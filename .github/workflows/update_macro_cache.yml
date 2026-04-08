@@ -1,0 +1,36 @@
+name: Update Macro Cache
+
+on:
+  schedule:
+    - cron: "0 13 * * *"
+    - cron: "30 21 * * *"
+  workflow_dispatch:
+
+jobs:
+  update-macro:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install pandas numpy requests yfinance wbgapi
+
+      - name: Run macro update script
+        run: |
+          python scripts/update_macro_cache.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/macro_cache.json
+          git commit -m "chore: update macro cache" || echo "No changes"
+          git push
