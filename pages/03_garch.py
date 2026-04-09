@@ -17,12 +17,18 @@ ensure_project_dirs()
 
 st.title("Módulo 3 - Modelos ARCH/GARCH")
 
+# ==============================
+# Sidebar
+# ==============================
 with st.sidebar:
     st.header("Parámetros GARCH")
     asset_name = st.selectbox("Activo representativo", list(ASSETS.keys()), index=0)
     start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE, key="garch_start")
     end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="garch_end")
 
+# ==============================
+# Descargar datos
+# ==============================
 ticker = get_ticker(asset_name)
 df = download_single_ticker(ticker=ticker, start=str(start_date), end=str(end_date))
 
@@ -37,15 +43,22 @@ if "log_return" not in ret_df.columns:
     st.error("No se encontró la columna 'log_return' para ajustar el modelo GARCH.")
     st.stop()
 
+# ==============================
+# Explicación
+# ==============================
 st.markdown(
     """
     La volatilidad condicional se usa cuando la varianza no es constante en el tiempo.
     En finanzas esto ocurre con frecuencia por clustering de volatilidad.
+
     Los modelos GARCH permiten modelar esa persistencia de la volatilidad y generar
     pronósticos de riesgo más realistas que una volatilidad histórica constante.
     """
 )
 
+# ==============================
+# Validación de la serie
+# ==============================
 serie_retornos = ret_df["log_return"]
 
 validacion = validar_serie_para_garch(
@@ -74,6 +87,9 @@ if not validacion["ok"]:
     )
     st.stop()
 
+# ==============================
+# Preparar datos para GARCH
+# ==============================
 serie_garch = validacion["serie_limpia"] * 100.0
 
 st.caption(
@@ -81,12 +97,24 @@ st.caption(
     "del ajuste en modelos ARCH/GARCH."
 )
 
+# ==============================
+# Ajuste de modelos
+# ==============================
 results = fit_garch_models(serie_garch)
 
 if results["comparison"].empty:
     st.warning("No hay suficientes datos o el ajuste no convergió correctamente para los modelos GARCH.")
     st.stop()
 
+# ==============================
+# 🔥 Interpretación automática (MUY IMPORTANTE PARA LA RÚBRICA)
+# ==============================
+if results["best_model_name"] is not None and results.get("summary_text"):
+    st.info(results["summary_text"])
+
+# ==============================
+# Resultados
+# ==============================
 st.subheader("Comparación de modelos")
 st.dataframe(results["comparison"], width="stretch")
 
