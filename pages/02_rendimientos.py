@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, get_ticker, ensure_project_dirs
@@ -13,6 +14,162 @@ from src.returns_analysis import (
 from src.plots import plot_histogram_with_normal, plot_qq, plot_box
 
 ensure_project_dirs()
+
+
+# ==============================
+# Estilos UI
+# ==============================
+def inject_kpi_cards_css():
+    st.markdown(
+        """
+        <style>
+        .section-intro-box {
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+            padding: 16px 18px;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+            margin-bottom: 0.75rem;
+        }
+
+        .section-intro-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 0.2rem;
+        }
+
+        .section-intro-subtitle {
+            font-size: 0.86rem;
+            color: #64748b;
+            line-height: 1.45;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def section_intro(title: str, subtitle: str):
+    st.markdown(
+        f"""
+        <div class="section-intro-box">
+            <div class="section-intro-title">{title}</div>
+            <div class="section-intro-subtitle">{subtitle}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def sanitize_text(text):
+    if text is None:
+        return ""
+    return str(text).replace("<", "").replace(">", "")
+
+
+def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
+    title = sanitize_text(title)
+    value = sanitize_text(value)
+    delta = sanitize_text(delta) if delta is not None else ""
+    caption = sanitize_text(caption)
+
+    delta_html = ""
+    if delta:
+        delta_html = f'<div class="kpi-delta {delta_type}">{delta}</div>'
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{
+                margin: 0;
+                padding: 0;
+                background: transparent;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }}
+
+            .kpi-card {{
+                background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 18px;
+                padding: 18px 18px 14px 18px;
+                box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+                min-height: 124px;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }}
+
+            .kpi-label {{
+                font-size: 0.88rem;
+                font-weight: 600;
+                color: #475569;
+                margin-bottom: 0.35rem;
+                letter-spacing: 0.2px;
+            }}
+
+            .kpi-value {{
+                font-size: 1.85rem;
+                font-weight: 800;
+                color: #0f172a;
+                line-height: 1.1;
+                margin-bottom: 0.45rem;
+                word-break: break-word;
+            }}
+
+            .kpi-delta {{
+                display: inline-block;
+                width: fit-content;
+                font-size: 0.80rem;
+                font-weight: 700;
+                padding: 0.28rem 0.55rem;
+                border-radius: 999px;
+                margin-top: 0.10rem;
+            }}
+
+            .kpi-delta.pos {{
+                background-color: rgba(22, 163, 74, 0.10);
+                color: #15803d;
+            }}
+
+            .kpi-delta.neg {{
+                background-color: rgba(220, 38, 38, 0.10);
+                color: #b91c1c;
+            }}
+
+            .kpi-delta.neu {{
+                background-color: rgba(100, 116, 139, 0.10);
+                color: #475569;
+            }}
+
+            .kpi-caption {{
+                font-size: 0.78rem;
+                color: #64748b;
+                margin-top: 0.65rem;
+                line-height: 1.35;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-label">{title}</div>
+                <div class="kpi-value">{value}</div>
+                {delta_html}
+            </div>
+            <div class="kpi-caption">{caption}</div>
+        </div>
+    </body>
+    </html>
+    """
+
+    components.html(html, height=145)
+
+
+inject_kpi_cards_css()
 
 st.title("Módulo 2 - Rendimientos y propiedades empíricas")
 st.caption("Analiza la distribución de rendimientos del activo y sus principales propiedades estadísticas.")
@@ -134,22 +291,91 @@ st.caption(f"Periodo analizado: {start_date} a {end_date}")
 # KPIs
 # ==============================
 st.markdown("### KPIs de rendimientos")
+section_intro(
+    "Resumen ejecutivo de la distribución",
+    "Aquí se sintetizan la rentabilidad media, la volatilidad y los extremos observados en la serie de rendimientos seleccionada.",
+)
 
 mean_ret = series.mean()
 vol_ret = series.std(ddof=1)
 min_ret = series.min()
 max_ret = series.max()
+last_ret = series.iloc[-1] if len(series) > 0 else None
+
+prom_delta = None
+prom_delta_type = "neu"
+if mean_ret > 0:
+    prom_delta = "Sesgo positivo"
+    prom_delta_type = "pos"
+elif mean_ret < 0:
+    prom_delta = "Sesgo negativo"
+    prom_delta_type = "neg"
+
+vol_delta = None
+vol_delta_type = "neu"
+if vol_ret >= series.abs().median():
+    vol_delta = "Alta dispersión"
+    vol_delta_type = "neg"
+else:
+    vol_delta = "Dispersión moderada"
+    vol_delta_type = "pos"
+
+min_delta = None
+min_delta_type = "neg"
+if last_ret is not None:
+    min_delta = f"Último: {last_ret:.4%}"
+
+max_delta = None
+max_delta_type = "pos"
+if last_ret is not None:
+    max_delta = f"Último: {last_ret:.4%}"
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Promedio", f"{mean_ret:.4%}")
-col2.metric("Volatilidad", f"{vol_ret:.4%}")
-col3.metric("Mínimo", f"{min_ret:.4%}")
-col4.metric("Máximo", f"{max_ret:.4%}")
+
+with col1:
+    kpi_card(
+        "Promedio",
+        f"{mean_ret:.4%}",
+        delta=prom_delta,
+        delta_type=prom_delta_type,
+        caption=f"Media de la serie de {return_type}",
+    )
+
+with col2:
+    kpi_card(
+        "Volatilidad",
+        f"{vol_ret:.4%}",
+        delta=vol_delta,
+        delta_type=vol_delta_type,
+        caption="Desviación estándar muestral de rendimientos",
+    )
+
+with col3:
+    kpi_card(
+        "Mínimo",
+        f"{min_ret:.4%}",
+        delta=min_delta,
+        delta_type="neg",
+        caption="Peor rendimiento observado en el periodo",
+    )
+
+with col4:
+    kpi_card(
+        "Máximo",
+        f"{max_ret:.4%}",
+        delta=max_delta,
+        delta_type="pos",
+        caption="Mejor rendimiento observado en el periodo",
+    )
 
 # ==============================
 # Tablas principales
 # ==============================
 st.markdown("### Resumen estadístico")
+section_intro(
+    "Estadísticos y normalidad",
+    "Estas tablas permiten contrastar medidas descriptivas de la serie y evaluar si la distribución se aparta de una normal teórica.",
+)
 
 if mostrar_tablas:
     col1, col2 = st.columns(2)
@@ -173,6 +399,10 @@ else:
 # Gráficos principales
 # ==============================
 st.markdown("### Distribución de rendimientos")
+section_intro(
+    "Forma de la distribución",
+    "Los gráficos permiten visualizar la dispersión, la asimetría y la presencia de valores extremos en los rendimientos.",
+)
 
 col3, col4 = st.columns(2)
 with col3:
@@ -204,6 +434,11 @@ else:
 # ==============================
 if mostrar_qq:
     st.markdown("### Gráfico Q-Q")
+    section_intro(
+        "Contraste visual con normalidad",
+        "El gráfico Q-Q permite verificar si los cuantiles observados siguen la forma esperada bajo una distribución normal.",
+    )
+
     st.plotly_chart(plot_qq(qq_df), width="stretch")
 
     if modo == "General":

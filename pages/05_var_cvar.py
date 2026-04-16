@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import numpy as np
 import pandas as pd
 
@@ -9,6 +10,162 @@ from src.risk_metrics import risk_comparison_table, kupiec_test
 from src.plots import plot_var_distribution
 
 ensure_project_dirs()
+
+
+# ==============================
+# Estilos UI
+# ==============================
+def inject_kpi_cards_css():
+    st.markdown(
+        """
+        <style>
+        .section-intro-box {
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+            padding: 16px 18px;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+            margin-bottom: 0.75rem;
+        }
+
+        .section-intro-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 0.2rem;
+        }
+
+        .section-intro-subtitle {
+            font-size: 0.86rem;
+            color: #64748b;
+            line-height: 1.45;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def section_intro(title: str, subtitle: str):
+    st.markdown(
+        f"""
+        <div class="section-intro-box">
+            <div class="section-intro-title">{title}</div>
+            <div class="section-intro-subtitle">{subtitle}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def sanitize_text(text):
+    if text is None:
+        return ""
+    return str(text).replace("<", "").replace(">", "")
+
+
+def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
+    title = sanitize_text(title)
+    value = sanitize_text(value)
+    delta = sanitize_text(delta) if delta is not None else ""
+    caption = sanitize_text(caption)
+
+    delta_html = ""
+    if delta:
+        delta_html = f'<div class="kpi-delta {delta_type}">{delta}</div>'
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{
+                margin: 0;
+                padding: 0;
+                background: transparent;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }}
+
+            .kpi-card {{
+                background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 18px;
+                padding: 18px 18px 14px 18px;
+                box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+                min-height: 124px;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }}
+
+            .kpi-label {{
+                font-size: 0.88rem;
+                font-weight: 600;
+                color: #475569;
+                margin-bottom: 0.35rem;
+                letter-spacing: 0.2px;
+            }}
+
+            .kpi-value {{
+                font-size: 1.85rem;
+                font-weight: 800;
+                color: #0f172a;
+                line-height: 1.1;
+                margin-bottom: 0.45rem;
+                word-break: break-word;
+            }}
+
+            .kpi-delta {{
+                display: inline-block;
+                width: fit-content;
+                font-size: 0.80rem;
+                font-weight: 700;
+                padding: 0.28rem 0.55rem;
+                border-radius: 999px;
+                margin-top: 0.10rem;
+            }}
+
+            .kpi-delta.pos {{
+                background-color: rgba(22, 163, 74, 0.10);
+                color: #15803d;
+            }}
+
+            .kpi-delta.neg {{
+                background-color: rgba(220, 38, 38, 0.10);
+                color: #b91c1c;
+            }}
+
+            .kpi-delta.neu {{
+                background-color: rgba(100, 116, 139, 0.10);
+                color: #475569;
+            }}
+
+            .kpi-caption {{
+                font-size: 0.78rem;
+                color: #64748b;
+                margin-top: 0.65rem;
+                line-height: 1.35;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-label">{title}</div>
+                <div class="kpi-value">{value}</div>
+                {delta_html}
+            </div>
+            <div class="kpi-caption">{caption}</div>
+        </div>
+    </body>
+    </html>
+    """
+
+    components.html(html, height=145)
+
+
+inject_kpi_cards_css()
 
 st.title("Módulo 5 - VaR y CVaR")
 st.caption(
@@ -76,7 +233,6 @@ with st.sidebar:
 
     mostrar_fundamento = False
     mostrar_interpretacion_tecnica = False
-    mostrar_simulacion = False
 
     if modo == "Estadístico":
         mostrar_fundamento = st.checkbox("Mostrar fundamento teórico", value=False)
@@ -217,17 +373,93 @@ cvar_mc = float(var_mc_row["CVaR_diario"].iloc[0]) if not var_mc_row.empty else 
 # KPIs
 # ==============================
 st.markdown("### KPIs de riesgo")
+section_intro(
+    "Resumen ejecutivo del riesgo extremo",
+    "Estas métricas resumen la pérdida umbral esperada y la severidad promedio de los escenarios más extremos del portafolio.",
+)
+
+var_delta = None
+if var_h is not None and cvar_h is not None:
+    gap_hist = cvar_h - var_h
+    var_delta = f"Brecha cola: {gap_hist:.2%}"
+
+cvar_delta = None
+if cvar_h is not None and var_h is not None:
+    cvar_delta = "Más severo que VaR"
+
+param_delta = None
+param_delta_type = "neu"
+if var_p is not None and var_h is not None:
+    if var_p > var_h:
+        param_delta = "Más conservador"
+        param_delta_type = "neg"
+    elif var_p < var_h:
+        param_delta = "Menos conservador"
+        param_delta_type = "pos"
+    else:
+        param_delta = "Muy similar al histórico"
+        param_delta_type = "neu"
+
+mc_delta = None
+mc_delta_type = "neu"
+if var_mc is not None and var_h is not None:
+    if var_mc > var_h:
+        mc_delta = "Simulación más severa"
+        mc_delta_type = "neg"
+    elif var_mc < var_h:
+        mc_delta = "Simulación menos severa"
+        mc_delta_type = "pos"
+    else:
+        mc_delta = "Muy similar al histórico"
+        mc_delta_type = "neu"
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric(f"VaR histórico {int(alpha * 100)}%", f"{var_h:.2%}" if var_h is not None else "N/D")
-col2.metric(f"CVaR histórico {int(alpha * 100)}%", f"{cvar_h:.2%}" if cvar_h is not None else "N/D")
-col3.metric("VaR paramétrico", f"{var_p:.2%}" if var_p is not None else "N/D")
-col4.metric("VaR Monte Carlo", f"{var_mc:.2%}" if var_mc is not None else "N/D")
+
+with col1:
+    kpi_card(
+        f"VaR histórico {int(alpha * 100)}%",
+        f"{var_h:.2%}" if var_h is not None else "N/D",
+        delta=var_delta,
+        delta_type="neg" if var_delta else "neu",
+        caption="Pérdida umbral con enfoque empírico",
+    )
+
+with col2:
+    kpi_card(
+        f"CVaR histórico {int(alpha * 100)}%",
+        f"{cvar_h:.2%}" if cvar_h is not None else "N/D",
+        delta=cvar_delta,
+        delta_type="neg" if cvar_delta else "neu",
+        caption="Pérdida promedio en la cola extrema",
+    )
+
+with col3:
+    kpi_card(
+        "VaR paramétrico",
+        f"{var_p:.2%}" if var_p is not None else "N/D",
+        delta=param_delta,
+        delta_type=param_delta_type,
+        caption="Estimado bajo supuesto de normalidad",
+    )
+
+with col4:
+    kpi_card(
+        "VaR Monte Carlo",
+        f"{var_mc:.2%}" if var_mc is not None else "N/D",
+        delta=mc_delta,
+        delta_type=mc_delta_type,
+        caption="Estimado mediante simulación probabilística",
+    )
 
 # ==============================
 # Gráfico
 # ==============================
 st.markdown("### Distribución y riesgo extremo")
+section_intro(
+    "Distribución de rendimientos del portafolio",
+    "El histograma muestra la forma empírica de los rendimientos y las líneas señalan los umbrales de VaR y CVaR por método.",
+)
+
 st.caption(
     "El histograma muestra la distribución de rendimientos. Las líneas punteadas representan VaR y CVaR por método."
 )
@@ -344,6 +576,10 @@ with st.expander("Ver interpretación técnica completa"):
 # ==============================
 if mostrar_backtesting:
     st.markdown("### Backtesting VaR - Test de Kupiec")
+    section_intro(
+        "Validación del VaR estimado",
+        "Este bloque contrasta si la frecuencia observada de violaciones del VaR es coherente con la esperada bajo el nivel de confianza seleccionado.",
+    )
 
     if var_h is not None:
         kupiec = kupiec_test(
@@ -354,9 +590,27 @@ if mostrar_backtesting:
 
         if kupiec:
             col1, col2, col3 = st.columns(3)
-            col1.metric("Violaciones", kupiec["violations"])
-            col2.metric("Observadas (%)", f"{kupiec['observed_fail_rate'] * 100:.2f}%")
-            col3.metric("Esperadas (%)", f"{kupiec['expected_fail_rate'] * 100:.2f}%")
+
+            with col1:
+                kpi_card(
+                    "Violaciones",
+                    str(kupiec["violations"]),
+                    caption="Número de veces que la pérdida superó el VaR",
+                )
+
+            with col2:
+                kpi_card(
+                    "Observadas (%)",
+                    f"{kupiec['observed_fail_rate'] * 100:.2f}%",
+                    caption="Frecuencia empírica de violaciones",
+                )
+
+            with col3:
+                kpi_card(
+                    "Esperadas (%)",
+                    f"{kupiec['expected_fail_rate'] * 100:.2f}%",
+                    caption="Frecuencia teórica bajo el modelo",
+                )
 
             st.write(f"**p-value:** {kupiec['p_value']:.4f}")
             st.write(f"**Conclusión:** {kupiec['conclusion']}")

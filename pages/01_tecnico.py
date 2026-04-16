@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, get_ticker, ensure_project_dirs
@@ -13,6 +14,162 @@ from src.plots import (
 )
 
 ensure_project_dirs()
+
+
+# ==============================
+# Estilos UI
+# ==============================
+def inject_kpi_cards_css():
+    st.markdown(
+        """
+        <style>
+        .section-intro-box {
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+            padding: 16px 18px;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+            margin-bottom: 0.75rem;
+        }
+
+        .section-intro-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 0.2rem;
+        }
+
+        .section-intro-subtitle {
+            font-size: 0.86rem;
+            color: #64748b;
+            line-height: 1.45;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def section_intro(title: str, subtitle: str):
+    st.markdown(
+        f"""
+        <div class="section-intro-box">
+            <div class="section-intro-title">{title}</div>
+            <div class="section-intro-subtitle">{subtitle}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def sanitize_text(text):
+    if text is None:
+        return ""
+    return str(text).replace("<", "").replace(">", "")
+
+
+def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
+    title = sanitize_text(title)
+    value = sanitize_text(value)
+    delta = sanitize_text(delta) if delta is not None else ""
+    caption = sanitize_text(caption)
+
+    delta_html = ""
+    if delta:
+        delta_html = f'<div class="kpi-delta {delta_type}">{delta}</div>'
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{
+                margin: 0;
+                padding: 0;
+                background: transparent;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }}
+
+            .kpi-card {{
+                background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 18px;
+                padding: 18px 18px 14px 18px;
+                box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+                min-height: 124px;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }}
+
+            .kpi-label {{
+                font-size: 0.88rem;
+                font-weight: 600;
+                color: #475569;
+                margin-bottom: 0.35rem;
+                letter-spacing: 0.2px;
+            }}
+
+            .kpi-value {{
+                font-size: 1.85rem;
+                font-weight: 800;
+                color: #0f172a;
+                line-height: 1.1;
+                margin-bottom: 0.45rem;
+                word-break: break-word;
+            }}
+
+            .kpi-delta {{
+                display: inline-block;
+                width: fit-content;
+                font-size: 0.80rem;
+                font-weight: 700;
+                padding: 0.28rem 0.55rem;
+                border-radius: 999px;
+                margin-top: 0.10rem;
+            }}
+
+            .kpi-delta.pos {{
+                background-color: rgba(22, 163, 74, 0.10);
+                color: #15803d;
+            }}
+
+            .kpi-delta.neg {{
+                background-color: rgba(220, 38, 38, 0.10);
+                color: #b91c1c;
+            }}
+
+            .kpi-delta.neu {{
+                background-color: rgba(100, 116, 139, 0.10);
+                color: #475569;
+            }}
+
+            .kpi-caption {{
+                font-size: 0.78rem;
+                color: #64748b;
+                margin-top: 0.65rem;
+                line-height: 1.35;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="kpi-card">
+            <div>
+                <div class="kpi-label">{title}</div>
+                <div class="kpi-value">{value}</div>
+                {delta_html}
+            </div>
+            <div class="kpi-caption">{caption}</div>
+        </div>
+    </body>
+    </html>
+    """
+
+    components.html(html, height=145)
+
+
+inject_kpi_cards_css()
 
 st.title("Módulo 1 - Análisis técnico")
 st.caption("Explora tendencia, momentum y señales técnicas del activo seleccionado.")
@@ -135,22 +292,98 @@ st.caption(f"Periodo analizado: {start_date} a {end_date}")
 # KPIs
 # ==============================
 st.markdown("### KPIs del activo")
+section_intro(
+    "Resumen ejecutivo del activo",
+    "Aquí se resumen los indicadores técnicos más importantes para una lectura rápida de tendencia, momentum y nivel actual del precio.",
+)
 
 close_now = float(ind["Close"].iloc[-1]) if "Close" in ind.columns else None
 rsi_now = float(ind[f"RSI_{rsi_window}"].iloc[-1]) if f"RSI_{rsi_window}" in ind.columns else None
 sma_now = float(ind[f"SMA_{sma_window}"].iloc[-1]) if f"SMA_{sma_window}" in ind.columns else None
 ema_now = float(ind[f"EMA_{ema_window}"].iloc[-1]) if f"EMA_{ema_window}" in ind.columns else None
+close_prev = float(ind["Close"].iloc[-2]) if "Close" in ind.columns and len(ind) > 1 else None
+
+precio_delta = None
+precio_delta_type = "neu"
+if close_now is not None and close_prev is not None and close_prev != 0:
+    price_change = (close_now / close_prev) - 1
+    precio_delta = f"{price_change:.2%} vs sesión previa"
+    precio_delta_type = "pos" if price_change > 0 else "neg" if price_change < 0 else "neu"
+
+rsi_delta = None
+rsi_delta_type = "neu"
+if rsi_now is not None:
+    if rsi_now >= 70:
+        rsi_delta = "Sobrecompra"
+        rsi_delta_type = "neg"
+    elif rsi_now <= 30:
+        rsi_delta = "Sobreventa"
+        rsi_delta_type = "pos"
+    else:
+        rsi_delta = "Zona neutral"
+        rsi_delta_type = "neu"
+
+sma_delta = None
+sma_delta_type = "neu"
+if close_now is not None and sma_now is not None and sma_now != 0:
+    dist_sma = (close_now / sma_now) - 1
+    sma_delta = f"{dist_sma:.2%} vs SMA"
+    sma_delta_type = "pos" if dist_sma > 0 else "neg" if dist_sma < 0 else "neu"
+
+ema_delta = None
+ema_delta_type = "neu"
+if close_now is not None and ema_now is not None and ema_now != 0:
+    dist_ema = (close_now / ema_now) - 1
+    ema_delta = f"{dist_ema:.2%} vs EMA"
+    ema_delta_type = "pos" if dist_ema > 0 else "neg" if dist_ema < 0 else "neu"
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Precio actual", f"{close_now:,.2f}" if close_now is not None else "N/D")
-col2.metric(f"RSI ({rsi_window})", f"{rsi_now:.2f}" if rsi_now is not None else "N/D")
-col3.metric(f"SMA ({sma_window})", f"{sma_now:,.2f}" if sma_now is not None else "N/D")
-col4.metric(f"EMA ({ema_window})", f"{ema_now:,.2f}" if ema_now is not None else "N/D")
+
+with col1:
+    kpi_card(
+        "Precio actual",
+        f"{close_now:,.2f}" if close_now is not None else "N/D",
+        delta=precio_delta,
+        delta_type=precio_delta_type,
+        caption="Último precio de cierre disponible",
+    )
+
+with col2:
+    kpi_card(
+        f"RSI ({rsi_window})",
+        f"{rsi_now:.2f}" if rsi_now is not None else "N/D",
+        delta=rsi_delta,
+        delta_type=rsi_delta_type,
+        caption="Momentum reciente del activo",
+    )
+
+with col3:
+    kpi_card(
+        f"SMA ({sma_window})",
+        f"{sma_now:,.2f}" if sma_now is not None else "N/D",
+        delta=sma_delta,
+        delta_type=sma_delta_type,
+        caption="Promedio móvil simple para tendencia",
+    )
+
+with col4:
+    kpi_card(
+        f"EMA ({ema_window})",
+        f"{ema_now:,.2f}" if ema_now is not None else "N/D",
+        delta=ema_delta,
+        delta_type=ema_delta_type,
+        caption="Promedio móvil exponencial más sensible",
+    )
 
 # ==============================
 # Gráfico principal
 # ==============================
 st.markdown("### Tendencia del precio")
+section_intro(
+    "Precio y medias móviles",
+    "Este gráfico permite comparar la trayectoria del precio con sus referencias de tendencia de corto y mediano plazo.",
+)
+
 st.plotly_chart(
     plot_price_and_mas(ind, sma_col=f"SMA_{sma_window}", ema_col=f"EMA_{ema_window}"),
     width="stretch",
@@ -180,6 +413,10 @@ else:
 # Indicadores esenciales
 # ==============================
 st.markdown("### Indicadores esenciales")
+section_intro(
+    "Momentum y dispersión",
+    "Aquí se muestran señales clave para identificar zonas extremas, fuerza relativa y cambios en la volatilidad implícita del precio.",
+)
 
 col1, col2 = st.columns(2)
 
@@ -222,6 +459,10 @@ with col2:
 # ==============================
 if modo == "Estadístico" and mostrar_indicadores_avanzados:
     st.markdown("### Indicadores avanzados")
+    section_intro(
+        "Señales complementarias",
+        "Estos indicadores amplían la lectura de momentum y posibles cambios de dirección mediante señales adicionales de aceleración o agotamiento.",
+    )
 
     col3, col4 = st.columns(2)
 
