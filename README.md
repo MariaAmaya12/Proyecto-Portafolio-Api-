@@ -1,105 +1,98 @@
-# Dashboard de Gestión de Portafolios y Teoría del Riesgo
 
-Aplicación desarrollada en **Python** con una interfaz principal en **Streamlit** y una capa complementaria en **FastAPI** para exponer servicios de datos y facilitar pruebas manuales mediante Swagger. El proyecto integra datos históricos de mercado y variables macroeconómicas para evaluar rendimiento, riesgo, volatilidad, optimización y señales de decisión.
+# Proyecto Integrador de Riesgo: Dashboard de Gestión de Portafolios con API
 
-## Descripción
+## Descripción general
 
-Este dashboard permite analizar un portafolio compuesto por activos internacionales mediante herramientas de análisis financiero y estadístico. La aplicación descarga datos desde APIs, construye métricas de riesgo y rendimiento, compara el portafolio frente a benchmarks y presenta los resultados en una interfaz interactiva.
+Este proyecto desarrolla un dashboard interactivo para el análisis de un portafolio financiero, integrando métricas de riesgo, análisis técnico, modelos de volatilidad, CAPM, optimización de portafolios y contexto macroeconómico.
 
-La interfaz visual sigue funcionando en Streamlit. Además, la lógica de consulta de datos fue separada para permitir su reutilización desde un backend en FastAPI, lo que mejora la organización del proyecto y facilita futuras integraciones sin afectar el funcionamiento del dashboard.
+La solución está construida con una arquitectura separada en dos capas:
 
-## Objetivo
+- **Frontend** en **Streamlit** para la visualización y exploración interactiva.
+- **Backend** en **FastAPI** para exponer una API propia de datos y analítica.
 
-Desarrollar una herramienta interactiva para apoyar el análisis de portafolios desde la perspectiva de la teoría del riesgo, integrando:
+El objetivo es que la interfaz visual no consuma directamente proveedores externos, sino que consulte primero una API interna controlada por el proyecto.
 
-- análisis técnico,
-- rendimientos y estadística descriptiva,
-- modelos ARCH/GARCH,
-- CAPM,
-- VaR y CVaR,
-- optimización de Markowitz,
-- señales automáticas,
-- contexto macroeconómico y benchmark.
+---
 
-## Activos del portafolio
+## Objetivo del proyecto
 
-| Empresa | Ticker | Mercado |
-|---|---|---|
-| Seven & i Holdings | `3382.T` | Japón |
-| Alimentation Couche-Tard | `ATD.TO` | Canadá |
-| FEMSA | `FEMSAUBD.MX` | México |
-| BP | `BP.L` | Reino Unido |
-| Carrefour | `CA.PA` | Francia |
+Construir una herramienta de análisis financiero que permita:
 
-### Benchmark global
+- visualizar la evolución histórica de activos del portafolio,
+- calcular rendimientos y estadísticas descriptivas,
+- estimar riesgo con VaR y CVaR,
+- analizar volatilidad con modelos ARCH/GARCH,
+- evaluar desempeño con CAPM y benchmark,
+- optimizar portafolios con Markowitz,
+- incorporar señales técnicas para apoyar decisiones de inversión,
+- integrar variables macroeconómicas relevantes.
 
-- `ACWI`
+---
 
-### Benchmarks locales usados en CAPM
+## Arquitectura del proyecto
 
-- Seven & i Holdings → `^N225`
-- Alimentation Couche-Tard → `^GSPTSE`
-- FEMSA → `^MXX`
-- BP → `^FTSE`
-- Carrefour → `^FCHI`
+La arquitectura actual sigue este flujo:
+
+```text
+Usuario
+   ↓
+Streamlit (frontend)
+   ↓
+FastAPI (backend propio)
+   ↓
+Servicios internos del proyecto
+   ↓
+Proveedores externos / cache macro
+````
+
+### Separación de responsabilidades
+
+* **Streamlit**: interfaz visual y experiencia de usuario.
+* **FastAPI**: capa API con endpoints tipados, validación, caching y manejo de errores.
+* **src/services/**: lógica de acceso a datos de mercado y macroeconomía.
+* **src/**: lógica analítica y financiera del proyecto.
+
+Esto permite desacoplar el dashboard de APIs externas como Yahoo Finance, FRED o World Bank.
+
+---
 
 ## Tecnologías utilizadas
 
-- Python
-- Streamlit
-- FastAPI
-- Uvicorn
-- pandas
-- numpy
-- scipy
-- plotly
-- yfinance
-- arch
-- requests
-- python-dotenv
-- wbgapi
+* **Python**
+* **Streamlit**
+* **FastAPI**
+* **Uvicorn**
+* **Pydantic**
+* **Pandas**
+* **NumPy**
+* **SciPy**
+* **Plotly**
+* **yfinance**
+* **requests**
+* **arch**
+* **wbgapi**
 
-## Arquitectura
-
-La arquitectura actual separa interfaz, wrappers y lógica reutilizable:
-
-### 1. Streamlit
-
-La aplicación principal del dashboard se ejecuta desde `app.py` y organiza sus vistas en la carpeta `pages/`.
-
-### 2. `src/api/`
-
-Contiene wrappers compatibles con Streamlit. Su función es conservar una interfaz estable para el dashboard y aplicar cache cuando corresponde.
-
-Ejemplos:
-
-- `src.api.macro.macro_snapshot()`
-- `src.api.market.get_prices()`
-- `src.api.market.get_multiple_prices()`
-
-### 3. `src/services/`
-
-Contiene la lógica de negocio desacoplada de Streamlit.
-
-- `macro_service.py`: snapshot macro, cache remoto y fallbacks.
-- `market_service.py`: descarga de precios, limpieza, validación y construcción de matrices.
-
-### 4. `backend/main.py`
-
-Expone el backend FastAPI del proyecto y reutiliza la lógica de `src/services/`.
-
-Swagger se usa únicamente como herramienta de documentación y de prueba manual de los endpoints.
+---
 
 ## Estructura del proyecto
 
 ```text
 riesgo_dashboard/
+│
 ├── app.py
-├── backend/
-│   └── main.py
-├── requirements.txt
 ├── README.md
+├── requirements.txt
+├── .env
+│
+├── backend/
+│   ├── main.py
+│   └── cache.py
+│
+├── data/
+│   └── macro_cache.json
+│
 ├── pages/
+│   ├── 0_contextualizacion.py
 │   ├── 01_tecnico.py
 │   ├── 02_rendimientos.py
 │   ├── 03_garch.py
@@ -107,14 +100,22 @@ riesgo_dashboard/
 │   ├── 05_var_cvar.py
 │   ├── 06_markowitz.py
 │   ├── 07_senales.py
-│   └── 08_macro_benchmark.py
+│   ├── 08_macro_benchmark.py
+│   └── 09_panel_decision.py
+│
+├── scripts/
+│   └── update_macro_cache.py
+│
 ├── src/
 │   ├── api/
-│   │   ├── macro.py
-│   │   └── market.py
+│   │   ├── backend_client.py
+│   │   ├── market.py
+│   │   └── macro.py
+│   │
 │   ├── services/
-│   │   ├── macro_service.py
-│   │   └── market_service.py
+│   │   ├── market_service.py
+│   │   └── macro_service.py
+│   │
 │   ├── benchmark.py
 │   ├── capm.py
 │   ├── config.py
@@ -123,236 +124,120 @@ riesgo_dashboard/
 │   ├── indicators.py
 │   ├── markowitz.py
 │   ├── plots.py
+│   ├── portfolio_optimization.py
 │   ├── preprocess.py
 │   ├── returns_analysis.py
 │   ├── risk_metrics.py
 │   └── signals.py
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── macro_cache.json
-├── scripts/
-│   └── update_macro_cache.py
-└── report/
-    └── informe_articulo.tex
+│
+├── report/
+│   └── informe_articulo.tex
+│
+├── .devcontainer/
+│   └── devcontainer.json
+│
+└── .github/
+    └── workflows/
+        └── update_macro_cache.yml
 ```
 
-## Módulos del dashboard
+---
 
-### 1. Análisis técnico
+## Funcionalidades principales
 
-Visualiza precios, medias móviles, RSI, MACD, Bandas de Bollinger y oscilador estocástico.
+El dashboard incluye las siguientes secciones:
 
-### 2. Rendimientos
+* **Contextualización** de activos y benchmark
+* **Análisis técnico**
+* **Rendimientos y propiedades empíricas**
+* **Modelos ARCH/GARCH**
+* **CAPM**
+* **VaR / CVaR**
+* **Optimización de Markowitz**
+* **Señales automáticas**
+* **Contexto macroeconómico y benchmark**
+* **Panel final de decisión**
 
-Calcula rendimientos simples y logarítmicos, además de estadísticas descriptivas y comportamiento acumulado.
+---
 
-### 3. Modelos GARCH
+## API del backend
 
-Permite analizar la volatilidad condicional mediante modelos ARCH/GARCH.
+El backend expone **9 endpoints principales**:
 
-### 4. CAPM
+| Método | Endpoint               | Descripción                                    |
+| ------ | ---------------------- | ---------------------------------------------- |
+| GET    | `/health`              | Verifica que la API esté disponible            |
+| GET    | `/macro/snapshot`      | Devuelve el snapshot macroeconómico            |
+| POST   | `/market/bundle`       | Devuelve precios, matriz de cierres y retornos |
+| GET    | `/returns/{ticker}`    | Retornos, estadísticos descriptivos y pruebas  |
+| GET    | `/indicators/{ticker}` | Indicadores técnicos por activo                |
+| POST   | `/signals/evaluate`    | Evaluación de señales técnicas                 |
+| POST   | `/risk/var-cvar`       | Cálculo de VaR y CVaR                          |
+| POST   | `/portfolio/markowitz` | Optimización y frontera eficiente              |
+| GET    | `/capm/{ticker}`       | Métricas CAPM por activo                       |
 
-Estima beta, alpha y retorno esperado del activo respecto a su benchmark.
+### Características técnicas del backend
 
-### 5. VaR y CVaR
+* Validación de requests y responses con **Pydantic**
+* Inyección de dependencias con **Depends()**
+* Validación de pesos a nivel de schema y lógica de negocio
+* Caching backend con TTL
+* Manejo uniforme de errores HTTP
+* Async/await aplicado de forma conservadora con `run_in_threadpool`
 
-Calcula métricas de riesgo extremo mediante distintos enfoques.
-
-### 6. Markowitz
-
-Simula portafolios, construye la frontera eficiente y obtiene portafolios de mínima varianza y máximo Sharpe.
-
-### 7. Señales y alertas
-
-Genera recomendaciones automáticas de compra, venta o mantener a partir de indicadores técnicos.
-
-### 8. Macro y benchmark
-
-Integra variables macroeconómicas y compara el portafolio frente al benchmark global.
-
-## Backend FastAPI
-
-El proyecto incluye un backend complementario para exponer datos y facilitar validaciones manuales desde Swagger.
-
-### Endpoints actuales
-
-#### `GET /health`
-
-Verifica que el backend esté activo.
-
-Respuesta esperada:
-
-```json
-{
-  "status": "ok"
-}
-```
-
-#### `GET /macro/snapshot`
-
-Devuelve un snapshot macroeconómico consolidado con campos como:
-
-- `risk_free_rate_pct`
-- `inflation_yoy`
-- `cop_per_usd`
-- `usdcop_market`
-- `source`
-- `last_updated`
-
-#### `POST /market/bundle`
-
-Devuelve un bundle de mercado con:
-
-- `ohlcv` por ticker,
-- matriz `close`,
-- matriz `returns`.
-
-Ejemplo de request válido:
-
-```json
-{
-  "tickers": ["AAPL", "MSFT", "^GSPC"],
-  "start": "2024-01-01",
-  "end": "2024-12-31"
-}
-```
-
-El endpoint valida:
-
-- que la lista de tickers no esté vacía,
-- que cada ticker sea válido,
-- que las fechas tengan formato correcto,
-- que `end` no sea anterior a `start`,
-- que existan datos para el rango solicitado.
-
-## Verificación manual en Swagger
-
-Durante la validación local del backend se comprobaron manualmente los siguientes casos desde Swagger.
-
-### 1. Respuesta exitosa de `POST /market/bundle`
-
-Ejemplo de referencia:
-
-```json
-{
-  "ohlcv": {
-    "AAPL": [
-      {
-        "Date": "2024-01-02T00:00:00",
-        "Open": 187.15,
-        "High": 188.44,
-        "Low": 183.89,
-        "Close": 185.64,
-        "Adj Close": 184.94,
-        "Volume": 82488700
-      }
-    ]
-  },
-  "close": [
-    {
-      "Date": "2024-01-02T00:00:00",
-      "AAPL": 184.94,
-      "MSFT": 368.51,
-      "^GSPC": 4742.83
-    }
-  ],
-  "returns": [
-    {
-      "Date": "2024-01-03T00:00:00",
-      "AAPL": -0.0075,
-      "MSFT": -0.0014,
-      "^GSPC": -0.0080
-    }
-  ]
-}
-```
-
-### 2. Error 422 por request inválido
-
-Ejemplo de referencia:
-
-```json
-{
-  "error": "Solicitud inválida.",
-  "detail": [
-    {
-      "field": "tickers[1]",
-      "message": "String should have at least 1 character"
-    }
-  ]
-}
-```
-
-### 3. Error 404 por ticker inexistente o sin datos
-
-Ejemplo de referencia:
-
-```json
-{
-  "error": "No se encontraron datos para uno o más tickers.",
-  "detail": [
-    {
-      "field": "tickers[0]",
-      "message": "No se pudo descargar datos para 'STRING' o no hubo precios en el rango solicitado."
-    }
-  ]
-}
-```
-
-## Flujo general del sistema
-
-```text
-config -> services/api -> download/preprocess -> análisis/métricas -> visualización -> páginas del dashboard
-```
+---
 
 ## Fuentes de datos
 
-### Yahoo Finance
+El proyecto usa fuentes externas de datos financieras y macroeconómicas, pero estas ya no son consumidas directamente por la interfaz visual.
 
-Se utiliza para descargar precios históricos de los activos y benchmarks.
+Entre las fuentes utilizadas se encuentran:
 
-### FRED
+* **Yahoo Finance**
+* **FRED**
+* **World Bank**
+* **cache macro local/remoto**
 
-Se utiliza para obtener variables macroeconómicas, por ejemplo:
+La capa visual consume únicamente la **API interna del proyecto**.
 
-- `DGS3MO` → tasa libre de riesgo
-- `CPIAUCSL` → inflación
-- `COLCCUSMA02STM` → tipo de cambio COP/USD
+---
 
-### World Bank
+## Variables de entorno
 
-Se utiliza como fuente de respaldo en algunos datos macroeconómicos cuando FRED no responde o no entrega la serie esperada.
+Crea un archivo `.env` en la raíz del proyecto con variables como estas:
 
-## Requisitos
+```env
+FRED_API_KEY=tu_api_key
+DEFAULT_START_DATE=2021-01-01
+DEFAULT_END_DATE=2026-03-27
+```
 
-- Python 3.10 o superior
-- Conexión a internet
-- API key de FRED para habilitar completamente el módulo macroeconómico
+Si el frontend necesita apuntar al backend explícitamente, puede usarse también:
+
+```env
+BACKEND_API_BASE_URL=http://127.0.0.1:8000
+```
+
+> Si no se define, el cliente backend usa por defecto `http://127.0.0.1:8000`.
+
+---
 
 ## Instalación
 
 ### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/MariaAmaya12/Proyecto-Portafolio-Api-.git
-cd Proyecto-Portafolio-Api-
+git clone https://github.com/MariaAmaya12/Proyecto-Portafolio-Api.git
+cd Proyecto-Portafolio-Api
 ```
 
-### 2. Crear y activar el entorno virtual
+### 2. Crear entorno virtual
 
-#### Windows PowerShell
+En Windows PowerShell:
 
 ```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-#### Linux / macOS
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 ```
 
 ### 3. Instalar dependencias
@@ -361,39 +246,212 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Ejecución local
+---
 
-### Streamlit
+## Cómo ejecutar el proyecto
+
+### Importante
+
+Actualmente el sistema funciona con **dos procesos**:
+
+1. **Backend FastAPI**
+2. **Frontend Streamlit**
+
+Debes levantar ambos para que el dashboard funcione correctamente.
+
+---
+
+### Opción recomendada: ejecutar en dos terminales
+
+## Terminal 1: levantar backend
 
 ```bash
-python -m streamlit run app.py
+uvicorn backend.main:app --reload
 ```
 
-Luego abre:
-
-```text
-http://localhost:8501
-```
-
-### FastAPI
-
-```bash
-python -m uvicorn backend.main:app --reload
-```
-
-Luego abre:
+Esto inicia la API en:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-Documentación interactiva:
+Y la documentación Swagger en:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
+---
 
-## Autoría
+## Terminal 2: levantar frontend
 
-Proyecto académico orientado al análisis de portafolios, teoría del riesgo y visualización financiera.
+```bash
+streamlit run app.py
+```
+
+Esto inicia el dashboard en una URL similar a:
+
+```text
+http://localhost:8501
+```
+
+---
+
+## Orden recomendado de ejecución
+
+1. Activa el entorno virtual
+2. Levanta **FastAPI**
+3. Levanta **Streamlit**
+4. Abre el dashboard en el navegador
+
+---
+
+## Cómo verificar que todo funciona
+
+### Verificación del backend
+
+Abre:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Si ves Swagger con los 9 endpoints, el backend está funcionando.
+
+### Verificación del frontend
+
+Abre la URL que Streamlit muestre en consola.
+Si el dashboard carga y muestra datos, entonces la integración está activa.
+
+---
+
+## Comportamiento esperado si el backend está apagado
+
+Como el frontend ya está desacoplado de proveedores externos y consume el backend propio, si FastAPI no está corriendo pueden aparecer errores como:
+
+* no fue posible descargar precios,
+* fallo de conexión,
+* datos no disponibles.
+
+Esto es esperado, porque el dashboard ahora depende de la API interna.
+
+---
+
+## Ejemplo de pruebas rápidas
+
+### Probar health
+
+En Swagger o desde navegador:
+
+```text
+GET /health
+```
+
+### Probar snapshot macro
+
+```text
+GET /macro/snapshot
+```
+
+### Probar market bundle
+
+```json
+{
+  "tickers": ["AAPL", "MSFT", "NVDA"],
+  "start": "2024-01-01",
+  "end": "2024-12-31"
+}
+```
+
+### Probar VaR/CVaR con pesos válidos
+
+```json
+{
+  "tickers": ["AAPL", "MSFT"],
+  "start": "2024-01-01",
+  "end": "2024-12-31",
+  "weights": [0.6, 0.4],
+  "alpha": 0.95,
+  "n_sim": 10000
+}
+```
+
+---
+
+## Manejo de errores
+
+La API devuelve errores con estructura uniforme:
+
+```json
+{
+  "error": "Solicitud inválida.",
+  "detail": [
+    {
+      "field": "weights",
+      "message": "Value error, `weights` no puede estar vacío."
+    }
+  ]
+}
+```
+
+Códigos utilizados:
+
+* `400` parámetros inválidos
+* `404` recurso no encontrado / sin datos
+* `422` error de validación o datos insuficientes
+* `502` fallo de proveedor externo
+* `503` indisponibilidad temporal del servicio
+
+---
+
+## Caching
+
+El proyecto usa varias capas de cache:
+
+* **`st.cache_data`** en la capa Streamlit
+* **TTL cache en backend** para respuestas y loaders
+* **cache macro persistente** en `data/macro_cache.json`
+* **workflow automático** para actualización de cache macro
+
+Esto reduce descargas repetidas y mejora tiempo de respuesta.
+
+---
+
+## Archivo de actualización automática de cache macro
+
+El proyecto incluye un workflow en:
+
+```text
+.github/workflows/update_macro_cache.yml
+```
+
+que actualiza `data/macro_cache.json` automáticamente.
+
+También puedes actualizarlo manualmente con:
+
+```bash
+python scripts/update_macro_cache.py
+```
+
+---
+
+## Recomendaciones de uso
+
+* Levanta primero el backend y luego el frontend.
+* Verifica que el archivo `.env` esté configurado.
+* Si el dashboard no carga datos, revisa:
+
+  * conexión a internet,
+  * que FastAPI siga activo,
+  * fechas válidas,
+  * tickers válidos,
+  * valor de `BACKEND_API_BASE_URL`.
+
+---
+
+## Autora
+
+**María Amaya**
+Proyecto académico de análisis financiero, riesgo y optimización de portafolios.
+
+

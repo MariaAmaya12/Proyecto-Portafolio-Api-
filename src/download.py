@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Dict, List
 import pandas as pd
 import streamlit as st
-import yfinance as yf
 
 from src.config import RAW_DIR, PROCESSED_DIR, ensure_project_dirs
+from src.api.market import get_market_bundle, get_multiple_prices, get_prices
 
 
 def _standardize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
@@ -60,19 +60,10 @@ def _standardize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
 @st.cache_data(show_spinner=False, ttl=3600)
 def download_single_ticker(ticker: str, start: str, end: str) -> pd.DataFrame:
     """
-    Descarga OHLCV de un ticker usando yfinance.
-    Usa auto_adjust=False para preservar OHLC y Close crudo.
+    Obtiene OHLCV de un ticker desde el backend FastAPI propio.
     """
     try:
-        df = yf.download(
-            ticker,
-            start=start,
-            end=end,
-            auto_adjust=False,
-            progress=False,
-            actions=False,
-            threads=False,
-        )
+        df = get_prices(ticker=ticker, start=start, end=end)
         df = _standardize_ohlcv(df)
 
         if not df.empty:
@@ -87,8 +78,6 @@ def download_single_ticker(ticker: str, start: str, end: str) -> pd.DataFrame:
         print(f"Error descargando {ticker}: {e}")
         return pd.DataFrame()
 
-
-from src.api.market import get_multiple_prices
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def download_multiple_tickers(tickers: List[str], start: str, end: str) -> Dict[str, pd.DataFrame]:
@@ -150,9 +139,15 @@ def load_market_bundle(tickers: List[str], start: str, end: str) -> Dict[str, ob
     Bundle central de mercado usado en todo el dashboard.
     """
     ensure_project_dirs()
-    data = download_multiple_tickers(tickers=tickers, start=start, end=end)
-    close = build_close_matrix(data)
-    returns = build_returns_matrix(close)
+    try:
+        bundle = get_market_bundle(tickers=tickers, start=start, end=end)
+        data = bundle["ohlcv"]
+        close = bundle["close"]
+        returns = bundle["returns"]
+    except Exception:
+        data = download_multiple_tickers(tickers=tickers, start=start, end=end)
+        close = build_close_matrix(data)
+        returns = build_returns_matrix(close)
 
     try:
         close.to_csv(PROCESSED_DIR / "close_prices.csv")

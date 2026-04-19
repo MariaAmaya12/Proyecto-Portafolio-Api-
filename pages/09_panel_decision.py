@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-import yfinance as yf
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
 from src.download import load_market_bundle, download_single_ticker
@@ -573,23 +572,15 @@ extras_df = pd.DataFrame()
 max_dd = np.nan
 
 try:
-    bench_df = yf.download("^GSPC", start=str(start_date), end=str(end_date), auto_adjust=False)
+    bench_df = download_single_ticker("^GSPC", start=str(start_date), end=str(end_date))
 
     if not bench_df.empty:
-        if isinstance(bench_df.columns, pd.MultiIndex):
-            if ("Adj Close", "^GSPC") in bench_df.columns:
-                benchmark_prices = bench_df[("Adj Close", "^GSPC")]
-            elif ("Close", "^GSPC") in bench_df.columns:
-                benchmark_prices = bench_df[("Close", "^GSPC")]
-            else:
-                benchmark_prices = pd.Series(dtype=float)
+        if "Adj Close" in bench_df.columns:
+            benchmark_prices = bench_df["Adj Close"]
+        elif "Close" in bench_df.columns:
+            benchmark_prices = bench_df["Close"]
         else:
-            if "Adj Close" in bench_df.columns:
-                benchmark_prices = bench_df["Adj Close"]
-            elif "Close" in bench_df.columns:
-                benchmark_prices = bench_df["Close"]
-            else:
-                benchmark_prices = pd.Series(dtype=float)
+            benchmark_prices = pd.Series(dtype=float)
 
         benchmark_prices = pd.to_numeric(benchmark_prices, errors="coerce").dropna()
         benchmark_returns = benchmark_prices.pct_change().dropna()
