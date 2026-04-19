@@ -9,7 +9,7 @@ from src.config import (
     ensure_project_dirs,
     get_ticker,
 )
-from src.download import download_single_ticker
+from src.download import data_error_message, download_single_ticker
 from src.garch_models import fit_garch_models
 from src.plots import plot_forecast, plot_volatility
 from src.returns_analysis import compute_return_series
@@ -251,7 +251,7 @@ ticker = get_ticker(asset_name)
 df = download_single_ticker(ticker=ticker, start=str(start_date), end=str(end_date))
 
 if df.empty:
-    st.error("No se pudieron descargar datos.")
+    st.error(data_error_message("No se pudieron descargar datos."))
     st.stop()
 
 price_col = "Adj Close" if "Adj Close" in df.columns else "Close"

@@ -6,6 +6,23 @@ import streamlit as st
 
 from src.config import RAW_DIR, PROCESSED_DIR, ensure_project_dirs
 from src.api.market import get_market_bundle, get_multiple_prices, get_prices
+from src.api.backend_client import friendly_error_message
+
+_LAST_DATA_ERROR_MESSAGE: str | None = None
+
+
+def _remember_data_error(exc: Exception) -> None:
+    global _LAST_DATA_ERROR_MESSAGE
+    _LAST_DATA_ERROR_MESSAGE = friendly_error_message(exc)
+
+
+def clear_data_error_message() -> None:
+    global _LAST_DATA_ERROR_MESSAGE
+    _LAST_DATA_ERROR_MESSAGE = None
+
+
+def data_error_message(default: str) -> str:
+    return _LAST_DATA_ERROR_MESSAGE or default
 
 
 def _standardize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
@@ -65,6 +82,7 @@ def download_single_ticker(ticker: str, start: str, end: str) -> pd.DataFrame:
     try:
         df = get_prices(ticker=ticker, start=start, end=end)
         df = _standardize_ohlcv(df)
+        clear_data_error_message()
 
         if not df.empty:
             try:
@@ -75,7 +93,7 @@ def download_single_ticker(ticker: str, start: str, end: str) -> pd.DataFrame:
         return df
 
     except Exception as e:
-        print(f"Error descargando {ticker}: {e}")
+        _remember_data_error(e)
         return pd.DataFrame()
 
 
@@ -86,7 +104,12 @@ def download_multiple_tickers(tickers: List[str], start: str, end: str) -> Dict[
     """
     ensure_project_dirs()
 
-    data = get_multiple_prices(tickers=tickers, start=start, end=end)
+    try:
+        data = get_multiple_prices(tickers=tickers, start=start, end=end)
+        clear_data_error_message()
+    except Exception as e:
+        _remember_data_error(e)
+        data = {ticker: pd.DataFrame() for ticker in tickers}
 
     return data
 
@@ -144,7 +167,9 @@ def load_market_bundle(tickers: List[str], start: str, end: str) -> Dict[str, ob
         data = bundle["ohlcv"]
         close = bundle["close"]
         returns = bundle["returns"]
-    except Exception:
+        clear_data_error_message()
+    except Exception as e:
+        _remember_data_error(e)
         data = download_multiple_tickers(tickers=tickers, start=start, end=end)
         close = build_close_matrix(data)
         returns = build_returns_matrix(close)

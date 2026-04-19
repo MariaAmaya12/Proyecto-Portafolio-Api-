@@ -10,7 +10,7 @@ from src.config import (
     get_local_benchmark,
     ensure_project_dirs,
 )
-from src.download import download_single_ticker
+from src.download import data_error_message, download_single_ticker
 from src.returns_analysis import compute_return_series
 from src.capm import compute_beta_and_capm
 from src.api.macro import macro_snapshot
@@ -248,7 +248,7 @@ asset_df = download_single_ticker(ticker=ticker, start=str(start_date), end=str(
 bench_df = download_single_ticker(ticker=benchmark_ticker, start=str(start_date), end=str(end_date))
 
 if asset_df.empty or bench_df.empty:
-    st.error("No se pudieron descargar los datos del activo o del benchmark.")
+    st.error(data_error_message("No se pudieron descargar los datos del activo o del benchmark."))
     st.stop()
 
 asset_price = asset_df["Adj Close"] if "Adj Close" in asset_df.columns else asset_df["Close"]

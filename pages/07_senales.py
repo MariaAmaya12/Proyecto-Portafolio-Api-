@@ -3,7 +3,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
-from src.download import download_single_ticker
+from src.download import data_error_message, download_single_ticker
 from src.indicators import compute_all_indicators
 from src.signals import evaluate_signals
 
@@ -410,7 +410,7 @@ for asset_name, meta in ASSETS.items():
     )
 
 if not cards_data:
-    st.warning("No fue posible construir señales para los activos en la ventana seleccionada.")
+    st.warning(data_error_message("No fue posible construir señales para los activos en la ventana seleccionada."))
     st.stop()
 
 

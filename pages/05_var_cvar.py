@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
-from src.download import load_market_bundle
+from src.download import data_error_message, load_market_bundle
 from src.preprocess import equal_weight_vector, equal_weight_portfolio
 from src.risk_metrics import risk_comparison_table, kupiec_test
 from src.plots import plot_var_distribution
@@ -257,7 +257,7 @@ bundle = load_market_bundle(tickers=tickers, start=str(start_date), end=str(end_
 returns = bundle["returns"].replace([np.inf, -np.inf], np.nan).dropna()
 
 if returns.empty or len(returns) < 30:
-    st.error("No hay suficientes datos para calcular métricas de riesgo.")
+    st.error(data_error_message("No hay suficientes datos para calcular métricas de riesgo."))
     st.stop()
 
 weights = equal_weight_vector(returns.shape[1])

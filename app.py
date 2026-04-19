@@ -11,7 +11,7 @@ from src.config import (
     GLOBAL_BENCHMARK,
     ensure_project_dirs,
 )
-from src.download import load_market_bundle
+from src.download import data_error_message, load_market_bundle
 from src.preprocess import (
     equal_weight_portfolio,
     annualize_return,
@@ -317,7 +317,7 @@ try:
             end=str(end_date),
         )
 except Exception as e:
-    st.error(f"Ocurrió un error al descargar los datos: {e}")
+    st.error(data_error_message(f"Ocurrió un error al descargar los datos: {e}"))
     st.stop()
 
 if market_data is None:
@@ -325,7 +325,7 @@ if market_data is None:
     st.stop()
 
 if "close" not in market_data or market_data["close"].empty:
-    st.error("No fue posible descargar precios. Verifica conexión, fechas o tickers.")
+    st.error(data_error_message("No fue posible descargar precios. Verifica conexión, fechas o tickers."))
     st.stop()
 
 if "returns" not in market_data or market_data["returns"].empty:

@@ -9,7 +9,7 @@ from src.config import (
     DEFAULT_END_DATE,
     ensure_project_dirs,
 )
-from src.download import load_market_bundle
+from src.download import data_error_message, load_market_bundle
 from src.preprocess import equal_weight_portfolio
 from src.api.macro import macro_snapshot
 from src.benchmark import benchmark_summary
@@ -284,7 +284,7 @@ bundle = load_market_bundle(tickers=tickers, start=str(start_date), end=str(end_
 returns = bundle["returns"].dropna()
 
 if returns.empty or GLOBAL_BENCHMARK not in returns.columns:
-    st.error("No fue posible construir benchmark global.")
+    st.error(data_error_message("No fue posible construir benchmark global."))
     st.stop()
 
 portfolio_returns = equal_weight_portfolio(

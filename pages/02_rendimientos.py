@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 import pandas as pd
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, get_ticker, ensure_project_dirs
-from src.download import download_single_ticker
+from src.download import data_error_message, download_single_ticker
 from src.returns_analysis import (
     compute_return_series,
     descriptive_stats,
@@ -246,7 +246,7 @@ ticker = get_ticker(asset_name)
 df = download_single_ticker(ticker=ticker, start=str(start_date), end=str(end_date))
 
 if df.empty:
-    st.error("No se pudieron descargar datos.")
+    st.error(data_error_message("No se pudieron descargar datos."))
     st.stop()
 
 price_series = df["Adj Close"] if "Adj Close" in df.columns else df["Close"]

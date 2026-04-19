@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
-from src.download import load_market_bundle
+from src.download import data_error_message, load_market_bundle
 from src.markowitz import (
     simulate_portfolios,
     efficient_frontier,
@@ -309,7 +309,7 @@ returns = (
 )
 
 if returns.empty or returns.shape[0] < 2 or returns.shape[1] < 2:
-    st.error("No hay suficientes datos de retornos alineados para ejecutar Markowitz.")
+    st.error(data_error_message("No hay suficientes datos de retornos alineados para ejecutar Markowitz."))
     st.write({
         "shape_returns": bundle["returns"].shape,
         "na_por_activo": bundle["returns"].isna().sum().to_dict(),

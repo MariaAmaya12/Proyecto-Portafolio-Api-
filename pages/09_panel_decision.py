@@ -6,7 +6,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
-from src.download import load_market_bundle, download_single_ticker
+from src.download import data_error_message, load_market_bundle, download_single_ticker
 from src.preprocess import equal_weight_vector, equal_weight_portfolio
 from src.risk_metrics import risk_comparison_table, validar_serie_para_garch
 from src.garch_models import fit_garch_models
@@ -526,7 +526,7 @@ bundle = load_market_bundle(tickers=tickers, start=str(start_date), end=str(end_
 returns = bundle["returns"].replace([np.inf, -np.inf], np.nan).dropna()
 
 if returns.empty or len(returns) < 30:
-    st.error("No hay suficientes datos para construir el panel de decisión.")
+    st.error(data_error_message("No hay suficientes datos para construir el panel de decisión."))
     st.stop()
 
 weights = equal_weight_vector(returns.shape[1])

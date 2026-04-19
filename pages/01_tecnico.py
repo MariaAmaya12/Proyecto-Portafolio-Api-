@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 import pandas as pd
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, get_ticker, ensure_project_dirs
-from src.download import download_single_ticker
+from src.download import data_error_message, download_single_ticker
 from src.indicators import compute_all_indicators
 from src.plots import (
     plot_price_and_mas,
@@ -249,7 +249,7 @@ ticker = get_ticker(asset_name)
 df = download_single_ticker(ticker=ticker, start=str(start_date), end=str(end_date))
 
 if df.empty:
-    st.error("No se pudieron descargar datos del activo seleccionado.")
+    st.error(data_error_message("No se pudieron descargar datos del activo seleccionado."))
     st.stop()
 
 ind = compute_all_indicators(
