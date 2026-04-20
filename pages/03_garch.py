@@ -14,8 +14,12 @@ from src.garch_models import fit_garch_models
 from src.plots import plot_forecast, plot_volatility
 from src.returns_analysis import compute_return_series
 from src.risk_metrics import validar_serie_para_garch
+from src.ui_navigation import render_sidebar_navigation
+from src.ui_style import apply_global_typography, render_page_title
 
 ensure_project_dirs()
+apply_global_typography()
+render_sidebar_navigation()
 
 
 # ==============================
@@ -175,8 +179,10 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
 
 inject_kpi_cards_css()
 
-st.title("Módulo 3 - Modelos ARCH/GARCH")
-st.caption("Analiza volatilidad condicional y pronósticos de riesgo a partir de rendimientos del activo.")
+render_page_title(
+    "Módulo 3 - Modelos ARCH/GARCH",
+    "Analiza volatilidad condicional y pronósticos de riesgo a partir de rendimientos del activo.",
+)
 
 # ==============================
 # Sidebar
@@ -192,6 +198,7 @@ with st.sidebar:
             "Trimestre",
             "Semestre",
             "1 año",
+            "2 años",
             "3 años",
             "5 años",
             "Personalizado",
@@ -212,6 +219,9 @@ with st.sidebar:
         end_date = fecha_fin_ref.date()
     elif horizonte == "1 año":
         start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
+        end_date = fecha_fin_ref.date()
+    elif horizonte == "2 años":
+        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
         end_date = fecha_fin_ref.date()
     elif horizonte == "3 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()

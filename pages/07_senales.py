@@ -6,10 +6,16 @@ from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_proj
 from src.download import data_error_message, download_single_ticker
 from src.indicators import compute_all_indicators
 from src.signals import evaluate_signals
+from src.ui_navigation import render_sidebar_navigation
+from src.ui_style import apply_global_typography, render_page_title
 
 ensure_project_dirs()
-st.title("Módulo 7 - Señales y alertas")
-st.caption("Resume señales técnicas por activo y las traduce en una lectura operativa más clara.")
+apply_global_typography()
+render_sidebar_navigation()
+render_page_title(
+    "Módulo 7 - Señales y alertas",
+    "Resume señales técnicas por activo y las traduce en una lectura operativa más clara.",
+)
 
 
 SIGNAL_LABELS = {
@@ -288,6 +294,7 @@ with st.sidebar:
             "Trimestre",
             "Semestre",
             "1 año",
+            "2 años",
             "3 años",
             "5 años",
             "Personalizado",
@@ -308,6 +315,9 @@ with st.sidebar:
         end_date = fecha_fin_ref.date()
     elif horizonte == "1 año":
         start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
+        end_date = fecha_fin_ref.date()
+    elif horizonte == "2 años":
+        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
         end_date = fecha_fin_ref.date()
     elif horizonte == "3 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()

@@ -13,6 +13,8 @@ from src.garch_models import fit_garch_models
 from src.benchmark import benchmark_summary
 from src.indicators import compute_all_indicators
 from src.signals import evaluate_signals
+from src.ui_navigation import render_sidebar_navigation
+from src.ui_style import apply_global_typography, render_page_title
 
 try:
     from src.api.macro import macro_snapshot
@@ -20,6 +22,8 @@ except Exception:
     macro_snapshot = None
 
 ensure_project_dirs()
+apply_global_typography()
+render_sidebar_navigation()
 
 
 # ==============================
@@ -246,8 +250,10 @@ def hero_decision(title, subtitle, level="neutral"):
 
 inject_ui_css()
 
-st.title("Módulo 9 - Panel de decisión")
-st.caption("Integra riesgo, volatilidad, señales técnicas y benchmark para producir una postura de acción más clara.")
+render_page_title(
+    "Módulo 9 - Panel de decisión",
+    "Integra riesgo, volatilidad, señales técnicas y benchmark para producir una postura de acción más clara.",
+)
 
 
 # ==============================
@@ -258,7 +264,7 @@ with st.sidebar:
 
     horizonte = st.selectbox(
         "Horizonte de análisis",
-        ["1 mes", "Trimestre", "Semestre", "1 año", "3 años", "5 años", "Personalizado"],
+        ["1 mes", "Trimestre", "Semestre", "1 año", "2 años", "3 años", "5 años", "Personalizado"],
         index=3,
     )
 
@@ -275,6 +281,9 @@ with st.sidebar:
         end_date = fecha_fin_ref.date()
     elif horizonte == "1 año":
         start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
+        end_date = fecha_fin_ref.date()
+    elif horizonte == "2 años":
+        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
         end_date = fecha_fin_ref.date()
     elif horizonte == "3 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()

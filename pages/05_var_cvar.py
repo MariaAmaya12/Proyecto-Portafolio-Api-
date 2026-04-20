@@ -8,8 +8,12 @@ from src.download import data_error_message, load_market_bundle
 from src.preprocess import equal_weight_vector, equal_weight_portfolio
 from src.risk_metrics import risk_comparison_table, kupiec_test
 from src.plots import plot_var_distribution
+from src.ui_navigation import render_sidebar_navigation
+from src.ui_style import apply_global_typography, render_page_title
 
 ensure_project_dirs()
+apply_global_typography()
+render_sidebar_navigation()
 
 
 # ==============================
@@ -167,9 +171,9 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
 
 inject_kpi_cards_css()
 
-st.title("Módulo 5 - VaR y CVaR")
-st.caption(
-    "Evalúa el riesgo extremo del portafolio mediante VaR y CVaR bajo distintos enfoques de estimación."
+render_page_title(
+    "Módulo 5 - VaR y CVaR",
+    "Evalúa el riesgo extremo del portafolio mediante VaR y CVaR bajo distintos enfoques de estimación.",
 )
 
 # ==============================
@@ -185,6 +189,7 @@ with st.sidebar:
             "Trimestre",
             "Semestre",
             "1 año",
+            "2 años",
             "3 años",
             "5 años",
             "Personalizado",
@@ -205,6 +210,9 @@ with st.sidebar:
         end_date = fecha_fin_ref.date()
     elif horizonte == "1 año":
         start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
+        end_date = fecha_fin_ref.date()
+    elif horizonte == "2 años":
+        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
         end_date = fecha_fin_ref.date()
     elif horizonte == "3 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()

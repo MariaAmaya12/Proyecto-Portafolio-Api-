@@ -20,6 +20,21 @@ ASSET_COLORS = {
     "Benchmark": "#008CFF",
 }
 
+NORMALIZED_PRICE_COLORS = {
+    "3382.T": "#2563EB",
+    "ATD.TO": "#D97706",
+    "FEMSAUBD.MX": "#0F766E",
+    "BP.L": "#EF4444",
+    "CA.PA": "#7C3AED",
+    "ACWI": "#334155",
+}
+
+NORMALIZED_PRICE_FALLBACK_COLORS = [
+    "#F59E0B",
+    "#0891B2",
+    "#4B5563",
+]
+
 METHOD_COLORS = {
     "Histórico": "#3FA7FF",
     "Paramétrico": "#FFB347",
@@ -49,28 +64,69 @@ def _get_asset_color(name: str) -> str:
     return ASSET_COLORS.get(name, "#8FD3FF")
 
 
-def _apply_layout(fig: go.Figure, title: str, xaxis_title: str = "Fecha", yaxis_title: str = "") -> go.Figure:
+def _get_normalized_price_color(name: str, index: int) -> str:
+    return NORMALIZED_PRICE_COLORS.get(
+        name,
+        NORMALIZED_PRICE_FALLBACK_COLORS[index % len(NORMALIZED_PRICE_FALLBACK_COLORS)],
+    )
+
+
+def _apply_layout(
+    fig: go.Figure,
+    title: str,
+    xaxis_title: str = "Fecha",
+    yaxis_title: str = "",
+    theme: str = "dark",
+) -> go.Figure:
+    is_light = theme == "light"
+    template = "plotly_white" if is_light else "plotly_dark"
+    text_color = "#0f172a" if is_light else None
+    grid_color = "rgba(15, 23, 42, 0.08)" if is_light else "rgba(255,255,255,0.10)"
+    plot_bg = "#ffffff" if is_light else "rgba(0,0,0,0)"
+    paper_bg = "#ffffff" if is_light else "rgba(0,0,0,0)"
+    legend_bg = "rgba(255,255,255,0.96)" if is_light else "rgba(0,0,0,0)"
+    legend_border = "rgba(37, 99, 235, 0.18)" if is_light else "rgba(0,0,0,0)"
+
     fig.update_layout(
         title=title,
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        template=template,
+        paper_bgcolor=paper_bg,
+        plot_bgcolor=plot_bg,
+        font=dict(color=text_color, size=13) if is_light else None,
+        title_font=dict(color=text_color, size=18) if is_light else None,
         xaxis_title=xaxis_title,
         yaxis_title=yaxis_title,
-        height=460,
-        margin=dict(l=40, r=40, t=60, b=40),
+        height=500 if is_light else 460,
+        margin=dict(l=56, r=34, t=108 if is_light else 60, b=54),
         legend=dict(
-            orientation="v",
-            yanchor="top",
-            y=1.0,
-            xanchor="left",
-            x=1.02,
-            bgcolor="rgba(0,0,0,0)",
+            orientation="h" if is_light else "v",
+            yanchor="bottom" if is_light else "top",
+            y=1.06 if is_light else 1.0,
+            xanchor="center" if is_light else "left",
+            x=0.5 if is_light else 1.02,
+            bgcolor=legend_bg,
+            bordercolor=legend_border,
+            borderwidth=1 if is_light else 0,
+            font=dict(color=text_color, size=12) if is_light else None,
+            itemsizing="constant",
         ),
         hovermode="x unified",
     )
-    fig.update_xaxes(showgrid=False, zeroline=False)
-    fig.update_yaxes(gridcolor="rgba(255,255,255,0.10)", zeroline=False)
+    fig.update_xaxes(
+        showgrid=is_light,
+        gridcolor=grid_color,
+        zeroline=False,
+        linecolor="rgba(15, 23, 42, 0.18)" if is_light else None,
+        tickfont=dict(color=text_color) if is_light else None,
+        title_font=dict(color=text_color) if is_light else None,
+    )
+    fig.update_yaxes(
+        gridcolor=grid_color,
+        zeroline=False,
+        linecolor="rgba(15, 23, 42, 0.18)" if is_light else None,
+        tickfont=dict(color=text_color) if is_light else None,
+        title_font=dict(color=text_color) if is_light else None,
+    )
     return fig
 
 
@@ -86,18 +142,19 @@ def plot_normalized_prices(close: pd.DataFrame) -> go.Figure:
     base = close / close.dropna().iloc[0] * 100
     fig = go.Figure()
 
-    for col in base.columns:
+    for index, col in enumerate(base.columns):
         fig.add_trace(
             go.Scatter(
                 x=base.index,
                 y=base[col],
                 mode="lines",
                 name=col,
-                line=dict(color=_get_asset_color(col), width=2),
+                line=dict(color=_get_normalized_price_color(col, index), width=2.9),
+                opacity=0.96,
             )
         )
 
-    return _apply_layout(fig, "Precios normalizados (base 100)", "Fecha", "Base 100")
+    return _apply_layout(fig, "Precios normalizados (base 100)", "Fecha", "Base 100", theme="light")
 
 
 # =========================================================

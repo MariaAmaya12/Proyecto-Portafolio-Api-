@@ -14,8 +14,12 @@ from src.preprocess import equal_weight_portfolio
 from src.api.macro import macro_snapshot
 from src.benchmark import benchmark_summary
 from src.plots import plot_benchmark_base100
+from src.ui_navigation import render_sidebar_navigation
+from src.ui_style import apply_global_typography, render_page_title
 
 ensure_project_dirs()
+apply_global_typography()
+render_sidebar_navigation()
 
 
 # ==============================
@@ -173,9 +177,9 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
 
 inject_kpi_cards_css()
 
-st.title("Módulo 8 - Contexto macro y benchmark")
-st.caption(
-    "Compara el desempeño del portafolio frente a un benchmark global y contextualiza los resultados con variables macroeconómicas."
+render_page_title(
+    "Módulo 8 - Contexto macro y benchmark",
+    "Compara el desempeño del portafolio frente a un benchmark global y contextualiza los resultados con variables macroeconómicas.",
 )
 
 # ==============================
@@ -191,6 +195,7 @@ with st.sidebar:
             "Trimestre",
             "Semestre",
             "1 año",
+            "2 años",
             "3 años",
             "5 años",
             "Personalizado",
@@ -211,6 +216,9 @@ with st.sidebar:
         end_date = fecha_fin_ref.date()
     elif horizonte == "1 año":
         start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
+        end_date = fecha_fin_ref.date()
+    elif horizonte == "2 años":
+        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
         end_date = fecha_fin_ref.date()
     elif horizonte == "3 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()

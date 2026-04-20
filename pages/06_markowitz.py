@@ -15,8 +15,12 @@ from src.markowitz import (
 from src.plots import plot_correlation_heatmap, plot_frontier
 from src.api.macro import macro_snapshot
 from src.portfolio_optimization import optimize_target_return
+from src.ui_navigation import render_sidebar_navigation
+from src.ui_style import apply_global_typography, render_page_title
 
 ensure_project_dirs()
+apply_global_typography()
+render_sidebar_navigation()
 
 
 # ==============================
@@ -212,8 +216,10 @@ def format_weights_df(df: pd.DataFrame) -> pd.DataFrame:
 
 inject_kpi_cards_css()
 
-st.title("Módulo 6 - Optimización de portafolio (Markowitz)")
-st.caption("Explora portafolios eficientes, diversificación, relación riesgo-retorno y soluciones óptimas bajo Markowitz.")
+render_page_title(
+    "Módulo 6 - Optimización de portafolio (Markowitz)",
+    "Explora portafolios eficientes, diversificación, relación riesgo-retorno y soluciones óptimas bajo Markowitz.",
+)
 
 # ==============================
 # Sidebar
@@ -228,6 +234,7 @@ with st.sidebar:
             "Trimestre",
             "Semestre",
             "1 año",
+            "2 años",
             "3 años",
             "5 años",
             "Personalizado",
@@ -248,6 +255,9 @@ with st.sidebar:
         end_date = fecha_fin_ref.date()
     elif horizonte == "1 año":
         start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
+        end_date = fecha_fin_ref.date()
+    elif horizonte == "2 años":
+        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
         end_date = fecha_fin_ref.date()
     elif horizonte == "3 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()

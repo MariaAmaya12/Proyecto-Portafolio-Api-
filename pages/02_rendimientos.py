@@ -12,8 +12,12 @@ from src.returns_analysis import (
     stylized_facts_comment,
 )
 from src.plots import plot_histogram_with_normal, plot_qq, plot_box
+from src.ui_navigation import render_sidebar_navigation
+from src.ui_style import apply_global_typography, render_page_title
 
 ensure_project_dirs()
+apply_global_typography()
+render_sidebar_navigation()
 
 
 # ==============================
@@ -171,8 +175,10 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
 
 inject_kpi_cards_css()
 
-st.title("Módulo 2 - Rendimientos y propiedades empíricas")
-st.caption("Analiza la distribución de rendimientos del activo y sus principales propiedades estadísticas.")
+render_page_title(
+    "Módulo 2 - Rendimientos y propiedades empíricas",
+    "Analiza la distribución de rendimientos del activo y sus principales propiedades estadísticas.",
+)
 
 # ==============================
 # Sidebar
@@ -188,6 +194,7 @@ with st.sidebar:
             "Trimestre",
             "Semestre",
             "1 año",
+            "2 años",
             "3 años",
             "5 años",
             "Personalizado",
@@ -208,6 +215,9 @@ with st.sidebar:
         end_date = fecha_fin_ref.date()
     elif horizonte == "1 año":
         start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
+        end_date = fecha_fin_ref.date()
+    elif horizonte == "2 años":
+        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
         end_date = fecha_fin_ref.date()
     elif horizonte == "3 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
