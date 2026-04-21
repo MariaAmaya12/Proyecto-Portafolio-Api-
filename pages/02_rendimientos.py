@@ -9,7 +9,6 @@ from src.returns_analysis import (
     descriptive_stats,
     normality_tests,
     qq_plot_data,
-    stylized_facts_comment,
 )
 from src.plots import plot_histogram_with_normal, plot_qq, plot_box
 from src.ui_navigation import render_sidebar_navigation
@@ -48,6 +47,7 @@ def inject_kpi_cards_css():
             color: #64748b;
             line-height: 1.45;
         }
+
         </style>
         """,
         unsafe_allow_html=True,
@@ -95,33 +95,34 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
             }}
 
             .kpi-card {{
-                background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-                border: 1px solid rgba(15, 23, 42, 0.08);
+                background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+                border: 1px solid rgba(37, 99, 235, 0.20);
                 border-radius: 18px;
-                padding: 18px 18px 14px 18px;
-                box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-                min-height: 124px;
+                padding: 20px 18px 16px 18px;
+                box-shadow: 0 6px 18px rgba(37, 99, 235, 0.10);
+                min-height: 160px;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
                 justify-content: space-between;
+                overflow-wrap: anywhere;
             }}
 
             .kpi-label {{
                 font-size: 0.88rem;
-                font-weight: 600;
-                color: #475569;
+                font-weight: 700;
+                color: #1e3a8a;
                 margin-bottom: 0.35rem;
-                letter-spacing: 0.2px;
+                letter-spacing: 0;
             }}
 
             .kpi-value {{
-                font-size: 1.85rem;
+                font-size: 1.78rem;
                 font-weight: 800;
                 color: #0f172a;
-                line-height: 1.1;
+                line-height: 1.14;
                 margin-bottom: 0.45rem;
-                word-break: break-word;
+                overflow-wrap: anywhere;
             }}
 
             .kpi-delta {{
@@ -150,10 +151,11 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
             }}
 
             .kpi-caption {{
-                font-size: 0.78rem;
-                color: #64748b;
+                font-size: 0.80rem;
+                color: #334155;
                 margin-top: 0.65rem;
-                line-height: 1.35;
+                line-height: 1.42;
+                overflow-wrap: anywhere;
             }}
         </style>
     </head>
@@ -170,7 +172,79 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
     </html>
     """
 
-    components.html(html, height=145)
+    components.html(html, height=190)
+
+
+def format_p_value(p_value):
+    if pd.isna(p_value):
+        return "Sin datos"
+    if p_value < 0.0001:
+        return "< 0.0001"
+    return f"{p_value:.4f}"
+
+
+def render_statistical_interpretation(
+    mean_ret,
+    vol_ret,
+    skew_value,
+    kurt_value,
+    jb_p_value,
+    shapiro_p_value,
+):
+    mean_text = (
+        "cercana a cero, lo que sugiere ausencia de sesgo fuerte en el retorno promedio"
+        if abs(mean_ret) < 0.0005
+        else "positiva, lo que indica un sesgo promedio favorable en el periodo"
+        if mean_ret > 0
+        else "negativa, lo que indica un sesgo promedio desfavorable en el periodo"
+    )
+    skew_text = (
+        "sin dato suficiente para evaluar asimetría"
+        if skew_value is None
+        else "negativa, asociada a cola izquierda y mayor atención a pérdidas extremas"
+        if skew_value < -0.5
+        else "positiva, asociada a mayor peso de movimientos favorables extremos"
+        if skew_value > 0.5
+        else "moderada, sin un sesgo direccional fuerte"
+    )
+    kurt_text = (
+        "sin dato suficiente para evaluar curtosis"
+        if kurt_value is None
+        else "alta, consistente con colas pesadas y mayor presencia de eventos extremos"
+        if kurt_value > 3
+        else "sin señal fuerte de colas pesadas bajo el umbral usado"
+    )
+    jb_text = (
+        "sin decisión formal por falta de datos"
+        if jb_p_value is None
+        else f"rechaza normalidad (p-value {format_p_value(jb_p_value)})"
+        if jb_p_value < 0.05
+        else f"no rechaza normalidad (p-value {format_p_value(jb_p_value)})"
+    )
+    shapiro_text = (
+        "sin dato disponible"
+        if shapiro_p_value is None
+        else f"p-value {format_p_value(shapiro_p_value)}"
+    )
+    risk_text = (
+        "conviene contrastar el VaR paramétrico normal con métodos históricos o enfoques menos dependientes de normalidad"
+        if (jb_p_value is not None and jb_p_value < 0.05) or (kurt_value is not None and kurt_value > 3)
+        else "el VaR paramétrico puede servir como referencia, pero debe validarse frente a métodos históricos"
+    )
+    skew_display = "sin datos" if skew_value is None else f"{skew_value:.2f}"
+    kurt_display = "sin datos" if kurt_value is None else f"{kurt_value:.2f}"
+    st.info(
+        f"""
+        **Lectura estadística integrada**
+
+        - **Media:** {mean_ret:.4%}, {mean_text}.
+        - **Volatilidad:** {vol_ret:.4%}, mide la dispersión diaria observada.
+        - **Asimetría:** {skew_display}; lectura {skew_text}.
+        - **Curtosis:** {kurt_display}; lectura {kurt_text}.
+        - **Normalidad:** Jarque-Bera {jb_text}; Shapiro-Wilk reporta {shapiro_text}.
+        - **Implicación para riesgo:** {risk_text}.
+        """
+    )
 
 
 inject_kpi_cards_css()
@@ -229,25 +303,8 @@ with st.sidebar:
         start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE, key="ret_start")
         end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="ret_end")
 
-    st.divider()
-    st.subheader("Modo de visualización")
-    modo = st.radio(
-        "Selecciona el nivel de detalle",
-        ["General", "Estadístico"],
-        index=0,
-    )
-
-    st.divider()
-    st.subheader("Opciones de visualización")
-    mostrar_tablas = st.checkbox("Mostrar tablas completas", value=False)
-    mostrar_qq = st.checkbox("Mostrar gráfico Q-Q", value=(modo == "Estadístico"))
-
-    with st.expander("Filtros secundarios"):
-        return_type = st.radio(
-            "Tipo de retorno",
-            ["simple_return", "log_return"],
-            index=1,
-        )
+return_type = "log_return"
+return_type_label = "Rendimiento logarítmico"
 
 # ==============================
 # Datos
@@ -274,26 +331,57 @@ if series.empty:
 
 desc_df = descriptive_stats(series)
 norm_df = normality_tests(series)
+norm_df["interpretacion"] = norm_df["p_value"].apply(
+    lambda p: "Sin datos suficientes"
+    if pd.isna(p)
+    else "Se rechaza normalidad"
+    if p < 0.05
+    else "No se rechaza normalidad"
+)
 qq_df = qq_plot_data(series)
+
+skew_value = float(desc_df.loc["asimetria", "valor"]) if "asimetria" in desc_df.index else None
+kurt_value = float(desc_df.loc["curtosis", "valor"]) if "curtosis" in desc_df.index else None
+jb_rows = norm_df[norm_df["test"] == "Jarque-Bera"]
+jb_p_value = float(jb_rows["p_value"].iloc[0]) if not jb_rows.empty and pd.notna(jb_rows["p_value"].iloc[0]) else None
+shapiro_rows = norm_df[norm_df["test"] == "Shapiro-Wilk"]
+shapiro_p_value = (
+    float(shapiro_rows["p_value"].iloc[0])
+    if not shapiro_rows.empty and pd.notna(shapiro_rows["p_value"].iloc[0])
+    else None
+)
+
+norm_display_df = norm_df.copy()
+norm_display_df["estadistico"] = norm_display_df["estadistico"].apply(
+    lambda value: "Sin datos" if pd.isna(value) else f"{value:.4f}"
+)
+norm_display_df["p_value"] = norm_display_df["p_value"].apply(format_p_value)
+
+if jb_p_value is None:
+    jb_decision = "Sin datos"
+    jb_delta = "p-value no disponible"
+    jb_delta_type = "neu"
+elif jb_p_value < 0.05:
+    jb_decision = "Rechazada"
+    jb_delta = f"p-value {format_p_value(jb_p_value)}"
+    jb_delta_type = "neg"
+else:
+    jb_decision = "No rechazada"
+    jb_delta = f"p-value {format_p_value(jb_p_value)}"
+    jb_delta_type = "pos"
 
 # ==============================
 # Resumen
 # ==============================
 st.markdown("### Resumen del módulo")
-if modo == "General":
-    st.write(
-        f"""
-        Este módulo analiza los rendimientos de **{asset_name} ({ticker})** para entender su comportamiento,
-        dispersión y qué tan lejos están de una distribución normal.
-        """
-    )
-else:
-    st.write(
-        f"""
-        Este módulo evalúa los rendimientos de **{asset_name} ({ticker})** mediante estadísticos descriptivos,
-        pruebas de normalidad y herramientas gráficas como histograma, boxplot y gráfico Q-Q.
-        """
-    )
+st.write(
+    f"""
+    Este módulo caracteriza la distribución de rendimientos de **{asset_name} ({ticker})** usando
+    rendimientos logarítmicos, estadísticos descriptivos, histograma, boxplot, Q-Q plot
+    y pruebas de normalidad. El objetivo es identificar dispersión, asimetría, colas pesadas y
+    posibles implicaciones para riesgo y VaR.
+    """
+)
 
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
 
@@ -310,51 +398,52 @@ mean_ret = series.mean()
 vol_ret = series.std(ddof=1)
 min_ret = series.min()
 max_ret = series.max()
-last_ret = series.iloc[-1] if len(series) > 0 else None
+q1_ret = series.quantile(0.25)
+q3_ret = series.quantile(0.75)
+iqr_ret = q3_ret - q1_ret
+lower_fence = q1_ret - 1.5 * iqr_ret
+upper_fence = q3_ret + 1.5 * iqr_ret
+outlier_count = int(((series < lower_fence) | (series > upper_fence)).sum())
 
 prom_delta = None
 prom_delta_type = "neu"
-if mean_ret > 0:
+if abs(mean_ret) < 0.0005:
+    prom_delta = "Sesgo débil"
+    prom_delta_type = "neu"
+elif mean_ret > 0:
     prom_delta = "Sesgo positivo"
     prom_delta_type = "pos"
-elif mean_ret < 0:
+else:
     prom_delta = "Sesgo negativo"
     prom_delta_type = "neg"
 
 vol_delta = None
 vol_delta_type = "neu"
-if vol_ret >= series.abs().median():
-    vol_delta = "Alta dispersión"
-    vol_delta_type = "neg"
-else:
-    vol_delta = "Dispersión moderada"
+if vol_ret < 0.01:
+    vol_delta = "Baja volatilidad"
     vol_delta_type = "pos"
+elif vol_ret < 0.02:
+    vol_delta = "Volatilidad moderada"
+    vol_delta_type = "neu"
+else:
+    vol_delta = "Alta volatilidad"
+    vol_delta_type = "neg"
 
-min_delta = None
-min_delta_type = "neg"
-if last_ret is not None:
-    min_delta = f"Último: {last_ret:.4%}"
-
-max_delta = None
-max_delta_type = "pos"
-if last_ret is not None:
-    max_delta = f"Último: {last_ret:.4%}"
-
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     kpi_card(
         "Promedio",
-        f"{mean_ret:.4%}",
+        f"{mean_ret:.3%}",
         delta=prom_delta,
         delta_type=prom_delta_type,
-        caption=f"Media de la serie de {return_type}",
+        caption=f"Media de la serie de {return_type_label.lower()}",
     )
 
 with col2:
     kpi_card(
         "Volatilidad",
-        f"{vol_ret:.4%}",
+        f"{vol_ret:.3%}",
         delta=vol_delta,
         delta_type=vol_delta_type,
         caption="Desviación estándar muestral de rendimientos",
@@ -362,48 +451,42 @@ with col2:
 
 with col3:
     kpi_card(
-        "Mínimo",
-        f"{min_ret:.4%}",
-        delta=min_delta,
-        delta_type="neg",
-        caption="Peor rendimiento observado en el periodo",
+        "Normalidad (JB)",
+        jb_decision,
+        delta=jb_delta,
+        delta_type=jb_delta_type,
+        caption="Decisión basada en Jarque-Bera al 5%",
     )
+
+col4, col5 = st.columns(2)
 
 with col4:
     kpi_card(
+        "Mínimo",
+        f"{min_ret:.3%}",
+        caption="Peor rendimiento observado en el periodo",
+    )
+
+with col5:
+    kpi_card(
         "Máximo",
-        f"{max_ret:.4%}",
-        delta=max_delta,
-        delta_type="pos",
+        f"{max_ret:.3%}",
         caption="Mejor rendimiento observado en el periodo",
     )
 
-# ==============================
-# Tablas principales
-# ==============================
-st.markdown("### Resumen estadístico")
-section_intro(
-    "Estadísticos y normalidad",
-    "Estas tablas permiten contrastar medidas descriptivas de la serie y evaluar si la distribución se aparta de una normal teórica.",
-)
-
-if mostrar_tablas:
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### Estadísticos descriptivos")
-        st.dataframe(desc_df, width="stretch")
-    with col2:
-        st.markdown("#### Pruebas de normalidad")
-        st.dataframe(norm_df, width="stretch")
-else:
-    with st.expander("Ver tablas estadísticas"):
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("#### Estadísticos descriptivos")
-            st.dataframe(desc_df, width="stretch")
-        with col2:
-            st.markdown("#### Pruebas de normalidad")
-            st.dataframe(norm_df, width="stretch")
+with st.expander("Interpretación de KPIs"):
+    st.markdown(
+        f"""
+        - **Promedio:** resume la dirección media de los rendimientos diarios. En **{asset_name}** es **{mean_ret:.4%}**;
+          si está cerca de cero, no hay un sesgo fuerte de rentabilidad diaria promedio.
+        - **Volatilidad:** mide cuán dispersos son los rendimientos alrededor de su media. El valor actual es
+          **{vol_ret:.4%}**, clasificado como **{vol_delta.lower()}**, y funciona como primera señal de incertidumbre.
+        - **Normalidad (JB):** indica si la distribución se parece a una normal simple. Una normalidad rechazada
+          sugiere que una aproximación normal puede no capturar bien colas, asimetrías o riesgo extremo.
+        - **Mínimo:** muestra el peor retorno observado del periodo (**{min_ret:.4%}**), útil para dimensionar pérdidas extremas históricas.
+        - **Máximo:** muestra el mejor retorno observado del periodo (**{max_ret:.4%}**), útil para comparar la amplitud de movimientos positivos.
+        """
+    )
 
 # ==============================
 # Gráficos principales
@@ -420,77 +503,132 @@ with col3:
 with col4:
     st.plotly_chart(plot_box(series), width="stretch")
 
-if modo == "General":
-    st.info(
-        """
-        **Cómo leer estos gráficos**
+skew_distribution_text = (
+    "sesgo hacia pérdidas extremas"
+    if skew_value is not None and skew_value < -0.5
+    else "sesgo hacia movimientos positivos extremos"
+    if skew_value is not None and skew_value > 0.5
+    else "asimetría moderada, sin sesgo direccional fuerte"
+)
+dispersion_text = (
+    "concentrados alrededor del centro"
+    if vol_ret < 0.01
+    else "con dispersión moderada alrededor del centro"
+    if vol_ret < 0.02
+    else "ampliamente dispersos, con variaciones diarias intensas"
+)
+outlier_text = (
+    "no se observan outliers bajo el criterio IQR"
+    if outlier_count == 0
+    else f"aparecen {outlier_count} observaciones atípicas bajo el criterio IQR"
+)
 
-        - El histograma muestra cómo se distribuyen los rendimientos del activo.
-        - La curva normal sirve como referencia para comparar si la distribución real se parece o no a una normal.
-        - El boxplot resume dispersión, mediana y posibles valores extremos.
-        """
-    )
-else:
-    with st.expander("Ver interpretación técnica de la distribución"):
-        st.write(
-            """
-            El histograma permite contrastar la forma empírica de la distribución con la referencia normal teórica,
-            mientras que el boxplot resume posición, dispersión, asimetría y presencia de valores atípicos.
-            """
-        )
+st.info(
+    f"""
+    **Lectura analítica de la distribución**
+
+    En **{asset_name}**, los rendimientos se ven **{dispersion_text}**. La forma observada sugiere
+    **{skew_distribution_text}** y en el boxplot **{outlier_text}**. Esto importa para riesgo porque una
+    distribución más dispersa, asimétrica o con valores extremos puede hacer que las pérdidas potenciales sean
+    mayores que las sugeridas por una lectura basada solo en el promedio.
+    """
+)
 
 # ==============================
 # Gráfico Q-Q
 # ==============================
-if mostrar_qq:
-    st.markdown("### Gráfico Q-Q")
-    section_intro(
-        "Contraste visual con normalidad",
-        "El gráfico Q-Q permite verificar si los cuantiles observados siguen la forma esperada bajo una distribución normal.",
-    )
+st.markdown("### Gráfico Q-Q")
+section_intro(
+    "Contraste visual con normalidad",
+    "El gráfico Q-Q compara cuantiles estandarizados para verificar si la serie sigue la forma esperada bajo normalidad.",
+)
 
-    st.plotly_chart(plot_qq(qq_df), width="stretch")
+qq_fig = plot_qq(qq_df)
+qq_fig.update_yaxes(scaleanchor="x", scaleratio=1)
+qq_fig.update_layout(height=540)
+st.plotly_chart(qq_fig, width="stretch")
 
-    if modo == "General":
-        st.info(
-            """
-            El gráfico Q-Q ayuda a ver si los rendimientos siguen una forma parecida a la distribución normal.
-            Si los puntos se alejan mucho de la diagonal, la normalidad es cuestionable.
-            """
-        )
-    else:
-        with st.expander("Ver interpretación técnica del gráfico Q-Q"):
-            st.write(
-                """
-                El gráfico Q-Q compara cuantiles muestrales frente a cuantiles teóricos normales. Desviaciones
-                sistemáticas respecto a la recta de 45° sugieren asimetría, colas pesadas o no normalidad.
-                """
-            )
+st.info(
+    """
+    El gráfico Q-Q compara los cuantiles observados del activo contra los que tendría una distribución
+    normal. Si los puntos se separan de la diagonal, especialmente en las colas, la evidencia visual
+    refuerza la presencia de no normalidad y posibles eventos extremos. Para riesgo, esas desviaciones
+    indican que una aproximación normal simple puede no capturar bien pérdidas o ganancias inusuales.
+    """
+)
 
 # ==============================
-# Interpretación
+# Tablas principales
 # ==============================
-st.markdown("### Interpretación")
+st.markdown("### Resumen estadístico")
+section_intro(
+    "Estadísticos y normalidad",
+    "Estas tablas profundizan en las medidas descriptivas y en las pruebas usadas para evaluar normalidad.",
+)
 
-if modo == "General":
-    st.success(
-        """
-        **Lectura sencilla**
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown("#### Estadísticos descriptivos")
+    st.dataframe(desc_df, width="stretch")
+with col2:
+    st.markdown("#### Pruebas de normalidad")
+    st.dataframe(norm_display_df, width="stretch")
 
-        - Este módulo muestra si los rendimientos son estables o si presentan variaciones fuertes.
-        - También ayuda a detectar si el comportamiento del activo se parece a una distribución normal o si tiene eventos extremos.
-        - Si hay mucha dispersión o colas pronunciadas, el riesgo puede ser mayor de lo que sugiere una aproximación normal simple.
-        """
-    )
-else:
-    st.info(stylized_facts_comment(series))
+render_statistical_interpretation(
+    mean_ret,
+    vol_ret,
+    skew_value,
+    kurt_value,
+    jb_p_value,
+    shapiro_p_value,
+)
 
 # ==============================
 # Datos recientes
 # ==============================
 st.markdown("### Últimos rendimientos")
-if mostrar_tablas:
-    st.dataframe(ret_df.tail(15), width="stretch")
-else:
-    with st.expander("Ver últimos rendimientos"):
-        st.dataframe(ret_df.tail(15), width="stretch")
+st.dataframe(ret_df.tail(15), width="stretch")
+
+# ==============================
+# Conclusión
+# ==============================
+st.markdown("### Conclusión")
+
+normality_conclusion = (
+    "no hay suficientes datos para una decisión formal de normalidad"
+    if jb_p_value is None
+    else "se rechaza normalidad"
+    if jb_p_value < 0.05
+    else "no se rechaza normalidad"
+)
+tails_conclusion = (
+    "no hay suficientes datos para evaluar colas"
+    if kurt_value is None
+    else "hay señal de colas pesadas"
+    if kurt_value > 3
+    else "no aparece una señal fuerte de colas pesadas"
+)
+skew_conclusion = (
+    "no hay suficientes datos para evaluar asimetría"
+    if skew_value is None
+    else "predomina riesgo de cola izquierda"
+    if skew_value < -0.5
+    else "predomina sesgo positivo"
+    if skew_value > 0.5
+    else "la asimetría no muestra sesgo direccional fuerte"
+)
+var_conclusion = (
+    "conviene contrastar el VaR paramétrico normal con métodos históricos o no normales."
+    if (jb_p_value is not None and jb_p_value < 0.05) or (kurt_value is not None and kurt_value > 3)
+    else "el VaR paramétrico puede usarse como referencia, pero debe validarse contra métodos históricos."
+)
+kurt_display = "sin datos" if kurt_value is None else f"{kurt_value:.2f}"
+skew_display = "sin datos" if skew_value is None else f"{skew_value:.2f}"
+st.info(
+    f"""
+    - **Normalidad:** {normality_conclusion} con Jarque-Bera (p-value {format_p_value(jb_p_value)}).
+    - **Colas:** {tails_conclusion} (curtosis {kurt_display}).
+    - **Asimetría:** {skew_conclusion} (asimetría {skew_display}).
+    - **Puente a VaR:** {var_conclusion}
+    """
+)

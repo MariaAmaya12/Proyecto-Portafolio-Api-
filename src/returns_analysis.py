@@ -64,8 +64,14 @@ def normality_tests(returns: pd.Series) -> pd.DataFrame:
 def qq_plot_data(returns: pd.Series) -> pd.DataFrame:
     """
     Datos para Q-Q plot contra normal.
+
+    La muestra se estandariza para que los cuantiles muestrales y teóricos
+    queden en una escala comparable frente a la línea de 45 grados.
     """
     r = returns.dropna()
+    sigma = r.std(ddof=1)
+    if sigma and not np.isnan(sigma):
+        r = (r - r.mean()) / sigma
     osm, osr = stats.probplot(r, dist="norm", fit=False)
     return pd.DataFrame({"theoretical_quantiles": osm, "sample_quantiles": osr})
 

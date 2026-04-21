@@ -349,8 +349,9 @@ def plot_box(returns: pd.Series) -> go.Figure:
         go.Box(
             y=returns.dropna(),
             name="Rendimientos",
-            marker_color="#8FD3FF",
-            line_color="#8FD3FF",
+            fillcolor="rgba(219, 234, 254, 0.70)",
+            marker=dict(color="#2563EB", size=5, opacity=0.65),
+            line=dict(color="#1E3A8A", width=2),
             boxmean=True,
         )
     )
