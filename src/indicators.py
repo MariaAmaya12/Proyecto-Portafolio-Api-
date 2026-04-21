@@ -25,6 +25,18 @@ def add_rsi(df: pd.DataFrame, window: int = 14) -> pd.DataFrame:
     return out
 
 
+def rsi(close: pd.Series, window: int = 14) -> pd.Series:
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.ewm(alpha=1 / window, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / window, adjust=False).mean()
+
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+
 def add_macd(
     df: pd.DataFrame,
     fast: int = 12,
