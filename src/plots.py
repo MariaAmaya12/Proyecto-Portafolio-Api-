@@ -364,20 +364,57 @@ def plot_box(returns: pd.Series) -> go.Figure:
 def plot_volatility(vol_df: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
 
-    palette = ["#8FD3FF", "#1E90FF", "#F6C1C1", "#FFB347", "#7CFC9A"]
+    model_colors = {
+        "ARCH(1)": "#1E3A8A",
+        "GARCH(1,1)": "#7C3AED",
+        "EGARCH(1,1)": "#D97706",
+    }
+    fallback_palette = ["#7C3AED", "#64748B", "#F59E0B"]
 
     for i, col in enumerate(vol_df.columns):
+        color = model_colors.get(col, fallback_palette[i % len(fallback_palette)])
         fig.add_trace(
             go.Scatter(
                 x=vol_df.index,
                 y=vol_df[col],
                 mode="lines",
                 name=col,
-                line=dict(color=palette[i % len(palette)], width=2),
+                line=dict(color=color, width=2.2),
             )
         )
 
-    return _apply_layout(fig, "Volatilidad condicional estimada", "Fecha", "Volatilidad")
+    fig = _apply_layout(fig, "Volatilidad condicional estimada", "Fecha", "Volatilidad")
+    fig.update_yaxes(rangemode="tozero")
+    return fig
+
+
+def plot_standardized_residuals(std_resid: pd.DataFrame | pd.Series) -> go.Figure:
+    if isinstance(std_resid, pd.DataFrame):
+        resid = std_resid.iloc[:, 0]
+    else:
+        resid = std_resid
+
+    resid = pd.to_numeric(resid, errors="coerce").dropna()
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=resid.index,
+            y=resid,
+            mode="lines",
+            name="Residuos estandarizados",
+            line=dict(color="#2563EB", width=1.8),
+        )
+    )
+    fig.add_hline(y=0, line_dash="dash", line_color="rgba(15, 23, 42, 0.35)")
+
+    return _apply_layout(
+        fig,
+        "Residuos estandarizados del modelo seleccionado",
+        "Fecha",
+        "Residuo estandarizado",
+        theme="light",
+    )
 
 
 def plot_forecast(forecast_df: pd.DataFrame, long_run_vol: float | None = None) -> go.Figure:
@@ -389,8 +426,8 @@ def plot_forecast(forecast_df: pd.DataFrame, long_run_vol: float | None = None) 
             y=forecast_df["volatilidad_pronosticada"],
             mode="lines+markers",
             name="Forecast",
-            line=dict(color=INDICATOR_COLORS["Forecast"], width=2),
-            marker=dict(size=6),
+            line=dict(color="#2563EB", width=2.4),
+            marker=dict(size=7, color="#2563EB"),
         )
     )
 
@@ -398,12 +435,14 @@ def plot_forecast(forecast_df: pd.DataFrame, long_run_vol: float | None = None) 
         fig.add_hline(
             y=long_run_vol,
             line_dash="dash",
-            line_color="#FFB347",
+            line_color="#D97706",
             annotation_text="Volatilidad de largo plazo",
             annotation_position="top left",
         )
 
-    return _apply_layout(fig, "Pronóstico de volatilidad", "Horizonte", "Volatilidad")
+    fig = _apply_layout(fig, "Pronóstico de volatilidad", "Horizonte", "Volatilidad")
+    fig.update_yaxes(rangemode="tozero")
+    return fig
 
 
 # =========================================================

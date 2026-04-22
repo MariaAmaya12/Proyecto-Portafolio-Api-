@@ -5,13 +5,12 @@ import pandas as pd
 from src.config import (
     ASSETS,
     DEFAULT_END_DATE,
-    DEFAULT_START_DATE,
     ensure_project_dirs,
     get_ticker,
 )
 from src.download import data_error_message, download_single_ticker
 from src.garch_models import fit_garch_models
-from src.plots import plot_forecast, plot_volatility
+from src.plots import plot_forecast, plot_standardized_residuals, plot_volatility
 from src.returns_analysis import compute_return_series
 from src.risk_metrics import validar_serie_para_garch
 from src.ui_navigation import render_sidebar_navigation
@@ -50,6 +49,27 @@ def inject_kpi_cards_css():
             color: #64748b;
             line-height: 1.45;
         }
+
+        .soft-explain-box {
+            background: #eff6ff;
+            border: 1px solid rgba(37, 99, 235, 0.16);
+            border-radius: 14px;
+            padding: 14px 16px;
+            margin: 0.65rem 0 0.9rem 0;
+        }
+
+        .soft-explain-title {
+            color: #0f172a;
+            font-size: 0.95rem;
+            font-weight: 750;
+            margin-bottom: 0.25rem;
+        }
+
+        .soft-explain-body {
+            color: #334155;
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -68,10 +88,36 @@ def section_intro(title: str, subtitle: str):
     )
 
 
+def soft_note(title: str, body: str):
+    st.markdown(
+        f"""
+        <div class="soft-explain-box">
+            <div class="soft-explain-title">{sanitize_text(title)}</div>
+            <div class="soft-explain-body">{sanitize_text(body)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def sanitize_text(text):
     if text is None:
         return ""
-    return str(text).replace("<", "").replace(">", "")
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def fmt_num(value):
+    numeric_value = pd.to_numeric(value, errors="coerce")
+    return f"{numeric_value:.3f}" if pd.notna(numeric_value) else "N/D"
+
+
+def fmt_pvalue(value):
+    numeric_value = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric_value):
+        return "N/D"
+    if numeric_value < 0.001:
+        return "< 0.001"
+    return f"{numeric_value:.3f}"
 
 
 def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
@@ -99,43 +145,54 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
             }}
 
             .kpi-card {{
-                background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-                border: 1px solid rgba(15, 23, 42, 0.08);
-                border-radius: 18px;
-                padding: 18px 18px 14px 18px;
-                box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-                min-height: 124px;
+                background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+                border: 1px solid rgba(37, 99, 235, 0.16);
+                border-radius: 14px;
+                padding: 16px 16px 14px 16px;
+                box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+                min-height: 156px;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
                 justify-content: space-between;
+                align-items: center;
+                gap: 0.55rem;
+                overflow: visible;
+                text-align: center;
             }}
 
             .kpi-label {{
-                font-size: 0.88rem;
-                font-weight: 600;
-                color: #475569;
+                font-size: 0.82rem;
+                font-weight: 700;
+                color: #334155;
                 margin-bottom: 0.35rem;
-                letter-spacing: 0.2px;
+                letter-spacing: 0;
+                line-height: 1.25;
             }}
 
             .kpi-value {{
-                font-size: 1.85rem;
+                font-size: 1.82rem;
                 font-weight: 800;
                 color: #0f172a;
-                line-height: 1.1;
+                line-height: 1.08;
                 margin-bottom: 0.45rem;
-                word-break: break-word;
+                overflow-wrap: anywhere;
+                word-break: normal;
+                white-space: normal;
+                width: 100%;
             }}
 
             .kpi-delta {{
                 display: inline-block;
                 width: fit-content;
-                font-size: 0.80rem;
+                max-width: 100%;
+                font-size: 0.76rem;
                 font-weight: 700;
                 padding: 0.28rem 0.55rem;
                 border-radius: 999px;
                 margin-top: 0.10rem;
+                line-height: 1.2;
+                white-space: normal;
             }}
 
             .kpi-delta.pos {{
@@ -154,10 +211,13 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
             }}
 
             .kpi-caption {{
-                font-size: 0.78rem;
-                color: #64748b;
-                margin-top: 0.65rem;
-                line-height: 1.35;
+                font-size: 0.76rem;
+                color: #475569;
+                margin-top: 0.45rem;
+                line-height: 1.38;
+                overflow-wrap: normal;
+                word-break: normal;
+                white-space: normal;
             }}
         </style>
     </head>
@@ -174,7 +234,7 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
     </html>
     """
 
-    components.html(html, height=145)
+    components.html(html, height=194)
 
 
 inject_kpi_cards_css()
@@ -201,7 +261,6 @@ with st.sidebar:
             "2 años",
             "3 años",
             "5 años",
-            "Personalizado",
         ],
         index=3,
     )
@@ -229,30 +288,6 @@ with st.sidebar:
     elif horizonte == "5 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
         end_date = fecha_fin_ref.date()
-    else:
-        start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE, key="garch_start")
-        end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="garch_end")
-
-    st.divider()
-    st.subheader("Modo de visualización")
-    modo = st.radio(
-        "Selecciona el nivel de detalle",
-        ["General", "Estadístico"],
-        index=0,
-    )
-
-    st.divider()
-    st.subheader("Opciones de visualización")
-
-    mostrar_long_run = st.checkbox("Mostrar volatilidad de largo plazo", value=True)
-    mostrar_tablas = st.checkbox("Mostrar tablas completas", value=False)
-
-    mostrar_diagnostico = False
-    mostrar_residuos = False
-
-    if modo == "Estadístico":
-        mostrar_diagnostico = st.checkbox("Mostrar diagnóstico del modelo", value=True)
-        mostrar_residuos = st.checkbox("Mostrar residuos estandarizados", value=False)
 
 # ==============================
 # Descargar datos
@@ -274,52 +309,6 @@ if "log_return" not in ret_df.columns:
 serie_retornos = ret_df["log_return"]
 
 # ==============================
-# Resumen
-# ==============================
-st.markdown("### Resumen del módulo")
-if modo == "General":
-    st.write(
-        f"""
-        Este módulo evalúa si la volatilidad de **{asset_name} ({ticker})** cambia a lo largo del tiempo.
-        En mercados financieros esto es importante porque los periodos tranquilos y turbulentos no suelen
-        alternarse de manera uniforme.
-        """
-    )
-else:
-    st.write(
-        f"""
-        Este módulo ajusta modelos ARCH/GARCH sobre los rendimientos logarítmicos de **{asset_name} ({ticker})**
-        para modelar heterocedasticidad condicional, comparar especificaciones y generar pronósticos de volatilidad.
-        """
-    )
-
-st.caption(f"Periodo analizado: {start_date} a {end_date}")
-
-# ==============================
-# Explicación base
-# ==============================
-if modo == "General":
-    st.info(
-        """
-        **Idea central**
-        - La volatilidad no siempre es constante.
-        - Los modelos GARCH ayudan a capturar periodos de calma y periodos de alta incertidumbre.
-        - Esto permite medir mejor el riesgo que usar una sola volatilidad fija.
-        """
-    )
-else:
-    with st.expander("Ver fundamento teórico"):
-        st.write(
-            """
-            La volatilidad condicional se usa cuando la varianza no es constante en el tiempo.
-            En finanzas esto ocurre con frecuencia por clustering de volatilidad.
-
-            Los modelos GARCH permiten modelar esa persistencia de la volatilidad y generar
-            pronósticos de riesgo más realistas que una volatilidad histórica constante.
-            """
-        )
-
-# ==============================
 # Validación de la serie
 # ==============================
 validacion = validar_serie_para_garch(
@@ -327,45 +316,6 @@ validacion = validar_serie_para_garch(
     min_obs=120,
     max_null_ratio=0.05,
 )
-
-st.markdown("### Validación de la serie para GARCH")
-section_intro(
-    "Calidad de la serie de entrada",
-    "Antes de ajustar el modelo, verificamos observaciones útiles, limpieza de datos y variabilidad mínima.",
-)
-
-n_original = validacion["resumen"].get("n_original", 0)
-n_limpio = validacion["resumen"].get("n_limpio", 0)
-std_val = validacion["resumen"].get("std", 0)
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    kpi_card(
-        "Obs. originales",
-        f"{n_original:,}".replace(",", "."),
-        caption="Cantidad total de datos descargados",
-    )
-
-with col2:
-    ratio_util = (n_limpio / n_original) if n_original else None
-    kpi_card(
-        "Obs. limpias",
-        f"{n_limpio:,}".replace(",", "."),
-        delta=f"{ratio_util:.1%} útiles" if ratio_util is not None else None,
-        delta_type="pos" if ratio_util is not None and ratio_util >= 0.95 else "neu",
-        caption="Datos válidos para estimar el modelo",
-    )
-
-with col3:
-    kpi_card(
-        "Desv. estándar",
-        f"{std_val:.6f}",
-        caption="Dispersión de los rendimientos logarítmicos",
-    )
-
-for adv in validacion["advertencias"]:
-    st.warning(adv)
 
 if not validacion["ok"]:
     for err in validacion["errores"]:
@@ -377,15 +327,46 @@ if not validacion["ok"]:
     )
     st.stop()
 
-# ==============================
-# Preparar datos para GARCH
-# ==============================
+for adv in validacion["advertencias"]:
+    st.warning(adv)
+
 serie_garch = validacion["serie_limpia"] * 100.0
 
-if modo == "Estadístico":
+# ==============================
+# Resumen
+# ==============================
+st.markdown("### Resumen del módulo")
+st.write(
+    f"""
+    Este módulo ajusta modelos ARCH/GARCH sobre los rendimientos logarítmicos de **{asset_name} ({ticker})**
+    para modelar heterocedasticidad condicional, comparar especificaciones y generar pronósticos de volatilidad.
+    La lectura integra validación de datos, selección del mejor modelo, persistencia, volatilidad de largo plazo
+    y diagnóstico del ajuste.
+    """
+)
+
+st.caption(f"Periodo analizado: {start_date} a {end_date}")
+
+# ==============================
+# Fundamento teórico
+# ==============================
+with st.expander("Ver fundamento teórico"):
     st.caption(
-        "Los rendimientos logarítmicos se escalan por 100 para mejorar la estabilidad numérica "
-        "del ajuste en modelos ARCH/GARCH."
+        "Este bloque justifica por qué se usan modelos de volatilidad condicional antes de revisar resultados."
+    )
+    st.write(
+        """
+        La volatilidad condicional se usa cuando la varianza no es constante en el tiempo.
+        En finanzas esto ocurre con frecuencia por clustering de volatilidad: periodos de calma
+        suelen alternarse con periodos de turbulencia.
+
+        Los modelos GARCH permiten modelar la persistencia de la volatilidad y generar
+        pronósticos de riesgo más realistas que una volatilidad histórica constante.
+
+        Para este ajuste, la serie cumple condiciones mínimas de longitud, limpieza y variabilidad.
+        Además, los rendimientos logarítmicos se escalan por 100 para mejorar la estabilidad numérica
+        del ajuste en modelos ARCH/GARCH.
+        """
     )
 
 # ==============================
@@ -398,48 +379,39 @@ if results["comparison"].empty:
     st.stop()
 
 # ==============================
-# Volatilidad de largo plazo
+# Resultados principales
 # ==============================
+comparison_df = results["comparison"].copy()
+if "AIC" in comparison_df.columns:
+    comparison_df = comparison_df.sort_values("AIC", ascending=True).reset_index(drop=True)
+
+best_model = results.get("best_model_name", None)
+best_row = pd.DataFrame()
+if best_model is not None and "modelo" in comparison_df.columns:
+    best_row = comparison_df.loc[comparison_df["modelo"] == best_model]
+
+if best_row.empty and not comparison_df.empty:
+    best_row = comparison_df.head(1)
+    best_model = best_row.iloc[0].get("modelo", best_model)
+
+best_aic = None
+best_bic = None
+best_converged = "N/D"
 long_run_vol = None
 persistence = None
 
-try:
-    best_model_name = results.get("best_model_name")
-    comparison_df = results.get("comparison")
+if not best_row.empty:
+    row = best_row.iloc[0]
+    best_aic = pd.to_numeric(row.get("AIC"), errors="coerce")
+    best_bic = pd.to_numeric(row.get("BIC"), errors="coerce")
+    best_converged = row.get("convergió", row.get("convergiÃ³", "N/D"))
+    persistence = pd.to_numeric(row.get("persistencia"), errors="coerce")
 
-    if best_model_name is not None and comparison_df is not None and not comparison_df.empty:
-        best_row = comparison_df.loc[comparison_df["modelo"] == best_model_name]
-
-        if not best_row.empty:
-            omega = pd.to_numeric(best_row["omega"], errors="coerce").iloc[0]
-            alpha_1 = pd.to_numeric(best_row["alpha_1"], errors="coerce").iloc[0]
-
-            beta_1 = None
-            if "beta_1" in best_row.columns:
-                beta_1 = pd.to_numeric(best_row["beta_1"], errors="coerce").iloc[0]
-
-            if pd.notna(omega) and pd.notna(alpha_1):
-                persistence = alpha_1 + beta_1 if pd.notna(beta_1) else alpha_1
-
-                if persistence < 1:
-                    long_run_var = omega / (1 - persistence)
-                    if long_run_var > 0:
-                        long_run_vol = long_run_var ** 0.5
-except Exception:
-    long_run_vol = None
-    persistence = None
-
-# ==============================
-# KPIs
-# ==============================
-st.markdown("### KPIs del ajuste")
-section_intro(
-    "Resumen ejecutivo del modelo",
-    "Aquí se condensan los resultados principales del ajuste para lectura rápida y presentación.",
-)
-
-best_model = results.get("best_model_name", None)
-n_models = len(results["comparison"]) if "comparison" in results else 0
+    omega = pd.to_numeric(row.get("omega"), errors="coerce")
+    if pd.notna(omega) and pd.notna(persistence) and persistence < 1:
+        long_run_var = omega / (1 - persistence)
+        if long_run_var > 0:
+            long_run_vol = long_run_var ** 0.5
 
 forecast_last = None
 try:
@@ -447,156 +419,334 @@ try:
 except Exception:
     forecast_last = None
 
-c1, c2, c3, c4 = st.columns(4)
+diagnostics_df = results.get("diagnostics", pd.DataFrame()).copy()
+diagnostic_map = {}
+if not diagnostics_df.empty and {"metrica", "valor"}.issubset(diagnostics_df.columns):
+    diagnostic_map = dict(zip(diagnostics_df["metrica"], diagnostics_df["valor"]))
 
-with c1:
-    kpi_card(
-        "Activo",
-        asset_name,
-        caption=f"Ticker de referencia: {ticker}",
+jb_stat = pd.to_numeric(diagnostic_map.get("jb_residuos_stat"), errors="coerce")
+jb_pvalue = pd.to_numeric(diagnostic_map.get("jb_residuos_pvalue"), errors="coerce")
+
+if pd.notna(jb_pvalue):
+    normality_rejected = jb_pvalue < 0.05
+    normality_decision = (
+        f"Se rechaza normalidad en residuos estandarizados (p-value {fmt_pvalue(jb_pvalue)})."
+        if normality_rejected
+        else f"No se rechaza normalidad en residuos estandarizados (p-value {fmt_pvalue(jb_pvalue)})."
     )
+else:
+    normality_rejected = None
+    normality_decision = "No fue posible evaluar normalidad de residuos estandarizados."
 
-with c2:
-    kpi_card(
-        "Modelos comparados",
-        str(n_models),
-        caption="Especificaciones evaluadas en el ajuste",
-    )
+if pd.notna(persistence):
+    if persistence >= 0.90:
+        persistence_label = "Alta persistencia"
+        persistence_delta = "pos"
+    elif persistence >= 0.75:
+        persistence_label = "Persistencia media"
+        persistence_delta = "neu"
+    else:
+        persistence_label = "Persistencia baja"
+        persistence_delta = "neg"
+else:
+    persistence_label = None
+    persistence_delta = "neu"
 
-with c3:
+# ==============================
+# KPIs del mejor modelo
+# ==============================
+st.markdown("### KPIs del mejor modelo")
+section_intro(
+    "Resumen analítico del ajuste",
+    "Estos indicadores resumen la selección, persistencia y riesgo prospectivo del modelo ganador.",
+)
+
+k1, k2, k3 = st.columns(3)
+
+with k1:
     kpi_card(
         "Mejor modelo",
         str(best_model) if best_model is not None else "N/D",
-        caption="Selección según criterios de comparación",
+        caption="Modelo con menor AIC",
     )
 
-with c4:
+with k2:
+    kpi_card(
+        "AIC",
+        fmt_num(best_aic),
+        caption="Criterio de información del modelo ganador",
+    )
+
+with k3:
+    kpi_card(
+        "Persistencia",
+        fmt_num(persistence),
+        delta=persistence_label,
+        delta_type=persistence_delta,
+        caption="Suma alpha + beta cuando aplica",
+    )
+
+k4, k5 = st.columns(2)
+
+with k4:
     kpi_card(
         "Forecast final",
-        f"{forecast_last:.4f}" if forecast_last is not None else "N/D",
+        fmt_num(forecast_last),
         caption="Último valor pronosticado de volatilidad",
     )
 
-if modo == "Estadístico":
-    extra1, extra2 = st.columns(2)
+with k5:
+    kpi_card(
+        "Vol. largo plazo",
+        fmt_num(long_run_vol),
+        caption="Nivel de reversión si el modelo es estacionario",
+    )
 
-    with extra1:
-        if persistence is not None:
-            if persistence >= 0.90:
-                delta_text = "Alta persistencia"
-                delta_type = "pos"
-            elif persistence >= 0.75:
-                delta_text = "Persistencia media"
-                delta_type = "neu"
-            else:
-                delta_text = "Persistencia baja"
-                delta_type = "neg"
+with st.expander("¿Qué significa cada KPI?"):
+    st.write(
+        """
+        **Mejor modelo:** especificación que tuvo mejor desempeño comparativo entre los modelos estimados.
+
+        **AIC:** criterio de información; un valor más bajo suele indicar mejor equilibrio entre ajuste y complejidad.
+
+        **Persistencia:** mide qué tanto duran los choques de volatilidad. Si es alta, los episodios de incertidumbre pueden prolongarse.
+
+        **Forecast final:** volatilidad esperada al final del horizonte pronosticado.
+
+        **Volatilidad de largo plazo:** nivel al que tendería la volatilidad si el modelo es estacionario.
+        """
+    )
+
+# ==============================
+# Lectura del modelo seleccionado
+# ==============================
+st.markdown("### Lectura del modelo seleccionado")
+
+if best_model is not None:
+    lectura = [
+        f"El modelo **{best_model}** fue seleccionado por presentar el menor AIC dentro de las especificaciones estimadas."
+    ]
+
+    if pd.notna(persistence):
+        lectura.append(
+            f"La persistencia estimada es **{fmt_num(persistence)}**, lo que indica qué tan rápido se disipan los choques de volatilidad."
+        )
+        if persistence >= 0.90:
+            lectura.append(
+                "Este nivel es consistente con clustering de volatilidad: los episodios de alta incertidumbre tienden a mantenerse por varios periodos."
+            )
         else:
-            delta_text = None
-            delta_type = "neu"
+            lectura.append(
+                "La persistencia no es extrema, por lo que los choques de volatilidad tienden a disiparse con mayor rapidez."
+            )
 
-        kpi_card(
-            "Persistencia",
-            f"{persistence:.4f}" if persistence is not None else "N/D",
-            delta=delta_text,
-            delta_type=delta_type,
-            caption="Memoria de los choques de volatilidad",
-        )
-
-    with extra2:
-        kpi_card(
-            "Volatilidad largo plazo",
-            f"{long_run_vol:.4f}" if long_run_vol is not None else "N/D",
-            caption="Nivel al que tendería la volatilidad si el modelo es estacionario",
-        )
-
-# ==============================
-# Interpretación automática
-# ==============================
-st.markdown("### Interpretación")
-
-if results["best_model_name"] is not None and results.get("summary_text"):
-    if modo == "General":
-        st.success(results["summary_text"])
-    else:
-        st.info(results["summary_text"])
+    st.info(" ".join(lectura))
 else:
-    st.warning("No se generó un resumen automático del mejor modelo.")
+    st.warning("No se generó una lectura automática del mejor modelo.")
 
 # ==============================
 # Comparación de modelos
 # ==============================
-st.markdown("### Comparación de modelos")
-
-if mostrar_tablas:
-    st.dataframe(results["comparison"], width="stretch")
-else:
-    with st.expander("Ver comparación completa de modelos"):
-        st.dataframe(results["comparison"], width="stretch")
-
-# ==============================
-# Gráficos
-# ==============================
-st.caption(
-    "El forecast muestra la evolución esperada de la volatilidad para distintos horizontes. "
-    "Opcionalmente se incluye la volatilidad de largo plazo del modelo."
-)
-
-st.markdown("### Volatilidad y pronóstico")
-
-col1, col2 = st.columns(2)
-with col1:
-    st.plotly_chart(plot_volatility(results["volatility"]), width="stretch")
-with col2:
-    st.plotly_chart(
-        plot_forecast(
-            results["forecast"],
-            long_run_vol=long_run_vol if mostrar_long_run else None,
-        ),
-        width="stretch",
+with st.expander("Ver comparación completa entre modelos"):
+    section_intro(
+        "Selección de especificación",
+        "Se comparan modelos candidatos mediante log-verosimilitud, AIC, BIC, convergencia y parámetros estimados.",
     )
 
-if modo == "General":
-    st.info(
-        """
-        **Cómo leer la volatilidad condicional estimada**
+    preferred_columns = [
+        "modelo",
+        "loglik",
+        "AIC",
+        "BIC",
+        "convergió",
+        "convergiÃ³",
+        "mu",
+        "omega",
+        "alpha_1",
+        "beta_1",
+        "persistencia",
+    ]
+    visible_columns = [col for col in preferred_columns if col in comparison_df.columns]
+    st.dataframe(comparison_df[visible_columns], width="stretch")
 
-        - El primer gráfico muestra cómo cambia la volatilidad estimada a lo largo del tiempo.
-        - Valores altos indican mayor incertidumbre y, por tanto, mayor riesgo.
-
-        **Cómo leer el pronóstico de volatilidad**
-
-        - El horizonte representa el número de días hacia el futuro.
-        - En el corto plazo, la volatilidad refleja choques recientes.
-        - A medida que aumenta el horizonte, la volatilidad tiende a estabilizarse.
-        - La línea punteada muestra la **volatilidad de largo plazo** del modelo.
-        - Esto refleja el comportamiento típico de modelos GARCH (mean reversion).
-        """
-    )
-else:
-    with st.expander("Ver interpretación técnica de volatilidad y forecast"):
-        st.write(
-            """
-            La serie de volatilidad condicional captura persistencia y clustering de la varianza,
-            mientras que el forecast resume la trayectoria esperada de volatilidad bajo el modelo
-            seleccionado. Esto permite comparar riesgo reciente y riesgo prospectivo.
-
-            El horizonte indica el número de días hacia el futuro para los cuales se proyecta la volatilidad.
-            Si el modelo es estacionario, el forecast tiende a converger hacia una volatilidad de largo plazo,
-            reflejando reversión a la media en la dinámica GARCH.
-            """
-        )
+    if best_model is not None:
+        criterio = f"AIC = {fmt_num(best_aic)}" if pd.notna(best_aic) else "menor AIC disponible"
+        st.caption(f"El modelo con mejor criterio de información es **{best_model}** ({criterio}).")
 
 # ==============================
 # Diagnóstico
 # ==============================
-if modo == "Estadístico" and mostrar_diagnostico:
-    st.markdown("### Diagnóstico")
-    st.dataframe(results["diagnostics"], width="stretch")
+st.markdown("### Diagnóstico del modelo")
+
+d1, d2, d3, d4 = st.columns(4)
+
+with d1:
+    kpi_card(
+        "Convergencia",
+        str(best_converged),
+        caption="Estado de convergencia del ajuste",
+    )
+
+with d2:
+    kpi_card(
+        "JB residuos est.",
+        fmt_num(jb_stat),
+        caption="Jarque-Bera sobre residuos estandarizados",
+    )
+
+with d3:
+    kpi_card(
+        "p-value JB",
+        fmt_pvalue(jb_pvalue),
+        delta="Rechaza normalidad" if normality_rejected else "No rechaza" if normality_rejected is False else None,
+        delta_type="neg" if normality_rejected else "pos" if normality_rejected is False else "neu",
+        caption="Prueba sobre residuos estandarizados",
+    )
+
+with d4:
+    kpi_card(
+        "Persistencia",
+        fmt_num(persistence),
+        delta=persistence_label,
+        delta_type=persistence_delta,
+        caption="Memoria de la volatilidad",
+    )
+
+with st.expander("¿Cómo interpretar este diagnóstico?"):
+    st.write(
+        """
+        **Convergencia:** indica si el modelo logró estimarse correctamente.
+
+        **JB residuos est.:** prueba de Jarque-Bera aplicada a los residuos estandarizados del modelo.
+
+        **p-value JB:** ayuda a decidir si se rechaza normalidad. Si es muy pequeño, como **< 0.001**, se rechaza normalidad en residuos.
+
+        **Persistencia:** indica si los choques de volatilidad duran poco o mucho.
+
+        Si el p-value es muy pequeño, el modelo puede estar capturando la volatilidad, pero todavía pueden quedar colas o comportamientos extremos no explicados por completo.
+        """
+    )
+
+if normality_rejected:
+    soft_note(
+        "Lectura del diagnóstico",
+        "Se rechaza normalidad en residuos estandarizados; el modelo captura la dinámica de volatilidad, "
+        "pero no elimina completamente rasgos no normales. Esto sugiere que el riesgo extremo puede no estar "
+        "totalmente capturado por una aproximación normal.",
+    )
+elif normality_rejected is False:
+    soft_note(
+        "Lectura del diagnóstico",
+        "No se rechaza normalidad en residuos estandarizados; bajo esta prueba, los residuos no muestran "
+        "evidencia estadística fuerte contra normalidad.",
+    )
+else:
+    soft_note("Lectura del diagnóstico", normality_decision)
+
+if not diagnostics_df.empty:
+    with st.expander("Ver detalle técnico del diagnóstico"):
+        st.dataframe(diagnostics_df, width="stretch")
+else:
+    st.info("No se generaron diagnósticos adicionales para el modelo seleccionado.")
+
+if "std_resid" in results and results["std_resid"] is not None:
+    st.plotly_chart(plot_standardized_residuals(results["std_resid"]), width="stretch")
+    soft_note(
+        "Lectura de los residuos estandarizados",
+        "Si los residuos oscilan alrededor de cero, el modelo está capturando buena parte de la estructura media. "
+        "Si persisten picos extremos, todavía hay episodios que el modelo no absorbe completamente; esto es importante "
+        "para evaluar riesgo extremo.",
+    )
+
+    with st.expander("Ver residuos estandarizados"):
+        st.dataframe(results["std_resid"].tail(20), width="stretch")
 
 # ==============================
-# Residuos estandarizados
+# Volatilidad condicional estimada
 # ==============================
-if modo == "Estadístico" and mostrar_residuos:
-    st.markdown("### Residuos estandarizados")
-    st.dataframe(results["std_resid"].tail(20), width="stretch")
+st.markdown("### Volatilidad condicional estimada")
+st.caption(
+    "La gráfica compara cómo cada especificación modela la evolución de la volatilidad condicional a lo largo del tiempo."
+)
+st.plotly_chart(plot_volatility(results["volatility"]), width="stretch")
+
+with st.expander("¿Qué significan ARCH, GARCH y EGARCH?"):
+    st.write(
+        """
+        **ARCH** se enfoca en cómo los choques recientes afectan la volatilidad actual.
+
+        **GARCH** combina el efecto de choques recientes con la persistencia de la volatilidad pasada.
+        Por eso suele capturar mejor periodos donde la incertidumbre se mantiene durante varios días.
+
+        **EGARCH** permite capturar respuestas asimétricas: por ejemplo, cuando malas noticias aumentan
+        la volatilidad más que buenas noticias de tamaño similar.
+        """
+    )
+
+soft_note(
+    "Lectura de la volatilidad estimada",
+    "La volatilidad condicional permite identificar clustering: tramos donde la incertidumbre se concentra "
+    "y tarda en disiparse. Una persistencia elevada refuerza la lectura de episodios de riesgo agrupado.",
+)
+
+# ==============================
+# Pronóstico de volatilidad
+# ==============================
+horizon_steps = None
+try:
+    horizon_steps = int(results["forecast"]["horizonte"].max())
+except Exception:
+    horizon_steps = None
+
+forecast_title = (
+    f"### Pronóstico de volatilidad ({horizon_steps} pasos)"
+    if horizon_steps is not None
+    else "### Pronóstico de volatilidad (N pasos)"
+)
+st.markdown(forecast_title)
+st.caption(
+    "El gráfico muestra un pronóstico de volatilidad a varios pasos hacia adelante. "
+    "La línea de volatilidad de largo plazo se incluye cuando el modelo seleccionado es estacionario."
+)
+st.plotly_chart(
+    plot_forecast(
+        results["forecast"],
+        long_run_vol=long_run_vol,
+    ),
+    width="stretch",
+)
+soft_note(
+    "Lectura del pronóstico",
+    "Este forecast resume la volatilidad esperada para un horizonte futuro de varios pasos. "
+    "Si el modelo es estacionario, la trayectoria pronosticada tiende a acercarse a la volatilidad de largo plazo.",
+)
+
+# ==============================
+# Conclusión
+# ==============================
+st.markdown("### Conclusión")
+
+if best_model is not None:
+    conclusion_parts = [
+        f"El modelo ganador fue **{best_model}** por criterio AIC.",
+    ]
+
+    if pd.notna(persistence):
+        conclusion_parts.append(
+            f"La persistencia de **{fmt_num(persistence)}** indica el grado de memoria de los choques de volatilidad."
+        )
+
+    conclusion_parts.append(normality_decision)
+
+    if forecast_last is not None:
+        conclusion_parts.append(
+            f"El forecast final de **{fmt_num(forecast_last)}** resume la volatilidad esperada al cierre del horizonte."
+        )
+
+    conclusion_parts.append(
+        "Para la gestión de riesgo y VaR, estos resultados ayudan a distinguir entre riesgo reciente, persistencia y riesgo prospectivo."
+    )
+
+    st.success(" ".join(conclusion_parts))
+else:
+    st.info("No fue posible construir una conclusión porque no se seleccionó un modelo final.")
