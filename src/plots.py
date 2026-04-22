@@ -139,8 +139,42 @@ def _add_reference_line(fig: go.Figure, y: float, text: str = "", color: str = "
 # Módulo 0 / App
 # =========================================================
 def plot_normalized_prices(close: pd.DataFrame) -> go.Figure:
-    base = close / close.dropna().iloc[0] * 100
+    close_numeric = close.copy()
+    close_numeric = close_numeric.apply(pd.to_numeric, errors="coerce")
+    close_numeric = close_numeric.dropna(axis=1, how="all")
     fig = go.Figure()
+
+    if close_numeric.empty:
+        fig.add_annotation(
+            text="No hay precios numéricos para normalizar",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=16, color="#475569"),
+        )
+        return _apply_layout(fig, "Precios normalizados (base 100)", "Fecha", "Base 100", theme="light")
+
+    first_valid_prices = close_numeric.apply(
+        lambda series: series.dropna().iloc[0] if not series.dropna().empty else np.nan
+    )
+    first_valid_prices = first_valid_prices.replace(0, np.nan).dropna()
+
+    if first_valid_prices.empty:
+        fig.add_annotation(
+            text="No hay precios numéricos para normalizar",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=16, color="#475569"),
+        )
+        return _apply_layout(fig, "Precios normalizados (base 100)", "Fecha", "Base 100", theme="light")
+
+    close_numeric = close_numeric.loc[:, first_valid_prices.index]
+    base = close_numeric.divide(first_valid_prices, axis="columns") * 100
 
     for index, col in enumerate(base.columns):
         fig.add_trace(

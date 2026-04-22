@@ -22,6 +22,8 @@ from src.plots import plot_normalized_prices
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
+RESERVED_PRICE_COLUMNS = {"index", "Date"}
+
 
 # ---------------------------------------------------------
 # Configuración inicial
@@ -682,7 +684,11 @@ if "returns" not in market_data or market_data["returns"].empty:
 close_prices = market_data["close"]
 returns = market_data["returns"]
 missing_tickers = market_data.get("metadata", {}).get("missing_tickers", [])
-valid_tickers = [ticker for ticker in close_prices.columns if ticker in returns.columns]
+valid_tickers = [
+    ticker
+    for ticker in close_prices.columns
+    if ticker in returns.columns and ticker not in RESERVED_PRICE_COLUMNS
+]
 dropped_tickers = [
     ticker
     for ticker in selected_tickers
@@ -812,6 +818,26 @@ section_intro(
 
 # Solo para visualizacion: suaviza huecos por calendarios bursatiles distintos.
 close_prices_chart = close_prices.ffill()
+
+if not isinstance(close_prices_chart.index, pd.DatetimeIndex):
+    if "Date" in close_prices_chart.columns:
+        close_prices_chart = close_prices_chart.set_index("Date")
+    elif "index" in close_prices_chart.columns:
+        close_prices_chart = close_prices_chart.set_index("index")
+
+close_prices_chart = close_prices_chart.copy()
+close_prices_chart.index = pd.to_datetime(close_prices_chart.index, errors="coerce")
+close_prices_chart = close_prices_chart[~close_prices_chart.index.isna()]
+close_prices_chart = close_prices_chart.apply(pd.to_numeric, errors="coerce")
+close_prices_chart = close_prices_chart.dropna(axis=1, how="all")
+
+with st.expander("Diagnóstico close_prices_chart"):
+    st.write("close_prices_chart.columns", list(close_prices_chart.columns))
+    st.write("close_prices_chart.dtypes", close_prices_chart.dtypes)
+    st.write("type(close_prices_chart.index)", type(close_prices_chart.index))
+    st.write("close_prices_chart.head(3)")
+    st.dataframe(close_prices_chart.head(3), width="stretch")
+
 fig_norm = plot_normalized_prices(close_prices_chart)
 st.plotly_chart(fig_norm, width="stretch")
 st.caption(
