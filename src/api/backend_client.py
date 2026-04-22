@@ -13,6 +13,7 @@ BACKEND_TIMEOUT_SECONDS = 30
 BACKEND_HEALTH_TIMEOUT_SECONDS = 10
 BACKEND_RETRY_DELAYS_SECONDS = (0.5, 1.0)
 RETRYABLE_STATUS_CODES = {502, 503, 504}
+_LAST_BACKEND_CALL: dict[str, Any] = {}
 
 
 class BackendAPIError(RuntimeError):
@@ -81,7 +82,7 @@ def _message_for_http_status(status_code: int, response: requests.Response) -> s
     if status_code == 400:
         return "Los parámetros enviados no son válidos. Revisa fechas o configuración."
     if status_code == 404:
-        return "No hay datos disponibles para el activo o rango seleccionado."
+        return backend_detail or "No hay datos disponibles para el activo o rango seleccionado."
     if status_code == 422:
         return backend_detail or "Los datos enviados no son válidos. Revisa la configuración seleccionada."
     if status_code == 502:
@@ -94,12 +95,20 @@ def _message_for_http_status(status_code: int, response: requests.Response) -> s
 
 def _request_backend(method: str, path: str, **kwargs) -> dict[str, Any]:
     url = build_backend_url(path)
+    _remember_backend_call(method=method, path=path, url=url, status_code=None, ok=False)
     try:
         response = _request_with_retries(
             method,
             url,
             timeout=kwargs.pop("timeout", BACKEND_TIMEOUT_SECONDS),
             **kwargs,
+        )
+        _remember_backend_call(
+            method=method,
+            path=path,
+            url=url,
+            status_code=response.status_code,
+            ok=response.ok,
         )
         response.raise_for_status()
         return response.json()
@@ -134,6 +143,23 @@ def backend_get(path: str, params: dict[str, Any] | None = None) -> dict[str, An
 
 def backend_post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _request_backend("POST", path, json=payload)
+
+
+def _remember_backend_call(method: str, path: str, url: str, status_code: int | None, ok: bool):
+    _LAST_BACKEND_CALL.clear()
+    _LAST_BACKEND_CALL.update(
+        {
+            "method": method,
+            "path": path,
+            "url": url,
+            "status_code": status_code,
+            "ok": ok,
+        }
+    )
+
+
+def last_backend_call() -> dict[str, Any]:
+    return dict(_LAST_BACKEND_CALL)
 
 
 def build_backend_url(path: str) -> str:

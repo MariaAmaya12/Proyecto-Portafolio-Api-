@@ -277,6 +277,8 @@ class MarketBundleResponse(BaseModel):
     ohlcv: dict[str, List[OhlcvRecord]]
     close: List[DynamicRecord]
     returns: List[DynamicRecord]
+    missing_tickers: List[str] = Field(default_factory=list)
+    last_available_date: str | None = None
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -1025,23 +1027,37 @@ async def market_bundle(
 ) -> MarketBundleResponse:
     bundle = await load_market_bundle_cached_async(market, payload)
 
-    ticker_errors = []
-    for index, ticker in enumerate(payload.tickers):
+    missing_tickers = []
+    for ticker in payload.tickers:
         df = bundle["ohlcv"].get(ticker)
         if df is None or df.empty:
-            ticker_errors.append(
-                {
-                    "field": f"tickers[{index}]",
-                    "message": f"No se pudo descargar datos para '{ticker}' o no hubo precios en el rango solicitado.",
-                }
-            )
+            missing_tickers.append(ticker)
 
-    if ticker_errors:
+    valid_frames = [
+        df
+        for df in bundle["ohlcv"].values()
+        if df is not None and not df.empty
+    ]
+    last_available_date = None
+    if valid_frames:
+        last_available = max(df.index.max() for df in valid_frames)
+        if pd.notna(last_available):
+            last_available_date = pd.Timestamp(last_available).date().isoformat()
+
+    if len(missing_tickers) == len(payload.tickers):
         raise HTTPException(
             status_code=404,
             detail=build_error_response(
                 "Recurso no encontrado.",
-                ticker_errors,
+                [
+                    {
+                        "field": "tickers",
+                        "message": (
+                            f"Sin datos para el rango {payload.start}–{payload.end}. "
+                            f"Último día disponible: {last_available_date or 'no disponible'}."
+                        ),
+                    }
+                ],
             ),
         )
 
@@ -1052,6 +1068,8 @@ async def market_bundle(
         },
         close=dataframe_to_json_records(bundle["close"]),
         returns=dataframe_to_json_records(bundle["returns"]),
+        missing_tickers=missing_tickers,
+        last_available_date=last_available_date,
     )
 
 

@@ -179,8 +179,39 @@ def build_returns_matrix(close: pd.DataFrame) -> pd.DataFrame:
     if close.empty:
         return pd.DataFrame()
 
-    returns = close.pct_change(fill_method=None).dropna(how="all")
+    aligned = close.sort_index().ffill(limit=3)
+    returns = aligned.pct_change(fill_method=None).dropna(how="all")
     return returns
+
+
+def market_bundle_metadata(data: Dict[str, pd.DataFrame], close: pd.DataFrame, returns: pd.DataFrame) -> Dict[str, object]:
+    valid_frames = {
+        ticker: df
+        for ticker, df in data.items()
+        if df is not None and not df.empty
+    }
+    last_available = None
+    if valid_frames:
+        last_available = max(df.index.max() for df in valid_frames.values())
+
+    return {
+        "missing_tickers": [
+            ticker
+            for ticker, df in data.items()
+            if df is None or df.empty
+        ],
+        "ohlcv_shapes": {
+            ticker: tuple(df.shape) if df is not None else (0, 0)
+            for ticker, df in data.items()
+        },
+        "close_shape": tuple(close.shape),
+        "returns_shape": tuple(returns.shape),
+        "last_available_date": (
+            pd.Timestamp(last_available).date().isoformat()
+            if last_available is not None and pd.notna(last_available)
+            else None
+        ),
+    }
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -194,12 +225,20 @@ def load_market_bundle(tickers: List[str], start: str, end: str) -> Dict[str, ob
         data = bundle["ohlcv"]
         close = bundle["close"]
         returns = bundle["returns"]
+        computed_metadata = market_bundle_metadata(data, close, returns)
+        metadata = {
+            **computed_metadata,
+            "missing_tickers": bundle.get("missing_tickers", []),
+            "last_available_date": bundle.get("last_available_date")
+            or computed_metadata.get("last_available_date"),
+        }
         clear_data_error_message()
     except Exception as e:
         _remember_data_error(e)
         data = download_multiple_tickers(tickers=tickers, start=start, end=end)
         close = build_close_matrix(data)
         returns = build_returns_matrix(close)
+        metadata = market_bundle_metadata(data, close, returns)
 
     try:
         close.to_csv(PROCESSED_DIR / "close_prices.csv")
@@ -211,4 +250,5 @@ def load_market_bundle(tickers: List[str], start: str, end: str) -> Dict[str, ob
         "ohlcv": data,
         "close": close,
         "returns": returns,
+        "metadata": metadata,
     }

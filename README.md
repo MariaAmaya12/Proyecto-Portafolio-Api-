@@ -228,6 +228,8 @@ Para Streamlit Community Cloud, configura la URL del backend de Render en **Sett
 API_BASE_URL="https://proyecto-portafolio-api-5ev7.onrender.com"
 ```
 
+La URL correcta usa el dominio `onrender.com`; evita variantes incompletas o mal escritas.
+
 El frontend lee primero `st.secrets["API_BASE_URL"]`; si no existe, usa variables de entorno (`API_BASE_URL` o `BACKEND_API_BASE_URL` por compatibilidad).
 
 ---

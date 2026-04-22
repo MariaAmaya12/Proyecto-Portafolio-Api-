@@ -177,7 +177,8 @@ def _build_returns_matrix(close: pd.DataFrame) -> pd.DataFrame:
     if close.empty:
         return pd.DataFrame()
 
-    returns = close.pct_change(fill_method=None).dropna(how="all")
+    aligned = close.sort_index().ffill(limit=3)
+    returns = aligned.pct_change(fill_method=None).dropna(how="all")
     return returns
 
 

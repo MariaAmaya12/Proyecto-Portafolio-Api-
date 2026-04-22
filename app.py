@@ -10,7 +10,8 @@ from src.config import (
     GLOBAL_BENCHMARK,
     ensure_project_dirs,
 )
-from src.api.backend_client import backend_base_url, ping_backend_health
+from src.api.backend_client import backend_base_url, last_backend_call, ping_backend_health
+from src.date_utils import yfinance_exclusive_end
 from src.download import data_error_message, load_market_bundle
 from src.preprocess import (
     equal_weight_portfolio,
@@ -320,6 +321,90 @@ def get_market_data(tickers, start, end):
     return load_market_bundle(tickers=tickers, start=start, end=end)
 
 
+def is_market_bundle_empty(market_data) -> bool:
+    if market_data is None:
+        return True
+    close = market_data.get("close", pd.DataFrame())
+    returns = market_data.get("returns", pd.DataFrame())
+    return close.empty or returns.empty
+
+
+def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage: str) -> dict:
+    close = pd.DataFrame() if market_data is None else market_data.get("close", pd.DataFrame())
+    returns = pd.DataFrame() if market_data is None else market_data.get("returns", pd.DataFrame())
+    metadata = {} if market_data is None else market_data.get("metadata", {})
+    backend_call = last_backend_call()
+    close_after_filter = (
+        close.loc[
+            (close.index >= pd.to_datetime(start_date))
+            & (close.index <= pd.to_datetime(end_date))
+        ]
+        if not close.empty
+        else close
+    )
+    business_days = pd.bdate_range(start=start_date, end=end_date)
+    if close.empty and len(business_days) == 0:
+        empty_reason = "El rango no contiene días hábiles."
+    elif close.empty and backend_call.get("status_code") == 404:
+        empty_reason = "El backend no encontró precios para ese rango/tickers."
+    elif close.empty:
+        empty_reason = "La respuesta llegó sin precios o el DataFrame quedó vacío al estandarizar."
+    else:
+        empty_reason = None
+
+    return {
+        "etapa": stage,
+        "api_base_url_efectivo": backend_base_url(),
+        "endpoint_llamado": backend_call.get("path") or "/market/bundle",
+        "url_llamada": backend_call.get("url"),
+        "status_code": backend_call.get("status_code"),
+        "horizonte": horizonte,
+        "start_date_usuario": str(start_date),
+        "end_date_usuario": str(end_date),
+        "end_date_enviado_api": str(end_date),
+        "end_date_enviado_yfinance": yfinance_exclusive_end(str(end_date)),
+        "df_shape": tuple(close.shape),
+        "df_index_max": close.index.max() if not close.empty else None,
+        "shape_df_antes_filtro_fechas": tuple(close.shape),
+        "shape_df_despues_filtro_fechas": tuple(close_after_filter.shape),
+        "shape_returns": tuple(returns.shape),
+        "tickers_df_vacio": metadata.get("missing_tickers", []),
+        "shapes_ohlcv_por_ticker": metadata.get("ohlcv_shapes", {}),
+        "ultimo_dia_disponible": metadata.get("last_available_date"),
+        "explicacion_si_vacio": empty_reason,
+    }
+
+
+def render_market_empty_diagnostic(horizonte, start_date, end_date, market_data, stage: str):
+    with st.expander("Diagnóstico de datos de mercado"):
+        st.write(market_data_diagnostics(horizonte, start_date, end_date, market_data, stage))
+
+
+def load_market_data_with_business_day_fallback(tickers, start_date, end_date, horizonte):
+    attempts = []
+    today = pd.Timestamp.today().normalize().date()
+    candidate_end = min(end_date, today)
+
+    for label, current_end in [
+        ("rango seleccionado", end_date),
+        ("end ajustado a hoy", candidate_end),
+        ("end ajustado a último día hábil previo", (pd.Timestamp(candidate_end) - pd.offsets.BDay(1)).date()),
+    ]:
+        if attempts and current_end == attempts[-1]["end_date"]:
+            continue
+
+        data = get_market_data(
+            tickers=tickers,
+            start=str(start_date),
+            end=str(current_end),
+        )
+        attempts.append({"label": label, "end_date": current_end, "data": data})
+        if not is_market_bundle_empty(data):
+            return data, current_end, attempts
+
+    return attempts[-1]["data"], attempts[-1]["end_date"], attempts
+
+
 # ---------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------
@@ -471,13 +556,21 @@ render_page_title(
 # ---------------------------------------------------------
 try:
     with st.spinner("Descargando datos de mercado..."):
-        market_data = get_market_data(
+        market_data, effective_end_date, market_attempts = load_market_data_with_business_day_fallback(
             tickers=selected_tickers,
-            start=str(start_date),
-            end=str(end_date),
+            start_date=start_date,
+            end_date=end_date,
+            horizonte=horizonte,
         )
 except Exception as e:
     st.error(data_error_message(f"Ocurrió un error al descargar los datos: {e}"))
+    render_market_empty_diagnostic(
+        horizonte,
+        start_date,
+        end_date,
+        None,
+        "error al llamar backend",
+    )
     st.stop()
 
 if market_data is None:
@@ -485,11 +578,20 @@ if market_data is None:
     st.stop()
 
 if "close" not in market_data or market_data["close"].empty:
-    st.error(data_error_message("No fue posible descargar precios. Verifica conexión, fechas o tickers."))
+    metadata = market_data.get("metadata", {})
+    last_available = metadata.get("last_available_date") or "no disponible"
+    st.error(
+        data_error_message(
+            f"Sin datos para el rango {start_date}–{effective_end_date}. "
+            f"Último día disponible: {last_available}."
+        )
+    )
+    render_market_empty_diagnostic(horizonte, start_date, effective_end_date, market_data, "close vacío")
     st.stop()
 
 if "returns" not in market_data or market_data["returns"].empty:
     st.error("No fue posible calcular rendimientos con los datos descargados.")
+    render_market_empty_diagnostic(horizonte, start_date, effective_end_date, market_data, "returns vacío")
     st.stop()
 
 
@@ -498,12 +600,24 @@ if "returns" not in market_data or market_data["returns"].empty:
 # ---------------------------------------------------------
 close_prices = market_data["close"]
 returns = market_data["returns"]
+missing_tickers = market_data.get("metadata", {}).get("missing_tickers", [])
+valid_tickers = list(close_prices.columns)
+
+if missing_tickers:
+    st.warning(
+        "Sin datos para estos tickers en el rango seleccionado; se excluyen del análisis: "
+        + ", ".join(missing_tickers)
+    )
+
+if effective_end_date != end_date:
+    st.info(f"Se ajustó la fecha final efectiva a {effective_end_date} para encontrar datos disponibles.")
+
 portfolio_returns = equal_weight_portfolio(returns)
 
 ann_return = annualize_return(portfolio_returns)
 ann_vol = annualize_volatility(portfolio_returns)
 obs_count = int(close_prices.shape[0])
-asset_count = len(selected_tickers)
+asset_count = len(valid_tickers)
 
 ret_delta = "Sesgo positivo" if ann_return > 0 else "Sesgo negativo" if ann_return < 0 else "Sin sesgo"
 ret_delta_type = "pos" if ann_return > 0 else "neg" if ann_return < 0 else "neu"
@@ -524,10 +638,10 @@ section_intro(
 info_col1, info_col2, info_col3 = st.columns([1.6, 1, 0.9])
 
 with info_col1:
-    summary_chip("Activo(s)", ", ".join(selected_tickers))
+    summary_chip("Activo(s)", ", ".join(valid_tickers))
 
 with info_col2:
-    summary_chip("Periodo", f"{start_date} a {end_date}")
+    summary_chip("Periodo", f"{start_date} a {effective_end_date}")
 
 with info_col3:
     summary_chip("Benchmark", GLOBAL_BENCHMARK)
