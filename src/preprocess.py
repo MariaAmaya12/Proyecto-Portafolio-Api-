@@ -104,17 +104,18 @@ def equal_weight_portfolio(returns: pd.DataFrame) -> pd.Series:
     """
     Retorno de portafolio equiponderado.
     """
-    if returns.empty:
+    if returns is None or returns.empty:
         return pd.Series(dtype=float)
 
-    clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
-    if clean.empty:
+    numeric_returns = returns.apply(pd.to_numeric, errors="coerce")
+    clean = numeric_returns.replace([np.inf, -np.inf], np.nan).dropna(how="all", axis=1)
+    if clean.empty or clean.shape[1] == 0:
         return pd.Series(dtype=float)
 
-    weights = equal_weight_vector(clean.shape[1])
-    port = clean @ weights
+    weights = pd.Series(1.0 / clean.shape[1], index=clean.columns)
+    port = clean.mul(weights, axis=1).sum(axis=1, min_count=1)
     port.name = "portfolio_equal_weight"
-    return port
+    return port.dropna()
 
 
 def annualize_return(daily_returns: pd.Series) -> float:

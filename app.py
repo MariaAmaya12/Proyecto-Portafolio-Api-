@@ -335,19 +335,52 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
     metadata = {} if market_data is None else market_data.get("metadata", {})
     backend_call = last_backend_call()
     calendar_diagnostics = metadata.get("calendar_diagnostics", {})
+    diagnostic_warnings = []
+
+    def ensure_datetime_index(frame: pd.DataFrame, label: str) -> pd.DataFrame:
+        if frame.empty:
+            return frame
+
+        original_index_type = type(frame.index).__name__
+        if isinstance(frame.index, pd.DatetimeIndex):
+            return frame.sort_index()
+
+        normalized = frame.copy()
+        if "Date" in normalized.columns:
+            normalized["Date"] = pd.to_datetime(normalized["Date"], errors="coerce")
+            normalized = normalized.dropna(subset=["Date"]).set_index("Date")
+
+        try:
+            normalized.index = pd.to_datetime(normalized.index, errors="coerce")
+            normalized = normalized[~normalized.index.isna()]
+            diagnostic_warnings.append(
+                f"{label}: índice convertido desde {original_index_type} a DatetimeIndex."
+            )
+            return normalized.sort_index()
+        except Exception as exc:
+            diagnostic_warnings.append(
+                f"{label}: no se pudo convertir índice {original_index_type} a fechas ({exc})."
+            )
+            return frame
+
+    close = ensure_datetime_index(close, "close")
+    returns = ensure_datetime_index(returns, "returns")
     portfolio_returns_diag = (
         equal_weight_portfolio(returns)
         if not returns.empty
         else pd.Series(dtype=float)
     )
-    close_after_filter = (
-        close.loc[
+    if not close.empty and isinstance(close.index, pd.DatetimeIndex):
+        close_after_filter = close.loc[
             (close.index >= pd.to_datetime(start_date))
             & (close.index <= pd.to_datetime(end_date))
         ]
-        if not close.empty
-        else close
-    )
+    else:
+        close_after_filter = close
+        if not close.empty:
+            diagnostic_warnings.append(
+                f"close: filtro por fechas omitido porque el índice es {type(close.index).__name__}."
+            )
     business_days = pd.bdate_range(start=start_date, end=end_date)
     if close.empty and len(business_days) == 0:
         empty_reason = "El rango no contiene días hábiles."
@@ -365,6 +398,9 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
         "endpoint_llamado": backend_call.get("path") or "/market/bundle",
         "url_llamada": backend_call.get("url"),
         "status_code": backend_call.get("status_code"),
+        "index_type_close": type(close.index).__name__,
+        "index_type_returns": type(returns.index).__name__,
+        "warning": "; ".join(diagnostic_warnings) if diagnostic_warnings else None,
         "horizonte": horizonte,
         "start_date_usuario": str(start_date),
         "end_date_usuario": str(end_date),
@@ -376,6 +412,9 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
         "returns.shape": tuple(returns.shape),
         "returns.index.min": returns.index.min() if not returns.empty else None,
         "returns.index.max": returns.index.max() if not returns.empty else None,
+        "returns.columns": list(returns.columns),
+        "close.columns": list(close.columns),
+        "len_valid_tickers": len([ticker for ticker in close.columns if ticker in returns.columns]),
         "na_por_activo_retornos": returns.isna().sum().to_dict() if not returns.empty else {},
         "na_por_activo_retornos_antes_fill": calendar_diagnostics.get(
             "na_por_activo_retornos_antes_fill",
@@ -643,7 +682,12 @@ if "returns" not in market_data or market_data["returns"].empty:
 close_prices = market_data["close"]
 returns = market_data["returns"]
 missing_tickers = market_data.get("metadata", {}).get("missing_tickers", [])
-valid_tickers = list(close_prices.columns)
+valid_tickers = [ticker for ticker in close_prices.columns if ticker in returns.columns]
+dropped_tickers = [
+    ticker
+    for ticker in selected_tickers
+    if ticker not in valid_tickers
+]
 
 if missing_tickers:
     st.warning(
@@ -651,10 +695,36 @@ if missing_tickers:
         + ", ".join(missing_tickers)
     )
 
+if dropped_tickers:
+    st.warning(
+        "Estos tickers no tienen precios y retornos alineados suficientes; se excluyen del portafolio: "
+        + ", ".join(dropped_tickers)
+    )
+
+if not valid_tickers:
+    st.error("No quedan activos con precios y retornos válidos para calcular el portafolio.")
+    render_market_data_diagnostic(horizonte, start_date, effective_end_date, market_data, "sin tickers válidos")
+    st.stop()
+
+close_prices = close_prices.loc[:, valid_tickers]
+returns = returns.loc[:, valid_tickers]
+market_data = {
+    **market_data,
+    "close": close_prices,
+    "returns": returns,
+}
+
+if len(valid_tickers) == 1:
+    st.warning("Solo queda un activo válido; los KPIs se calculan sobre ese activo.")
+
 if effective_end_date != end_date:
     st.info(f"Se ajustó la fecha final efectiva a {effective_end_date} para encontrar datos disponibles.")
 
 portfolio_returns = equal_weight_portfolio(returns)
+if portfolio_returns.empty:
+    st.error("No fue posible calcular retornos efectivos del portafolio con los activos válidos.")
+    render_market_data_diagnostic(horizonte, start_date, effective_end_date, market_data, "portafolio vacío")
+    st.stop()
 
 ann_return = annualize_return(portfolio_returns)
 ann_vol = annualize_volatility(portfolio_returns)
