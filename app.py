@@ -365,6 +365,12 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
         "end_date_enviado_yfinance": yfinance_exclusive_end(str(end_date)),
         "df_shape": tuple(close.shape),
         "df_index_max": close.index.max() if not close.empty else None,
+        "fechas_en_precios_union_calendarios": int(close.shape[0]),
+        "observaciones_efectivas_retornos_usados": (
+            int(equal_weight_portfolio(returns).dropna().shape[0])
+            if not returns.empty
+            else 0
+        ),
         "shape_df_antes_filtro_fechas": tuple(close.shape),
         "shape_df_despues_filtro_fechas": tuple(close_after_filter.shape),
         "shape_returns": tuple(returns.shape),
@@ -616,7 +622,7 @@ portfolio_returns = equal_weight_portfolio(returns)
 
 ann_return = annualize_return(portfolio_returns)
 ann_vol = annualize_volatility(portfolio_returns)
-obs_count = int(close_prices.shape[0])
+obs_count = int(portfolio_returns.dropna().shape[0])
 asset_count = len(valid_tickers)
 
 ret_delta = "Sesgo positivo" if ann_return > 0 else "Sesgo negativo" if ann_return < 0 else "Sin sesgo"
@@ -665,7 +671,7 @@ with metric_col2:
     kpi_card(
         "Observaciones",
         str(obs_count),
-        caption="Número de precios disponibles en la muestra",
+        caption="Días usados para retorno y riesgo",
     )
 
 with metric_col3:
