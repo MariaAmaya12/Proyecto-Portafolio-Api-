@@ -9,20 +9,43 @@ from src.api.market import get_market_bundle, get_multiple_prices, get_prices
 from src.api.backend_client import friendly_error_message
 
 _LAST_DATA_ERROR_MESSAGE: str | None = None
+_LAST_DATA_ERROR_DEBUG: str | None = None
 
 
 def _remember_data_error(exc: Exception) -> None:
-    global _LAST_DATA_ERROR_MESSAGE
+    global _LAST_DATA_ERROR_MESSAGE, _LAST_DATA_ERROR_DEBUG
     _LAST_DATA_ERROR_MESSAGE = friendly_error_message(exc)
+    technical_detail = getattr(exc, "technical_detail", None)
+    status_code = getattr(exc, "status_code", None)
+    parts = []
+    if status_code is not None:
+        parts.append(f"status_code={status_code}")
+    parts.append(f"exception={technical_detail or repr(exc)}")
+    _LAST_DATA_ERROR_DEBUG = " | ".join(parts)
+
+
+def _remember_empty_response(ticker: str, df: pd.DataFrame | None) -> None:
+    global _LAST_DATA_ERROR_MESSAGE, _LAST_DATA_ERROR_DEBUG
+    _LAST_DATA_ERROR_MESSAGE = None
+    columns = list(df.columns) if df is not None else []
+    _LAST_DATA_ERROR_DEBUG = (
+        f"ticker={ticker} | respuesta vacia desde API/proveedor | "
+        f"columnas={columns} | longitud_final=0"
+    )
 
 
 def clear_data_error_message() -> None:
-    global _LAST_DATA_ERROR_MESSAGE
+    global _LAST_DATA_ERROR_MESSAGE, _LAST_DATA_ERROR_DEBUG
     _LAST_DATA_ERROR_MESSAGE = None
+    _LAST_DATA_ERROR_DEBUG = None
 
 
 def data_error_message(default: str) -> str:
     return _LAST_DATA_ERROR_MESSAGE or default
+
+
+def data_error_debug(default: str = "") -> str:
+    return _LAST_DATA_ERROR_DEBUG or default
 
 
 def _standardize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
@@ -80,9 +103,13 @@ def download_single_ticker(ticker: str, start: str, end: str) -> pd.DataFrame:
     Obtiene OHLCV de un ticker desde el backend FastAPI propio.
     """
     try:
-        df = get_prices(ticker=ticker, start=start, end=end)
-        df = _standardize_ohlcv(df)
-        clear_data_error_message()
+        raw_df = get_prices(ticker=ticker, start=start, end=end)
+        df = _standardize_ohlcv(raw_df)
+
+        if df.empty:
+            _remember_empty_response(ticker, raw_df)
+        else:
+            clear_data_error_message()
 
         if not df.empty:
             try:

@@ -6,7 +6,30 @@ from typing import Dict, List
 import pandas as pd
 import yfinance as yf
 
+from src.config import DATA_DIR
+
 logger = logging.getLogger(__name__)
+
+_YFINANCE_CACHE_CONFIGURED = False
+
+
+def _configure_yfinance_cache() -> None:
+    global _YFINANCE_CACHE_CONFIGURED
+    if _YFINANCE_CACHE_CONFIGURED:
+        return
+
+    cache_dir = DATA_DIR / "yfinance_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        if hasattr(yf, "cache") and hasattr(yf.cache, "set_cache_location"):
+            yf.cache.set_cache_location(str(cache_dir.resolve()))
+        elif hasattr(yf, "set_tz_cache_location"):
+            yf.set_tz_cache_location(str(cache_dir.resolve()))
+    except Exception as exc:
+        logger.warning("[YFINANCE CACHE] No se pudo configurar caché en %s: %s", cache_dir, exc)
+
+    _YFINANCE_CACHE_CONFIGURED = True
 
 
 class MarketService:
@@ -89,6 +112,8 @@ def _validate_ohlcv(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
 
 def _get_prices(ticker: str, start: str, end: str) -> pd.DataFrame:
     try:
+        _configure_yfinance_cache()
+
         df = yf.download(
             ticker,
             start=start,
