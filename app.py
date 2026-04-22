@@ -334,6 +334,11 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
     returns = pd.DataFrame() if market_data is None else market_data.get("returns", pd.DataFrame())
     metadata = {} if market_data is None else market_data.get("metadata", {})
     backend_call = last_backend_call()
+    portfolio_returns_diag = (
+        equal_weight_portfolio(returns)
+        if not returns.empty
+        else pd.Series(dtype=float)
+    )
     close_after_filter = (
         close.loc[
             (close.index >= pd.to_datetime(start_date))
@@ -355,6 +360,7 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
     return {
         "etapa": stage,
         "api_base_url_efectivo": backend_base_url(),
+        "endpoint": backend_call.get("path") or "/market/bundle",
         "endpoint_llamado": backend_call.get("path") or "/market/bundle",
         "url_llamada": backend_call.get("url"),
         "status_code": backend_call.get("status_code"),
@@ -363,14 +369,27 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
         "end_date_usuario": str(end_date),
         "end_date_enviado_api": str(end_date),
         "end_date_enviado_yfinance": yfinance_exclusive_end(str(end_date)),
+        "close.shape": tuple(close.shape),
+        "close.index.min": close.index.min() if not close.empty else None,
+        "close.index.max": close.index.max() if not close.empty else None,
+        "returns.shape": tuple(returns.shape),
+        "returns.index.min": returns.index.min() if not returns.empty else None,
+        "returns.index.max": returns.index.max() if not returns.empty else None,
+        "na_por_activo_retornos": returns.isna().sum().to_dict() if not returns.empty else {},
+        "tickers_con_nan_retornos": (
+            returns.isna().sum()[returns.isna().sum() > 0].to_dict()
+            if not returns.empty
+            else {}
+        ),
+        "portfolio_returns.dropna.shape[0]": int(portfolio_returns_diag.dropna().shape[0]),
+        "metadata_backend": {
+            "missing_tickers": metadata.get("missing_tickers", []),
+            "last_available_date": metadata.get("last_available_date"),
+        },
         "df_shape": tuple(close.shape),
         "df_index_max": close.index.max() if not close.empty else None,
         "fechas_en_precios_union_calendarios": int(close.shape[0]),
-        "observaciones_efectivas_retornos_usados": (
-            int(equal_weight_portfolio(returns).dropna().shape[0])
-            if not returns.empty
-            else 0
-        ),
+        "observaciones_efectivas_retornos_usados": int(portfolio_returns_diag.dropna().shape[0]),
         "shape_df_antes_filtro_fechas": tuple(close.shape),
         "shape_df_despues_filtro_fechas": tuple(close_after_filter.shape),
         "shape_returns": tuple(returns.shape),
@@ -382,6 +401,11 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
 
 
 def render_market_empty_diagnostic(horizonte, start_date, end_date, market_data, stage: str):
+    with st.expander("Diagnóstico de datos de mercado"):
+        st.write(market_data_diagnostics(horizonte, start_date, end_date, market_data, stage))
+
+
+def render_market_data_diagnostic(horizonte, start_date, end_date, market_data, stage: str):
     with st.expander("Diagnóstico de datos de mercado"):
         st.write(market_data_diagnostics(horizonte, start_date, end_date, market_data, stage))
 
@@ -624,6 +648,8 @@ ann_return = annualize_return(portfolio_returns)
 ann_vol = annualize_volatility(portfolio_returns)
 obs_count = int(portfolio_returns.dropna().shape[0])
 asset_count = len(valid_tickers)
+
+render_market_data_diagnostic(horizonte, start_date, effective_end_date, market_data, "datos cargados")
 
 ret_delta = "Sesgo positivo" if ann_return > 0 else "Sesgo negativo" if ann_return < 0 else "Sin sesgo"
 ret_delta_type = "pos" if ann_return > 0 else "neg" if ann_return < 0 else "neu"
