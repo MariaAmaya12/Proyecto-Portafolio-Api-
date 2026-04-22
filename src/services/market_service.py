@@ -170,15 +170,65 @@ def _build_close_matrix(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     close = pd.concat(series.values(), axis=1).sort_index()
     close = close.dropna(how="all")
-    return close
+    return _calendar_fill_close(close)
+
+
+def _calendar_fill_close(close: pd.DataFrame) -> pd.DataFrame:
+    if close.empty:
+        return close
+
+    raw_close = close.sort_index()
+    first_valid_dates = [
+        raw_close[ticker].first_valid_index()
+        for ticker in raw_close.columns
+        if raw_close[ticker].first_valid_index() is not None
+    ]
+    if not first_valid_dates:
+        return pd.DataFrame()
+
+    start_effective = max(first_valid_dates)
+    calendar = pd.bdate_range(start=raw_close.index.min(), end=raw_close.index.max())
+    raw_returns = raw_close.pct_change(fill_method=None).dropna(how="all")
+
+    aligned_index = raw_close.index.union(calendar)
+    filled = (
+        raw_close.reindex(aligned_index)
+        .sort_index()
+        .ffill()
+        .reindex(calendar)
+        .loc[start_effective:]
+        .dropna(how="all")
+    )
+
+    filled.attrs["calendar_diagnostics"] = {
+        "calendar_fill_applied": True,
+        "fill_method": "ffill",
+        "fill_limit": None,
+        "start_effective": pd.Timestamp(start_effective).date().isoformat(),
+        "close_shape_before_fill": tuple(raw_close.shape),
+        "close_shape_after_fill": tuple(filled.shape),
+        "na_por_activo_close_antes_fill": raw_close.isna().sum().to_dict(),
+        "na_por_activo_close_despues_fill": filled.isna().sum().to_dict(),
+        "na_por_activo_retornos_antes_fill": raw_returns.isna().sum().to_dict(),
+        "returns_shape_before_fill": tuple(raw_returns.shape),
+    }
+    return filled
 
 
 def _build_returns_matrix(close: pd.DataFrame) -> pd.DataFrame:
     if close.empty:
         return pd.DataFrame()
 
-    aligned = close.sort_index().ffill(limit=3)
+    aligned = close.sort_index()
     returns = aligned.pct_change(fill_method=None).dropna(how="all")
+    diagnostics = dict(close.attrs.get("calendar_diagnostics", {}))
+    diagnostics.update(
+        {
+            "returns_shape_after_fill": tuple(returns.shape),
+            "na_por_activo_retornos_despues_fill": returns.isna().sum().to_dict(),
+        }
+    )
+    returns.attrs["calendar_diagnostics"] = diagnostics
     return returns
 
 
@@ -191,6 +241,7 @@ def _load_market_bundle_service(tickers: List[str], start: str, end: str) -> Dic
         "ohlcv": data,
         "close": close,
         "returns": returns,
+        "calendar_diagnostics": returns.attrs.get("calendar_diagnostics", {}),
     }
 
 

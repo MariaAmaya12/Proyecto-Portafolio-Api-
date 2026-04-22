@@ -334,6 +334,7 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
     returns = pd.DataFrame() if market_data is None else market_data.get("returns", pd.DataFrame())
     metadata = {} if market_data is None else market_data.get("metadata", {})
     backend_call = last_backend_call()
+    calendar_diagnostics = metadata.get("calendar_diagnostics", {})
     portfolio_returns_diag = (
         equal_weight_portfolio(returns)
         if not returns.empty
@@ -376,15 +377,26 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
         "returns.index.min": returns.index.min() if not returns.empty else None,
         "returns.index.max": returns.index.max() if not returns.empty else None,
         "na_por_activo_retornos": returns.isna().sum().to_dict() if not returns.empty else {},
+        "na_por_activo_retornos_antes_fill": calendar_diagnostics.get(
+            "na_por_activo_retornos_antes_fill",
+            {},
+        ),
+        "na_por_activo_retornos_despues_fill": calendar_diagnostics.get(
+            "na_por_activo_retornos_despues_fill",
+            returns.isna().sum().to_dict() if not returns.empty else {},
+        ),
         "tickers_con_nan_retornos": (
             returns.isna().sum()[returns.isna().sum() > 0].to_dict()
             if not returns.empty
             else {}
         ),
+        "start_effective_aplicado": calendar_diagnostics.get("start_effective"),
+        "obs_count_final": int(portfolio_returns_diag.dropna().shape[0]),
         "portfolio_returns.dropna.shape[0]": int(portfolio_returns_diag.dropna().shape[0]),
         "metadata_backend": {
             "missing_tickers": metadata.get("missing_tickers", []),
             "last_available_date": metadata.get("last_available_date"),
+            "calendar_diagnostics": calendar_diagnostics,
         },
         "df_shape": tuple(close.shape),
         "df_index_max": close.index.max() if not close.empty else None,
@@ -697,7 +709,7 @@ with metric_col2:
     kpi_card(
         "Observaciones",
         str(obs_count),
-        caption="Días usados para retorno y riesgo",
+        caption="Días efectivos usados para retorno y riesgo (con precios forward-filled en días sin trading)",
     )
 
 with metric_col3:

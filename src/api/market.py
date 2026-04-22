@@ -25,6 +25,7 @@ def get_market_bundle(tickers: List[str], start: str, end: str) -> Dict[str, obj
         "returns": records_to_dataframe(data.get("returns", [])),
         "missing_tickers": data.get("missing_tickers", []),
         "last_available_date": data.get("last_available_date"),
+        "calendar_diagnostics": data.get("calendar_diagnostics", {}),
     }
 
 

@@ -279,6 +279,7 @@ class MarketBundleResponse(BaseModel):
     returns: List[DynamicRecord]
     missing_tickers: List[str] = Field(default_factory=list)
     last_available_date: str | None = None
+    calendar_diagnostics: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -1070,6 +1071,7 @@ async def market_bundle(
         returns=dataframe_to_json_records(bundle["returns"]),
         missing_tickers=missing_tickers,
         last_available_date=last_available_date,
+        calendar_diagnostics=bundle.get("calendar_diagnostics", {}),
     )
 
 
