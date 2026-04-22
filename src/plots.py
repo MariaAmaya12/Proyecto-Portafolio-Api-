@@ -141,10 +141,11 @@ def _add_reference_line(fig: go.Figure, y: float, text: str = "", color: str = "
 def plot_normalized_prices(close: pd.DataFrame) -> go.Figure:
     close_numeric = close.copy()
     close_numeric = close_numeric.apply(pd.to_numeric, errors="coerce")
+    close_numeric = close_numeric.dropna(how="all")
     close_numeric = close_numeric.dropna(axis=1, how="all")
     fig = go.Figure()
 
-    if close_numeric.empty:
+    if close_numeric.empty or close_numeric.dropna(how="all").empty:
         fig.add_annotation(
             text="No hay precios numéricos para normalizar",
             xref="paper",

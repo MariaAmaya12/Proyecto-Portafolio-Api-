@@ -22,7 +22,55 @@ from src.plots import plot_normalized_prices
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
-RESERVED_PRICE_COLUMNS = {"index", "Date"}
+RESERVED_PRICE_COLUMNS = {"index", "date"}
+
+
+def normalize_market_frame(frame: pd.DataFrame, label: str, stop_on_invalid: bool = False) -> tuple[pd.DataFrame, str | None]:
+    if frame is None or frame.empty:
+        return pd.DataFrame(), None
+
+    original_index_type = type(frame.index).__name__
+    normalized = frame.copy()
+
+    if isinstance(normalized.index, pd.DatetimeIndex):
+        pass
+    else:
+        date_col = next((col for col in ("Date", "date") if col in normalized.columns), None)
+        if date_col is not None:
+            normalized[date_col] = pd.to_datetime(normalized[date_col], errors="coerce")
+            normalized = normalized.dropna(subset=[date_col]).set_index(date_col)
+        elif isinstance(normalized.index, pd.RangeIndex):
+            message = (
+                f"{label}: índice RangeIndex sin columna Date/date. "
+                "No se pueden recuperar fechas reales; se detienen los cálculos para evitar fechas 1970."
+            )
+            if stop_on_invalid:
+                st.error(message)
+                st.stop()
+            return normalized, message
+        else:
+            parsed_index = pd.to_datetime(normalized.index, errors="coerce")
+            if pd.isna(parsed_index).any():
+                message = f"{label}: índice {original_index_type} no contiene fechas válidas."
+                if stop_on_invalid:
+                    st.error(message)
+                    st.stop()
+                return normalized, message
+            normalized.index = parsed_index
+
+    normalized = normalized[~normalized.index.isna()].sort_index()
+    normalized = normalized.drop(columns=[c for c in normalized.columns if str(c).lower() in RESERVED_PRICE_COLUMNS], errors="ignore")
+    normalized = normalized.apply(pd.to_numeric, errors="coerce")
+    normalized = normalized.dropna(axis=1, how="all")
+
+    if normalized.empty or normalized.dropna(how="all").empty:
+        message = f"{label}: no quedaron columnas numéricas válidas después de normalizar."
+        if stop_on_invalid:
+            st.error(message)
+            st.stop()
+        return normalized, message
+
+    return normalized, None
 
 
 # ---------------------------------------------------------
@@ -332,8 +380,10 @@ def is_market_bundle_empty(market_data) -> bool:
 
 
 def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage: str) -> dict:
-    close = pd.DataFrame() if market_data is None else market_data.get("close", pd.DataFrame())
-    returns = pd.DataFrame() if market_data is None else market_data.get("returns", pd.DataFrame())
+    close = None if market_data is None else market_data.get("close")
+    returns = None if market_data is None else market_data.get("returns")
+    close_diag = pd.DataFrame() if close is None else close.copy()
+    returns_diag = pd.DataFrame() if returns is None else returns.copy()
     metadata = {} if market_data is None else market_data.get("metadata", {})
     backend_call = last_backend_call()
     calendar_diagnostics = metadata.get("calendar_diagnostics", {})
@@ -348,41 +398,43 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
             return frame.sort_index()
 
         normalized = frame.copy()
-        if "Date" in normalized.columns:
-            normalized["Date"] = pd.to_datetime(normalized["Date"], errors="coerce")
-            normalized = normalized.dropna(subset=["Date"]).set_index("Date")
-
-        try:
-            normalized.index = pd.to_datetime(normalized.index, errors="coerce")
-            normalized = normalized[~normalized.index.isna()]
-            diagnostic_warnings.append(
-                f"{label}: índice convertido desde {original_index_type} a DatetimeIndex."
-            )
+        date_col = next((col for col in ("Date", "date") if col in normalized.columns), None)
+        if date_col is not None:
+            normalized[date_col] = pd.to_datetime(normalized[date_col], errors="coerce")
+            normalized = normalized.dropna(subset=[date_col]).set_index(date_col)
+            normalized = normalized.drop(columns=[c for c in normalized.columns if str(c).lower() in RESERVED_PRICE_COLUMNS], errors="ignore")
+            normalized = normalized.apply(pd.to_numeric, errors="coerce").dropna(axis=1, how="all")
             return normalized.sort_index()
-        except Exception as exc:
-            diagnostic_warnings.append(
-                f"{label}: no se pudo convertir índice {original_index_type} a fechas ({exc})."
-            )
-            return frame
 
-    close = ensure_datetime_index(close, "close")
-    returns = ensure_datetime_index(returns, "returns")
+        if isinstance(normalized.index, pd.RangeIndex):
+            diagnostic_warnings.append(
+                f"{label}: índice no es datetime; se omite filtro por fechas."
+            )
+            return normalized
+
+        diagnostic_warnings.append(
+            f"{label}: índice no es datetime; se omite filtro por fechas."
+        )
+        return normalized
+
+    close = ensure_datetime_index(close_diag, "close")
+    returns = ensure_datetime_index(returns_diag, "returns")
     portfolio_returns_diag = (
         equal_weight_portfolio(returns)
         if not returns.empty
         else pd.Series(dtype=float)
     )
+    close_filter_note = None
     if not close.empty and isinstance(close.index, pd.DatetimeIndex):
         close_after_filter = close.loc[
             (close.index >= pd.to_datetime(start_date))
             & (close.index <= pd.to_datetime(end_date))
         ]
     else:
-        close_after_filter = close
+        close_after_filter = None
         if not close.empty:
-            diagnostic_warnings.append(
-                f"close: filtro por fechas omitido porque el índice es {type(close.index).__name__}."
-            )
+            close_filter_note = "índice no es datetime; se omite filtro por fechas"
+            diagnostic_warnings.append(f"close: {close_filter_note}.")
     business_days = pd.bdate_range(start=start_date, end=end_date)
     if close.empty and len(business_days) == 0:
         empty_reason = "El rango no contiene días hábiles."
@@ -444,7 +496,11 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
         "fechas_en_precios_union_calendarios": int(close.shape[0]),
         "observaciones_efectivas_retornos_usados": int(portfolio_returns_diag.dropna().shape[0]),
         "shape_df_antes_filtro_fechas": tuple(close.shape),
-        "shape_df_despues_filtro_fechas": tuple(close_after_filter.shape),
+        "shape_df_despues_filtro_fechas": (
+            tuple(close_after_filter.shape)
+            if close_after_filter is not None
+            else close_filter_note
+        ),
         "shape_returns": tuple(returns.shape),
         "tickers_df_vacio": metadata.get("missing_tickers", []),
         "shapes_ohlcv_por_ticker": metadata.get("ohlcv_shapes", {}),
@@ -678,6 +734,15 @@ if "returns" not in market_data or market_data["returns"].empty:
     st.stop()
 
 
+normalized_close, _ = normalize_market_frame(market_data["close"], "close", stop_on_invalid=True)
+normalized_returns, _ = normalize_market_frame(market_data["returns"], "returns", stop_on_invalid=True)
+market_data = {
+    **market_data,
+    "close": normalized_close,
+    "returns": normalized_returns,
+}
+
+
 # ---------------------------------------------------------
 # Variables principales
 # ---------------------------------------------------------
@@ -687,7 +752,9 @@ missing_tickers = market_data.get("metadata", {}).get("missing_tickers", [])
 valid_tickers = [
     ticker
     for ticker in close_prices.columns
-    if ticker in returns.columns and ticker not in RESERVED_PRICE_COLUMNS
+    if ticker in returns.columns
+    and ticker in selected_tickers
+    and str(ticker).lower() not in RESERVED_PRICE_COLUMNS
 ]
 dropped_tickers = [
     ticker
@@ -818,16 +885,22 @@ section_intro(
 
 # Solo para visualizacion: suaviza huecos por calendarios bursatiles distintos.
 close_prices_chart = close_prices.ffill()
-
-if not isinstance(close_prices_chart.index, pd.DatetimeIndex):
-    if "Date" in close_prices_chart.columns:
-        close_prices_chart = close_prices_chart.set_index("Date")
-    elif "index" in close_prices_chart.columns:
-        close_prices_chart = close_prices_chart.set_index("index")
-
 close_prices_chart = close_prices_chart.copy()
-close_prices_chart.index = pd.to_datetime(close_prices_chart.index, errors="coerce")
-close_prices_chart = close_prices_chart[~close_prices_chart.index.isna()]
+
+date_col = next((col for col in ("Date", "date", "index") if col in close_prices_chart.columns), None)
+if date_col is not None:
+    parsed_dates = pd.to_datetime(close_prices_chart[date_col], errors="coerce")
+    if parsed_dates.notna().all():
+        close_prices_chart = close_prices_chart.drop(columns=[date_col])
+        close_prices_chart.index = parsed_dates
+    else:
+        close_prices_chart = close_prices_chart.drop(columns=[date_col])
+
+if isinstance(close_prices_chart.index, pd.DatetimeIndex):
+    close_prices_chart = close_prices_chart[~close_prices_chart.index.isna()]
+else:
+    close_prices_chart = close_prices_chart.iloc[0:0]
+
 close_prices_chart = close_prices_chart.apply(pd.to_numeric, errors="coerce")
 close_prices_chart = close_prices_chart.dropna(axis=1, how="all")
 
@@ -838,8 +911,11 @@ with st.expander("Diagnóstico close_prices_chart"):
     st.write("close_prices_chart.head(3)")
     st.dataframe(close_prices_chart.head(3), width="stretch")
 
-fig_norm = plot_normalized_prices(close_prices_chart)
-st.plotly_chart(fig_norm, width="stretch")
+if close_prices_chart.empty or close_prices_chart.dropna(how="all").empty:
+    st.warning("No hay datos numéricos para graficar base 100")
+else:
+    fig_norm = plot_normalized_prices(close_prices_chart)
+    st.plotly_chart(fig_norm, width="stretch")
 st.caption(
     "Nota visual: la continuidad de las líneas se suaviza solo para la visualización, "
     "debido a calendarios bursátiles distintos entre mercados. Esto no afecta cálculos financieros ni métricas del dashboard."
