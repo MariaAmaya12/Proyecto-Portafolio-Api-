@@ -2,8 +2,18 @@ import streamlit as st
 import streamlit.components.v1 as components
 import numpy as np
 import pandas as pd
+from pydantic import BaseModel, ValidationError
 
-from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
+try:
+    from pydantic import model_validator
+
+    PYDANTIC_V2 = True
+except ImportError:
+    from pydantic import root_validator
+
+    PYDANTIC_V2 = False
+
+from src.config import ASSETS, DEFAULT_END_DATE, ensure_project_dirs
 from src.download import data_error_message, load_market_bundle
 from src.preprocess import equal_weight_vector, equal_weight_portfolio
 from src.risk_metrics import risk_comparison_table, kupiec_test
@@ -14,6 +24,62 @@ from src.ui_style import apply_global_typography, render_page_title
 ensure_project_dirs()
 apply_global_typography()
 render_sidebar_navigation()
+
+CONFIDENCE_LEVELS = [0.95, 0.99]
+WEIGHT_TOL = 1e-6
+
+
+def _validate_weights_dict(pesos: dict[str, float], tol: float = WEIGHT_TOL) -> None:
+    if not pesos:
+        raise ValueError("Debe ingresar al menos un peso.")
+    if any(weight < 0 or weight > 1 for weight in pesos.values()):
+        raise ValueError("Todos los pesos deben estar entre 0 y 1.")
+    if abs(sum(pesos.values()) - 1.0) > tol:
+        raise ValueError("La suma de pesos debe ser 1.00.")
+
+
+def _validate_n_sim(n_sim: int) -> None:
+    if int(n_sim) < 10_000:
+        raise ValueError("Monte Carlo requiere al menos 10,000 simulaciones.")
+
+
+if PYDANTIC_V2:
+
+    class PortfolioWeightsModel(BaseModel):
+        pesos: dict[str, float]
+
+        @model_validator(mode="after")
+        def validate_weights(self):
+            _validate_weights_dict(self.pesos)
+            return self
+
+
+    class SimulationConfigModel(BaseModel):
+        n_sim: int
+
+        @model_validator(mode="after")
+        def validate_simulations(self):
+            _validate_n_sim(self.n_sim)
+            return self
+
+else:
+
+    class PortfolioWeightsModel(BaseModel):
+        pesos: dict[str, float]
+
+        @root_validator
+        def validate_weights(cls, values):
+            _validate_weights_dict(values.get("pesos") or {})
+            return values
+
+
+    class SimulationConfigModel(BaseModel):
+        n_sim: int
+
+        @root_validator
+        def validate_simulations(cls, values):
+            _validate_n_sim(values.get("n_sim"))
+            return values
 
 
 # ==============================
@@ -68,6 +134,36 @@ def sanitize_text(text):
     return str(text).replace("<", "").replace(">", "")
 
 
+def style_risk_table(df: pd.DataFrame):
+    return (
+        df.style.hide(axis="index")
+        .set_table_styles(
+            [
+                {
+                    "selector": "th",
+                    "props": [
+                        ("background-color", "#EAF3FF"),
+                        ("color", "#0f172a"),
+                        ("font-weight", "700"),
+                        ("border", "1px solid rgba(37, 99, 235, 0.16)"),
+                    ],
+                },
+                {
+                    "selector": "td",
+                    "props": [
+                        ("border", "1px solid rgba(15, 23, 42, 0.06)"),
+                    ],
+                },
+            ]
+        )
+    )
+
+
+def fmt_pct_value(value):
+    numeric_value = pd.to_numeric(value, errors="coerce")
+    return f"{numeric_value:.2%}" if pd.notna(numeric_value) else "N/D"
+
+
 def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
     title = sanitize_text(title)
     value = sanitize_text(value)
@@ -91,43 +187,51 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
             }}
 
             .kpi-card {{
-                background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-                border: 1px solid rgba(15, 23, 42, 0.08);
-                border-radius: 18px;
-                padding: 18px 18px 14px 18px;
-                box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-                min-height: 124px;
+                background: linear-gradient(180deg, #f3f8ff 0%, #eaf3ff 100%);
+                border: 1px solid rgba(37, 99, 235, 0.16);
+                border-radius: 14px;
+                padding: 16px 16px 14px 16px;
+                box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+                min-height: 156px;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
                 justify-content: space-between;
+                gap: 0.55rem;
+                overflow: visible;
             }}
 
             .kpi-label {{
-                font-size: 0.88rem;
-                font-weight: 600;
-                color: #475569;
+                font-size: 0.82rem;
+                font-weight: 700;
+                color: #334155;
                 margin-bottom: 0.35rem;
-                letter-spacing: 0.2px;
+                letter-spacing: 0;
+                line-height: 1.25;
             }}
 
             .kpi-value {{
-                font-size: 1.85rem;
+                font-size: 1.58rem;
                 font-weight: 800;
                 color: #0f172a;
-                line-height: 1.1;
+                line-height: 1.12;
                 margin-bottom: 0.45rem;
-                word-break: break-word;
+                overflow-wrap: anywhere;
+                word-break: normal;
+                white-space: normal;
             }}
 
             .kpi-delta {{
                 display: inline-block;
                 width: fit-content;
-                font-size: 0.80rem;
+                max-width: 100%;
+                font-size: 0.76rem;
                 font-weight: 700;
                 padding: 0.28rem 0.55rem;
                 border-radius: 999px;
                 margin-top: 0.10rem;
+                line-height: 1.2;
+                white-space: normal;
             }}
 
             .kpi-delta.pos {{
@@ -146,10 +250,13 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
             }}
 
             .kpi-caption {{
-                font-size: 0.78rem;
-                color: #64748b;
-                margin-top: 0.65rem;
-                line-height: 1.35;
+                font-size: 0.76rem;
+                color: #475569;
+                margin-top: 0.45rem;
+                line-height: 1.38;
+                overflow-wrap: normal;
+                word-break: normal;
+                white-space: normal;
             }}
         </style>
     </head>
@@ -166,7 +273,7 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
     </html>
     """
 
-    components.html(html, height=145)
+    components.html(html, height=178)
 
 
 inject_kpi_cards_css()
@@ -185,77 +292,66 @@ with st.sidebar:
     horizonte = st.selectbox(
         "Horizonte histórico de análisis",
         [
-            "1 mes",
-            "Trimestre",
-            "Semestre",
             "1 año",
             "2 años",
-            "3 años",
             "5 años",
-            "Personalizado",
         ],
-        index=3,
+        index=0,
     )
 
     fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
 
-    if horizonte == "1 mes":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Trimestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Semestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "1 año":
+    if horizonte == "1 año":
         start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
         end_date = fecha_fin_ref.date()
     elif horizonte == "2 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
         end_date = fecha_fin_ref.date()
-    elif horizonte == "3 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref.date()
     elif horizonte == "5 años":
         start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
         end_date = fecha_fin_ref.date()
-    else:
-        start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE, key="var_start")
-        end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="var_end")
 
-    alpha = st.selectbox("Nivel de confianza", [0.95, 0.99], index=0)
+    alpha = st.radio("Nivel para mostrar KPIs", CONFIDENCE_LEVELS, index=0, horizontal=True)
 
-    st.divider()
-    st.subheader("Modo de visualización")
-    modo = st.radio(
-        "Selecciona el nivel de detalle",
-        ["General", "Estadístico"],
-        index=0,
+    n_sim = int(
+        st.number_input(
+            "Simulaciones Monte Carlo",
+            min_value=10_000,
+            value=10_000,
+            step=1_000,
+            format="%d",
+        )
     )
+    try:
+        SimulationConfigModel(n_sim=n_sim)
+    except ValidationError:
+        st.error("Monte Carlo requiere al menos 10,000 simulaciones.")
+        st.stop()
 
-    st.divider()
-    st.subheader("Opciones de visualización")
-    mostrar_tablas = st.checkbox("Mostrar tablas completas", value=False)
-    mostrar_backtesting = st.checkbox("Mostrar backtesting", value=True)
-
-    mostrar_fundamento = False
-    mostrar_interpretacion_tecnica = False
-
-    if modo == "Estadístico":
-        mostrar_fundamento = st.checkbox("Mostrar fundamento teórico", value=False)
-        mostrar_interpretacion_tecnica = st.checkbox("Mostrar interpretación técnica", value=True)
-
-        with st.expander("Filtros secundarios"):
-            n_sim = st.slider(
-                "Simulaciones Monte Carlo",
-                min_value=5000,
-                max_value=50000,
-                value=10000,
-                step=5000,
+    manual_weights_enabled = st.checkbox("Definir pesos manualmente (opcional)", value=False)
+    manual_weights = {}
+    if manual_weights_enabled:
+        st.caption("Ingresa pesos entre 0 y 1. La suma debe ser 1.00.")
+        default_weight = 1 / len(ASSETS)
+        for asset_name, meta in ASSETS.items():
+            manual_weights[asset_name] = st.number_input(
+                f"{asset_name} ({meta['ticker']})",
+                min_value=0.0,
+                max_value=1.0,
+                value=float(default_weight),
+                step=0.01,
+                format="%.4f",
+                key=f"var_weight_{meta['ticker']}",
             )
-    else:
-        n_sim = 10000
+
+        weights_sum = sum(manual_weights.values())
+        st.caption(f"Suma actual = {weights_sum:.6f}")
+        try:
+            PortfolioWeightsModel(pesos=manual_weights)
+            st.success("Pesos OK: la suma es 1.00.")
+        except ValidationError:
+            st.error(f"Pesos inválidos: la suma debe ser 1.00 para continuar. Suma actual = {weights_sum:.6f}.")
+            st.stop()
 
 # ==============================
 # Carga y preparación de datos
@@ -268,107 +364,74 @@ if returns.empty or len(returns) < 30:
     st.error(data_error_message("No hay suficientes datos para calcular métricas de riesgo."))
     st.stop()
 
-weights = equal_weight_vector(returns.shape[1])
-portfolio_returns = equal_weight_portfolio(returns)
+if manual_weights_enabled:
+    ticker_to_asset = {meta["ticker"]: name for name, meta in ASSETS.items()}
+    weights = np.array(
+        [manual_weights[ticker_to_asset[ticker]] for ticker in returns.columns],
+        dtype=float,
+    )
+    portfolio_returns = returns.mul(weights, axis=1).sum(axis=1)
+else:
+    weights = equal_weight_vector(returns.shape[1])
+    portfolio_returns = equal_weight_portfolio(returns)
 
-table = risk_comparison_table(
-    portfolio_returns=portfolio_returns,
-    asset_returns_df=returns,
-    weights=weights,
-    alpha=alpha,
-    n_sim=n_sim,
+tables_by_alpha = {}
+for level in CONFIDENCE_LEVELS:
+    alpha_table = risk_comparison_table(
+        portfolio_returns=portfolio_returns,
+        asset_returns_df=returns,
+        weights=weights,
+        alpha=level,
+        n_sim=n_sim,
+    )
+    if not alpha_table.empty:
+        alpha_table = alpha_table.copy()
+        alpha_table.insert(0, "confianza", level)
+    tables_by_alpha[level] = alpha_table
+
+table = pd.concat(
+    [alpha_table for alpha_table in tables_by_alpha.values() if not alpha_table.empty],
+    ignore_index=True,
 )
+selected_table = tables_by_alpha.get(alpha, pd.DataFrame())
 
 if table.empty:
     st.error("No fue posible calcular VaR y CVaR con los datos disponibles.")
+    st.stop()
+
+if selected_table.empty:
+    st.error("No fue posible calcular VaR y CVaR para el nivel de confianza seleccionado.")
     st.stop()
 
 # ==============================
 # Resumen
 # ==============================
 st.markdown("### Resumen del módulo")
-if modo == "General":
-    st.write(
-        f"""
-        Este módulo estima cuánto podría perder el portafolio en escenarios adversos con un nivel de confianza
-        del **{int(alpha * 100)}%**. El VaR muestra una pérdida umbral, mientras que el CVaR muestra qué tan
-        severas serían, en promedio, las pérdidas más extremas.
-        """
-    )
-else:
-    st.write(
-        f"""
-        Este módulo compara el **Value at Risk (VaR)** y el **Conditional Value at Risk (CVaR)** del portafolio
-        equiponderado bajo enfoques **paramétrico**, **histórico** y **Monte Carlo**, usando la convención de
-        pérdidas positivas para un nivel de confianza de **{int(alpha * 100)}%**.
-        """
-    )
+st.write(
+    f"""
+    Este módulo compara el **Value at Risk (VaR)** y el **Conditional Value at Risk (CVaR)** del portafolio
+    equiponderado bajo enfoques **paramétrico**, **histórico** y **Monte Carlo** con **{n_sim:,} simulaciones**,
+    usando la convención de pérdidas positivas para un nivel de confianza de **{int(alpha * 100)}%**.
+    """
+)
 
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
-
-# ==============================
-# Fundamento teórico
-# ==============================
-if modo == "Estadístico" and mostrar_fundamento:
-    st.markdown("### Fundamento teórico")
-
-    st.markdown(
-        rf"""
-        Sea $R_{{p,t}}$ el rendimiento del portafolio en el periodo \(t\), definido como combinación lineal
-        de los rendimientos de los activos según sus pesos. En este análisis, la pérdida se define como:
-        """
-    )
-    st.latex(r"L_t = -R_{p,t}")
-
-    st.markdown(
-        r"""
-        De esta forma:
-
-        - valores **positivos** de \(L_t\) representan **pérdidas**
-        - valores **negativos** de \(L_t\) representan **ganancias**
-
-        El **Value at Risk (VaR)** al nivel de confianza \(\alpha\) corresponde al cuantil de la distribución
-        de pérdidas. En términos prácticos, representa la pérdida máxima esperada que no se excede con
-        probabilidad \(\alpha\).
-
-        El **Conditional Value at Risk (CVaR)**, también llamado **Expected Shortfall**, mide la pérdida promedio
-        en los escenarios más extremos, es decir, cuando la pérdida supera el VaR.
-
-        **Convención usada en este proyecto:**
-        - El **VaR** y el **CVaR** se reportan como **pérdidas positivas**.
-        - Por ejemplo, un VaR diario de **0.025** significa una pérdida potencial de **2.5%**.
-        """
-    )
-
-    st.info(
-        """
-        **Interpretación de métodos**
-        - **Paramétrico**: supone normalidad de los rendimientos del portafolio.
-        - **Histórico**: usa la distribución empírica observada, sin imponer una distribución teórica.
-        - **Monte Carlo**: simula escenarios futuros a partir de la media y la matriz de covarianza de los activos.
-        """
-    )
 
 # ==============================
 # Portafolio
 # ==============================
 st.markdown("### Portafolio analizado")
-if modo == "General":
-    st.write("Se usa un portafolio equiponderado, es decir, todos los activos tienen el mismo peso.")
+if manual_weights_enabled:
+    st.write("Se usa un portafolio con pesos manuales validados.")
 else:
-    with st.expander("Ver pesos del portafolio"):
-        pesos_df = pd.DataFrame({
-            "Activo": returns.columns,
-            "Peso": weights,
-        })
-        st.dataframe(pesos_df, width="stretch")
+    st.write("Se usa un portafolio equiponderado, es decir, todos los activos tienen el mismo peso.")
 
 # ==============================
 # Filas por método
 # ==============================
-var_hist_row = table.loc[table["método"] == "Histórico"]
-var_param_row = table.loc[table["método"] == "Paramétrico"]
-var_mc_row = table.loc[table["método"] == "Monte Carlo"]
+var_hist_row = selected_table.loc[selected_table["método"] == "Histórico"]
+var_param_row = selected_table.loc[selected_table["método"] == "Paramétrico"]
+var_mc_row = selected_table.loc[selected_table["método"] == "Monte Carlo"]
 
 var_h = float(var_hist_row["VaR_diario"].iloc[0]) if not var_hist_row.empty else None
 cvar_h = float(var_hist_row["CVaR_diario"].iloc[0]) if not var_hist_row.empty else None
@@ -386,77 +449,70 @@ section_intro(
     "Estas métricas resumen la pérdida umbral esperada y la severidad promedio de los escenarios más extremos del portafolio.",
 )
 
-var_delta = None
-if var_h is not None and cvar_h is not None:
-    gap_hist = cvar_h - var_h
-    var_delta = f"Brecha cola: {gap_hist:.2%}"
+kpi_row_1 = st.columns(3)
+kpi_row_2 = st.columns(3)
 
-cvar_delta = None
-if cvar_h is not None and var_h is not None:
-    cvar_delta = "Más severo que VaR"
-
-param_delta = None
-param_delta_type = "neu"
-if var_p is not None and var_h is not None:
-    if var_p > var_h:
-        param_delta = "Más conservador"
-        param_delta_type = "neg"
-    elif var_p < var_h:
-        param_delta = "Menos conservador"
-        param_delta_type = "pos"
-    else:
-        param_delta = "Muy similar al histórico"
-        param_delta_type = "neu"
-
-mc_delta = None
-mc_delta_type = "neu"
-if var_mc is not None and var_h is not None:
-    if var_mc > var_h:
-        mc_delta = "Simulación más severa"
-        mc_delta_type = "neg"
-    elif var_mc < var_h:
-        mc_delta = "Simulación menos severa"
-        mc_delta_type = "pos"
-    else:
-        mc_delta = "Muy similar al histórico"
-        mc_delta_type = "neu"
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
+with kpi_row_1[0]:
     kpi_card(
-        f"VaR histórico {int(alpha * 100)}%",
-        f"{var_h:.2%}" if var_h is not None else "N/D",
-        delta=var_delta,
-        delta_type="neg" if var_delta else "neu",
-        caption="Pérdida umbral con enfoque empírico",
-    )
-
-with col2:
-    kpi_card(
-        f"CVaR histórico {int(alpha * 100)}%",
-        f"{cvar_h:.2%}" if cvar_h is not None else "N/D",
-        delta=cvar_delta,
-        delta_type="neg" if cvar_delta else "neu",
-        caption="Pérdida promedio en la cola extrema",
-    )
-
-with col3:
-    kpi_card(
-        "VaR paramétrico",
+        "VaR paramétrico diario",
         f"{var_p:.2%}" if var_p is not None else "N/D",
-        delta=param_delta,
-        delta_type=param_delta_type,
-        caption="Estimado bajo supuesto de normalidad",
+        delta=f"{int(alpha * 100)}% confianza",
+        caption="Pérdida umbral bajo supuesto de normalidad",
     )
 
-with col4:
+with kpi_row_1[1]:
     kpi_card(
-        "VaR Monte Carlo",
+        "VaR histórico diario",
+        f"{var_h:.2%}" if var_h is not None else "N/D",
+        delta=f"{int(alpha * 100)}% confianza",
+        caption="Pérdida umbral con distribución empírica",
+    )
+
+with kpi_row_1[2]:
+    kpi_card(
+        "VaR Monte Carlo diario",
         f"{var_mc:.2%}" if var_mc is not None else "N/D",
-        delta=mc_delta,
-        delta_type=mc_delta_type,
-        caption="Estimado mediante simulación probabilística",
+        delta=f"{n_sim:,} simulaciones",
+        caption="Pérdida umbral mediante simulación probabilística",
+    )
+
+with kpi_row_2[0]:
+    kpi_card(
+        "CVaR paramétrico diario",
+        f"{cvar_p:.2%}" if cvar_p is not None else "N/D",
+        delta="Cola extrema",
+        delta_type="neg",
+        caption="Pérdida promedio más allá del VaR paramétrico",
+    )
+
+with kpi_row_2[1]:
+    kpi_card(
+        "CVaR histórico diario",
+        f"{cvar_h:.2%}" if cvar_h is not None else "N/D",
+        delta="Cola extrema",
+        delta_type="neg",
+        caption="Pérdida promedio en los peores casos observados",
+    )
+
+with kpi_row_2[2]:
+    kpi_card(
+        "CVaR Monte Carlo diario",
+        f"{cvar_mc:.2%}" if cvar_mc is not None else "N/D",
+        delta="Cola extrema",
+        delta_type="neg",
+        caption="Pérdida promedio en escenarios simulados extremos",
+    )
+
+with st.expander("Interpretación"):
+    st.write(
+        f"""
+        - **VaR paramétrico diario:** asume normalidad y marca el umbral de pérdida diaria que no debería superarse con **{int(alpha * 100)}%** de confianza.
+        - **VaR histórico diario:** usa percentiles empíricos de los rendimientos observados para estimar la pérdida diaria umbral al **{int(alpha * 100)}%**.
+        - **VaR Monte Carlo diario:** estima el percentil de pérdida diaria a partir de **{n_sim:,} simulaciones**.
+        - **CVaR paramétrico diario:** estima la pérdida diaria promedio condicionada a exceder el VaR paramétrico.
+        - **CVaR histórico diario:** promedia las pérdidas diarias más extremas observadas en la cola histórica.
+        - **CVaR Monte Carlo diario:** promedia las pérdidas diarias más extremas dentro de los escenarios simulados.
+        """
     )
 
 # ==============================
@@ -471,128 +527,121 @@ section_intro(
 st.caption(
     "El histograma muestra la distribución de rendimientos. Las líneas punteadas representan VaR y CVaR por método."
 )
-st.plotly_chart(plot_var_distribution(portfolio_returns, table), width="stretch")
+fig_var = plot_var_distribution(portfolio_returns, selected_table)
+fig_var.update_traces(marker_line_width=0.6, marker_line_color="rgba(15, 23, 42, 0.35)", selector=dict(type="histogram"))
+line_styles = {
+    "Paramétrico": "#2563eb",
+    "Histórico": "#16a34a",
+    "Monte Carlo": "#f59e0b",
+}
+for trace in fig_var.data:
+    trace_name = str(getattr(trace, "name", ""))
+    if trace_name.startswith("VaR") or trace_name.startswith("CVaR"):
+        for method_name, color in line_styles.items():
+            if method_name in trace_name:
+                trace.line.color = color
+                trace.line.width = 3
+                trace.line.dash = "dash" if trace_name.startswith("VaR") else "dot"
+st.plotly_chart(fig_var, width="stretch")
 
-if modo == "General":
-    st.info(
+st.info(
+    """
+    **Cómo leer este gráfico**
+
+    - El histograma resume cómo se distribuyen los rendimientos del portafolio.
+    - Las líneas de **VaR** marcan pérdidas umbral bajo distintos métodos.
+    - Las líneas de **CVaR** muestran pérdidas promedio más severas en escenarios extremos.
+    - Cuando el CVaR es más alto que el VaR, las pérdidas extremas pueden ser considerablemente más intensas.
+    """
+)
+
+with st.expander("Leyenda de líneas (VaR/CVaR)"):
+    st.write(
         """
-        **Cómo leer este gráfico**
-
-        - El histograma resume cómo se distribuyen los rendimientos del portafolio.
-        - Las líneas de **VaR** marcan pérdidas umbral bajo distintos métodos.
-        - Las líneas de **CVaR** muestran pérdidas promedio más severas en escenarios extremos.
-        - Cuando el CVaR es más alto que el VaR, significa que las pérdidas extremas pueden ser considerablemente más intensas.
+        - **Rendimientos (histograma):** distribución empírica de rendimientos diarios del portafolio.
+        - **VaR Paramétrico:** umbral de pérdida diaria estimado bajo normalidad.
+        - **CVaR Paramétrico:** pérdida promedio más allá del VaR paramétrico.
+        - **VaR Histórico:** umbral de pérdida calculado con rendimientos observados.
+        - **CVaR Histórico:** promedio de pérdidas históricas en la cola extrema.
+        - **VaR Monte Carlo:** umbral de pérdida a partir de escenarios simulados.
+        - **CVaR Monte Carlo:** promedio de pérdidas extremas dentro de los escenarios simulados.
         """
     )
-else:
-    with st.expander("Ver interpretación técnica del gráfico"):
-        st.write(
-            """
-            El gráfico permite contrastar la distribución empírica del portafolio con los umbrales de VaR y CVaR
-            obtenidos bajo distintos enfoques. La separación entre líneas ayuda a comparar conservadurismo,
-            sensibilidad al riesgo extremo y coherencia entre métricas de cola.
-            """
-        )
 
 # ==============================
 # Tabla
 # ==============================
 st.markdown("### Comparación VaR / CVaR")
-if mostrar_tablas:
-    st.dataframe(table, width="stretch")
-else:
-    with st.expander("Ver tabla completa de VaR y CVaR"):
-        st.dataframe(table, width="stretch")
+compact_table = table[["confianza", "método", "VaR_diario", "CVaR_diario"]].copy()
+compact_table = compact_table.rename(
+    columns={
+        "confianza": "Confianza",
+        "método": "Método",
+        "VaR_diario": "VaR diario",
+        "CVaR_diario": "CVaR diario",
+    }
+)
+compact_table["Confianza"] = compact_table["Confianza"].map(lambda x: f"{x:.0%}")
+for col in ["VaR diario", "CVaR diario"]:
+    compact_table[col] = compact_table[col].map(fmt_pct_value)
 
-# ==============================
-# Interpretación
-# ==============================
-st.markdown("### Interpretación")
+st.dataframe(style_risk_table(compact_table), use_container_width=True, height=260)
 
-lectura_simple = f"""
-**Lectura sencilla**
+complete_table = table.copy().rename(
+    columns={
+        "confianza": "Confianza",
+        "método": "Método",
+        "VaR_diario": "VaR diario",
+        "CVaR_diario": "CVaR diario",
+        "VaR_anualizado": "VaR anualizado",
+        "CVaR_anualizado": "CVaR anualizado",
+    }
+)
+complete_table["Confianza"] = complete_table["Confianza"].map(lambda x: f"{x:.0%}")
+for col in ["VaR diario", "CVaR diario", "VaR anualizado", "CVaR anualizado"]:
+    if col in complete_table.columns:
+        complete_table[col] = complete_table[col].map(fmt_pct_value)
 
-- Con {int(alpha * 100)}% de confianza, la pérdida diaria del portafolio no superaría aproximadamente **{var_h:.2%}**.
-- Si ocurre un evento extremo que supera ese umbral, la pérdida promedio podría acercarse a **{cvar_h:.2%}**.
-- El CVaR es más severo que el VaR porque se enfoca en los peores escenarios.
-"""
+with st.expander("Ver tabla completa de VaR y CVaR"):
+    st.dataframe(style_risk_table(complete_table), use_container_width=True)
 
-interpretacion_tecnica = []
+st.info(
+    f"""
+    Para el nivel seleccionado de **{int(alpha * 100)}%**, el VaR histórico diario indica una pérdida umbral de
+    **{fmt_pct_value(var_h)}** y el CVaR histórico diario estima una pérdida promedio de cola de
+    **{fmt_pct_value(cvar_h)}**. Si el CVaR supera claramente al VaR, los escenarios extremos son más severos
+    que el umbral inicial. La comparación entre métodos ayuda a ver cuánto dependen los resultados del supuesto
+    normal, de la historia observada o de simulaciones Monte Carlo.
+    """
+)
 
-if var_h is not None and cvar_h is not None:
-    interpretacion_tecnica.append(
-        f"Con {int(alpha * 100)}% de confianza, el **VaR histórico diario** del portafolio es **{var_h:.2%}**, "
-        f"mientras que el **CVaR histórico diario** es **{cvar_h:.2%}**."
-    )
-    interpretacion_tecnica.append(
-        "Esto implica que, en escenarios de pérdida extrema, el promedio de pérdidas severas supera el umbral del VaR, "
-        "lo cual es consistente con la interpretación del CVaR como medida más sensible al riesgo de cola."
-    )
-
-if var_p is not None and var_h is not None:
-    if var_p < var_h:
-        interpretacion_tecnica.append(
-            "El VaR paramétrico es menor que el VaR histórico, lo que puede sugerir que el supuesto de normalidad "
-            "subestima el riesgo extremo frente a la evidencia empírica."
-        )
-    elif var_p > var_h:
-        interpretacion_tecnica.append(
-            "El VaR paramétrico es mayor que el VaR histórico, lo que sugiere una estimación más conservadora "
-            "bajo el supuesto normal."
-        )
-    else:
-        interpretacion_tecnica.append(
-            "El VaR paramétrico y el VaR histórico son muy similares para esta muestra."
-        )
-
-if var_mc is not None:
-    interpretacion_tecnica.append(
-        f"El **VaR Monte Carlo diario** estimado es **{var_mc:.2%}**, útil para contrastar "
-        "la sensibilidad del riesgo ante simulaciones probabilísticas."
-    )
-
-st.success(lectura_simple)
-
-tab1, tab2 = st.tabs(["Interpretación por métodos", "Advertencia metodológica"])
-
-with tab1:
-    for msg in interpretacion_tecnica:
-        st.write(f"- {msg}")
-
-with tab2:
-    st.warning(
-        "El VaR paramétrico depende del supuesto de normalidad. Si la distribución de rendimientos presenta colas pesadas "
-        "o asimetría, este método puede subestimar el riesgo extremo."
-    )
-
-with st.expander("Ver interpretación técnica completa"):
-    st.write(
-        """
-        El VaR resume una pérdida umbral bajo un nivel de confianza dado, mientras que el CVaR
-        captura la pérdida promedio cuando ese umbral ya fue superado. Por eso el CVaR ofrece una
-        lectura más sensible del riesgo extremo.
-
-        La comparación entre enfoque histórico, paramétrico y Monte Carlo permite evaluar si el riesgo
-        estimado depende fuertemente de supuestos distribucionales o de simulación.
-        """
-    )
-    for msg in interpretacion_tecnica:
-        st.write(f"- {msg}")
-
-# ==============================
-# Backtesting VaR - Test de Kupiec
-# ==============================
-if mostrar_backtesting:
-    st.markdown("### Backtesting VaR - Test de Kupiec")
+with st.expander("Backtesting (opcional) - Test de Kupiec"):
     section_intro(
         "Validación del VaR estimado",
         "Este bloque contrasta si la frecuencia observada de violaciones del VaR es coherente con la esperada bajo el nivel de confianza seleccionado.",
     )
+    st.write(
+        """
+        Una **violación** ocurre cuando la pérdida observada supera el VaR estimado. La tasa esperada de
+        violaciones es \(1 - \alpha\): por ejemplo, 5% para 95% de confianza y 1% para 99%.
+        El test de Kupiec evalúa si la frecuencia observada de violaciones es compatible con esa tasa esperada.
+        Si el **p-value** es mayor que 0.05, no se rechaza la calibración del VaR; si es menor o igual, hay evidencia
+        de que el VaR no está bien calibrado.
+        """
+    )
 
-    if var_h is not None:
+    backtest_method = st.selectbox(
+        "Método para backtesting",
+        ["Histórico", "Paramétrico", "Monte Carlo"],
+        index=0,
+    )
+    method_row = selected_table.loc[selected_table["método"] == backtest_method]
+    backtest_var = float(method_row["VaR_diario"].iloc[0]) if not method_row.empty else None
+
+    if backtest_var is not None:
         kupiec = kupiec_test(
             returns=portfolio_returns,
-            var=var_h,
+            var=backtest_var,
             alpha=alpha,
         )
 
@@ -625,25 +674,19 @@ if mostrar_backtesting:
 
             if kupiec["p_value"] > 0.05:
                 st.success(
-                    "El VaR histórico es consistente con la frecuencia de pérdidas observadas en la muestra."
+                    f"El VaR {backtest_method.lower()} es consistente con la frecuencia de pérdidas observadas en la muestra."
                 )
             else:
                 st.error(
-                    "El VaR histórico no es consistente con la frecuencia de pérdidas observadas. "
+                    f"El VaR {backtest_method.lower()} no es consistente con la frecuencia de pérdidas observadas. "
                     "Esto sugiere que el modelo puede estar subestimando o sobreestimando el riesgo."
                 )
 
-            if modo == "Estadístico":
-                with st.expander("Ver explicación del test de Kupiec"):
-                    st.info(
-                        "El test de Kupiec compara la proporción esperada de violaciones del VaR con la proporción observada. "
-                        "Es una forma de evaluar si el modelo de riesgo está calibrado de manera razonable."
-                    )
-            else:
-                st.info(
-                    "Este bloque verifica si el VaR estimado fue razonable frente a las pérdidas realmente observadas."
-                )
+            st.info(
+                "El test de Kupiec compara la proporción esperada de violaciones del VaR con la proporción observada. "
+                "Es una forma de evaluar si el modelo de riesgo está calibrado de manera razonable."
+            )
         else:
             st.warning("No se pudo ejecutar el test de Kupiec.")
     else:
-        st.warning("No hay VaR histórico disponible para ejecutar el test de Kupiec.")
+        st.warning(f"No hay VaR {backtest_method.lower()} disponible para ejecutar el test de Kupiec.")
