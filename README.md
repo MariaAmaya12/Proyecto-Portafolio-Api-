@@ -209,16 +209,26 @@ Crea un archivo `.env` en la raíz del proyecto con variables como estas:
 ```env
 FRED_API_KEY=tu_api_key
 DEFAULT_START_DATE=2021-01-01
-DEFAULT_END_DATE=2026-03-27
+# Opcional: si se omite, el sistema usa la fecha actual.
+# Define DEFAULT_END_DATE solo para reproducir un corte histórico fijo.
+# DEFAULT_END_DATE=2026-03-27
 ```
 
 Si el frontend necesita apuntar al backend explícitamente, puede usarse también:
 
 ```env
-BACKEND_API_BASE_URL=http://127.0.0.1:8000
+API_BASE_URL=http://127.0.0.1:8000
 ```
 
-> Si no se define, el cliente backend usa por defecto `http://127.0.0.1:8000`.
+> Si no se define `API_BASE_URL`, el cliente backend usa por defecto `http://127.0.0.1:8000` para desarrollo local.
+
+Para Streamlit Community Cloud, configura la URL del backend de Render en **Settings > Secrets**:
+
+```toml
+API_BASE_URL="https://proyecto-portafolio-api-5ev7.onrender.com"
+```
+
+El frontend lee primero `st.secrets["API_BASE_URL"]`; si no existe, usa variables de entorno (`API_BASE_URL` o `BACKEND_API_BASE_URL` por compatibilidad).
 
 ---
 
@@ -445,7 +455,7 @@ python scripts/update_macro_cache.py
   * que FastAPI siga activo,
   * fechas válidas,
   * tickers válidos,
-  * valor de `BACKEND_API_BASE_URL`.
+  * valor de `API_BASE_URL` en Streamlit Secrets o `.env`.
 
 ---
 

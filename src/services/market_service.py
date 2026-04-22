@@ -7,6 +7,7 @@ import pandas as pd
 import yfinance as yf
 
 from src.config import DATA_DIR
+from src.date_utils import yfinance_exclusive_end
 
 logger = logging.getLogger(__name__)
 
@@ -113,11 +114,13 @@ def _validate_ohlcv(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
 def _get_prices(ticker: str, start: str, end: str) -> pd.DataFrame:
     try:
         _configure_yfinance_cache()
+        # yfinance interpreta `end` como exclusivo; el dashboard lo trata como inclusivo.
+        yf_end = yfinance_exclusive_end(end)
 
         df = yf.download(
             ticker,
             start=start,
-            end=end,
+            end=yf_end,
             auto_adjust=False,
             progress=False,
             actions=False,

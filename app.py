@@ -10,6 +10,7 @@ from src.config import (
     GLOBAL_BENCHMARK,
     ensure_project_dirs,
 )
+from src.api.backend_client import backend_base_url, ping_backend_health
 from src.download import data_error_message, load_market_bundle
 from src.preprocess import (
     equal_weight_portfolio,
@@ -314,7 +315,7 @@ render_sidebar_navigation()
 # ---------------------------------------------------------
 # Cache de datos
 # ---------------------------------------------------------
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=3600)
 def get_market_data(tickers, start, end):
     return load_market_bundle(tickers=tickers, start=start, end=end)
 
@@ -398,6 +399,23 @@ with st.sidebar:
     else:
         start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE)
         end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE)
+
+    st.divider()
+    if st.button("Actualizar datos", key="home_refresh_data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+    with st.expander("Diagnóstico API"):
+        st.caption("API_BASE_URL efectivo")
+        st.code(backend_base_url())
+        health = ping_backend_health()
+        if health["ok"]:
+            st.success(f"/health OK · status {health['status_code']}")
+        else:
+            status_text = f"status {health['status_code']}" if health["status_code"] else "sin status code"
+            st.error(f"/health error · {status_text}")
+            if health["error"]:
+                st.caption(str(health["error"]))
 
     st.divider()
     st.subheader("Selección de activos")

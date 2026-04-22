@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 import pandas as pd
 import requests
+import streamlit as st
 
 DEFAULT_BACKEND_BASE_URL = "http://127.0.0.1:8000"
 BACKEND_TIMEOUT_SECONDS = 30
+BACKEND_HEALTH_TIMEOUT_SECONDS = 10
+BACKEND_RETRY_DELAYS_SECONDS = (0.5, 1.0)
+RETRYABLE_STATUS_CODES = {502, 503, 504}
 
 
 class BackendAPIError(RuntimeError):
@@ -24,7 +29,26 @@ class BackendAPIError(RuntimeError):
 
 
 def backend_base_url() -> str:
-    return os.getenv("BACKEND_API_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/")
+    return (
+        _streamlit_secret("API_BASE_URL")
+        or _streamlit_secret("BACKEND_API_BASE_URL")
+        or os.getenv("API_BASE_URL")
+        or os.getenv("BACKEND_API_BASE_URL")
+        or DEFAULT_BACKEND_BASE_URL
+    ).rstrip("/")
+
+
+def _streamlit_secret(name: str) -> str | None:
+    try:
+        value = st.secrets.get(name)
+    except Exception:
+        return None
+
+    if value is None:
+        return None
+
+    value = str(value).strip()
+    return value or None
 
 
 def friendly_error_message(exc: Exception, default: str = "Ocurrió un error inesperado al consultar la API del proyecto.") -> str:
@@ -69,9 +93,14 @@ def _message_for_http_status(status_code: int, response: requests.Response) -> s
 
 
 def _request_backend(method: str, path: str, **kwargs) -> dict[str, Any]:
-    url = f"{backend_base_url()}{path}"
+    url = build_backend_url(path)
     try:
-        response = requests.request(method, url, timeout=BACKEND_TIMEOUT_SECONDS, **kwargs)
+        response = _request_with_retries(
+            method,
+            url,
+            timeout=kwargs.pop("timeout", BACKEND_TIMEOUT_SECONDS),
+            **kwargs,
+        )
         response.raise_for_status()
         return response.json()
     except requests.ConnectionError as exc:
@@ -105,6 +134,59 @@ def backend_get(path: str, params: dict[str, Any] | None = None) -> dict[str, An
 
 def backend_post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _request_backend("POST", path, json=payload)
+
+
+def build_backend_url(path: str) -> str:
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return f"{backend_base_url()}{normalized_path}"
+
+
+def _request_with_retries(method: str, url: str, timeout: int | float, **kwargs) -> requests.Response:
+    last_exc: requests.RequestException | None = None
+    attempts = len(BACKEND_RETRY_DELAYS_SECONDS) + 1
+
+    for attempt in range(attempts):
+        try:
+            response = requests.request(method, url, timeout=timeout, **kwargs)
+            if response.status_code in RETRYABLE_STATUS_CODES and attempt < len(BACKEND_RETRY_DELAYS_SECONDS):
+                time.sleep(BACKEND_RETRY_DELAYS_SECONDS[attempt])
+                continue
+            return response
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            last_exc = exc
+            if attempt >= len(BACKEND_RETRY_DELAYS_SECONDS):
+                raise
+            time.sleep(BACKEND_RETRY_DELAYS_SECONDS[attempt])
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("No fue posible completar la solicitud al backend.")
+
+
+def ping_backend_health() -> dict[str, Any]:
+    url = build_backend_url("/health")
+    try:
+        response = _request_with_retries(
+            "GET",
+            url,
+            timeout=BACKEND_HEALTH_TIMEOUT_SECONDS,
+        )
+        ok = response.status_code == 200
+        return {
+            "ok": ok,
+            "status_code": response.status_code,
+            "url": url,
+            "body": response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text,
+            "error": None if ok else response.text,
+        }
+    except requests.RequestException as exc:
+        return {
+            "ok": False,
+            "status_code": None,
+            "url": url,
+            "body": None,
+            "error": str(exc),
+        }
 
 
 def records_to_dataframe(records: list[dict[str, Any]]) -> pd.DataFrame:

@@ -3,6 +3,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
+from src.date_utils import yfinance_exclusive_end
 from src.download import data_error_message, download_single_ticker
 from src.indicators import compute_all_indicators
 from src.signals import evaluate_signals
@@ -239,6 +240,159 @@ def signal_table(flags: dict) -> pd.DataFrame:
     )
 
 
+DIAGNOSTIC_COLUMN_ALIASES = {
+    "Close / Adj Close": ["Close", "Adj Close", "close", "adj_close", "adj close"],
+    "RSI": ["rsi", "RSI", "RSI_14", "RSI(14)", "rsi_14"],
+    "MACD": ["macd", "MACD"],
+    "MACD signal": ["macd_signal", "signal", "MACD_signal", "MACD Signal"],
+    "Bollinger superior": ["BB_upper", "BB_up", "boll_upper", "bb_upper", "upper_band", "Bollinger Upper"],
+    "Bollinger inferior": ["BB_lower", "BB_low", "boll_lower", "bb_lower", "lower_band", "Bollinger Lower"],
+    "Media 50": ["sma_50", "SMA_50", "ma_50", "MA_50"],
+    "Media 200": ["sma_200", "SMA_200", "ma_200", "MA_200"],
+    "Estocástico K": ["STOCH_K", "stoch_k", "Stoch_K", "%K", "stochastic_k"],
+    "Estocástico D": ["STOCH_D", "stoch_d", "Stoch_D", "%D", "stochastic_d"],
+}
+
+
+def find_matching_columns(columns, aliases: list[str]) -> list[str]:
+    columns_list = list(columns)
+    lower_map = {str(col).lower(): col for col in columns_list}
+    matches = []
+
+    for alias in aliases:
+        direct = lower_map.get(alias.lower())
+        if direct is not None and direct not in matches:
+            matches.append(direct)
+
+    if matches:
+        return matches
+
+    alias_tokens = [
+        alias.lower().replace("_", "").replace(" ", "").replace("(", "").replace(")", "")
+        for alias in aliases
+    ]
+    for col in columns_list:
+        normalized = str(col).lower().replace("_", "").replace(" ", "").replace("(", "").replace(")", "")
+        if any(token and token in normalized for token in alias_tokens):
+            matches.append(col)
+
+    return matches
+
+
+def diagnostic_column_summary(ind: pd.DataFrame) -> tuple[pd.DataFrame, list]:
+    rows = []
+    existing_columns = []
+    last_row = ind.tail(1)
+
+    for label, aliases in DIAGNOSTIC_COLUMN_ALIASES.items():
+        matches = find_matching_columns(ind.columns, aliases)
+        if not matches:
+            rows.append(
+                {
+                    "Indicador esperado": label,
+                    "Columnas encontradas": "NO EXISTE",
+                    "NaN en última fila": "NO EXISTE",
+                }
+            )
+            continue
+
+        for col in matches:
+            if col not in existing_columns:
+                existing_columns.append(col)
+
+        nan_status = {
+            str(col): bool(last_row[col].isna().iloc[0])
+            for col in matches
+            if col in last_row.columns and not last_row.empty
+        }
+        rows.append(
+            {
+                "Indicador esperado": label,
+                "Columnas encontradas": ", ".join(str(col) for col in matches),
+                "NaN en última fila": nan_status if nan_status else "Sin última fila",
+            }
+        )
+
+    return pd.DataFrame(rows), existing_columns
+
+
+def render_diagnostic(
+    asset_name: str,
+    ticker: str,
+    start_date,
+    end_date,
+    df: pd.DataFrame,
+    ind: pd.DataFrame | None = None,
+    signal: dict | None = None,
+):
+    with st.expander(f"Diagnóstico técnico (por activo) - {asset_name} ({ticker})"):
+        st.markdown("**Diagnóstico de descarga**")
+        st.write(
+            {
+                "start_date_usuario": str(start_date),
+                "end_date_usuario": str(end_date),
+                "end_date_enviado_a_yfinance": yfinance_exclusive_end(str(end_date)),
+                "filas_descargadas": len(df),
+                "fecha_min": df.index.min() if not df.empty else None,
+                "fecha_max": df.index.max() if not df.empty else None,
+                "ultima_fecha_descargada": df.index.max() if not df.empty else None,
+                "shape": df.shape,
+                "columnas_descargadas": list(df.columns),
+            }
+        )
+
+        if ind is None:
+            st.warning("No hay DataFrame de indicadores para este activo porque la descarga llegó vacía.")
+            return
+
+        st.markdown("**Columnas reales en indicadores**")
+        st.write(list(ind.columns))
+
+        summary, key_columns = diagnostic_column_summary(ind)
+        st.markdown("**Estado de columnas clave**")
+        st.dataframe(summary, width="stretch", hide_index=True)
+
+        missing_critical = summary.loc[
+            summary["Columnas encontradas"].eq("NO EXISTE"),
+            "Indicador esperado",
+        ].tolist()
+        if missing_critical:
+            st.warning(f"Columnas críticas faltantes: {', '.join(missing_critical)}")
+
+        if key_columns:
+            st.markdown("**Últimas 5 filas de columnas clave existentes**")
+            st.dataframe(ind[key_columns].tail(5), width="stretch")
+        else:
+            st.warning("No se encontró ninguna columna clave esperada en el DataFrame de indicadores.")
+
+        if signal and signal.get("diagnostics"):
+            st.markdown("**Evaluación de señales**")
+            signal_diag = pd.DataFrame(signal["diagnostics"])
+            signal_diag["Señal"] = signal_diag["signal"].map(SIGNAL_LABELS).fillna(signal_diag["signal"])
+            st.dataframe(
+                signal_diag[
+                    [
+                        "Señal",
+                        "evaluated",
+                        "active",
+                        "reason",
+                        "columns_used",
+                        "missing_columns",
+                    ]
+                ],
+                width="stretch",
+                hide_index=True,
+            )
+
+        if len(ind.columns) <= 20:
+            st.markdown("**Últimas 5 filas completas**")
+            st.dataframe(ind.tail(5), width="stretch")
+        else:
+            st.caption(
+                f"Se omite ind.tail(5) completo porque el DataFrame tiene {len(ind.columns)} columnas."
+            )
+
+
 def classify_signal_risk(signal: dict) -> dict:
     recommendation = str(signal.get("recommendation", "")).lower()
     score_buy = int(signal.get("score_buy", 0))
@@ -330,22 +484,18 @@ with st.sidebar:
         end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="sig_end")
 
     st.divider()
-    st.subheader("Modo de visualización")
-    modo = st.radio(
-        "Selecciona el nivel de detalle",
-        ["General", "Estadístico"],
-        index=0,
-    )
-
-    st.divider()
-    st.subheader("Opciones de visualización")
-    mostrar_detalle = st.checkbox("Mostrar detalle por activo", value=False)
-
-    with st.expander("Filtros secundarios"):
+    with st.expander("Umbrales configurables"):
         rsi_overbought = st.slider("RSI sobrecompra", min_value=60, max_value=90, value=70)
         rsi_oversold = st.slider("RSI sobreventa", min_value=10, max_value=40, value=30)
         stoch_overbought = st.slider("Estocástico sobrecompra", min_value=60, max_value=95, value=80)
         stoch_oversold = st.slider("Estocástico sobreventa", min_value=5, max_value=40, value=20)
+
+    st.divider()
+    modo_diagnostico = st.checkbox("Modo diagnóstico (temporal)", value=False)
+
+    if st.button("Actualizar datos", key="sig_refresh_data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
 
 # ==============================
@@ -356,24 +506,16 @@ section_intro(
     "Cada activo se resume en una tarjeta con recomendación, semáforo técnico, score de compra/venta y señales activas más relevantes.",
 )
 
-if modo == "General":
-    st.info(
-        """
-        **Semáforo interpretativo**
-        - **Favorable**: predominan señales de entrada o fortaleza técnica.
-        - **Neutral / Precaución**: señales mixtas o sin ventaja clara.
-        - **Desfavorable**: predominan señales de venta, agotamiento o deterioro técnico.
+st.info(
+    """
+    **Semáforo interpretativo**
+    - **Favorable**: predominan señales de entrada o fortaleza técnica.
+    - **Neutral / Precaución**: señales mixtas o sin ventaja clara.
+    - **Desfavorable**: predominan señales de venta, agotamiento o deterioro técnico.
 
-        Estas señales orientan la lectura táctica, pero no reemplazan el análisis de riesgo, benchmark ni contexto macro.
-        """
-    )
-else:
-    st.info(
-        """
-        Este módulo sintetiza señales provenientes de MACD, RSI, Bandas de Bollinger, cruces de medias y oscilador estocástico.
-        La recomendación final agrega evidencia de tendencia, reversión y momentum para construir una lectura técnica por activo.
-        """
-    )
+    Estas señales orientan la lectura táctica, pero no reemplazan el análisis de riesgo, benchmark ni contexto macro.
+    """
+)
 
 
 # ==============================
@@ -386,6 +528,8 @@ for asset_name, meta in ASSETS.items():
     df = download_single_ticker(ticker=ticker, start=str(start_date), end=str(end_date))
 
     if df.empty:
+        if modo_diagnostico:
+            render_diagnostic(asset_name, ticker, start_date, end_date, df)
         continue
 
     ind = compute_all_indicators(df)
@@ -396,6 +540,8 @@ for asset_name, meta in ASSETS.items():
         stoch_overbought=stoch_overbought,
         stoch_oversold=stoch_oversold,
     )
+    if modo_diagnostico:
+        render_diagnostic(asset_name, ticker, start_date, end_date, df, ind, signal)
 
     if not signal:
         continue
@@ -447,13 +593,12 @@ for i in range(0, len(cards_data), 2):
                 level=item["ui"],
             )
 
-            if mostrar_detalle or modo == "Estadístico":
-                with st.expander(f"Ver detalle de señales - {item['asset_name']}"):
-                    st.dataframe(
-                        signal_table(item["flags"]),
-                        width="stretch",
-                        hide_index=True,
-                    )
+            with st.expander(f"Ver detalle de señales - {item['asset_name']}"):
+                st.dataframe(
+                    signal_table(item["flags"]),
+                    width="stretch",
+                    hide_index=True,
+                )
 
 
 # ==============================
@@ -465,37 +610,24 @@ mixtas = len(cards_data) - favorables - desfavorables
 
 st.markdown("### Interpretación breve")
 
-if modo == "General":
-    if favorables > desfavorables:
-        st.success(
-            f"""
-            En esta ventana predominan señales **favorables** ({favorables} activos), por lo que la lectura técnica agregada
-            sugiere un sesgo más constructivo que defensivo. Aun así, la decisión no debería basarse solo en este módulo:
-            conviene contrastar estas señales con riesgo, benchmark y contexto macro.
-            """
-        )
-    elif desfavorables > favorables:
-        st.error(
-            f"""
-            En esta ventana predominan señales **desfavorables** ({desfavorables} activos), lo que sugiere mayor cautela
-            táctica. Esto puede reflejar sobrecompra, pérdida de momentum o deterioro técnico en varios activos del portafolio.
-            """
-        )
-    else:
-        st.warning(
-            f"""
-            La lectura agregada es **mixta**: hay señales favorables, desfavorables y neutrales coexistiendo. En este caso,
-            el módulo sugiere prudencia y selección más cuidadosa por activo en vez de una lectura uniforme del portafolio.
-            """
-        )
-else:
-    st.info(
+if favorables > desfavorables:
+    st.success(
         f"""
-        Desde una perspectiva agregada, el módulo identifica **{favorables} activos con lectura favorable**, 
-        **{desfavorables} con lectura desfavorable** y **{mixtas} con lectura intermedia o no concluyente**.
-
-        En términos técnicos, esto sugiere que las señales derivadas de momentum, reversión y tendencia no son homogéneas
-        en todo el universo analizado. Por tanto, la interpretación más adecuada es utilizar este bloque como apoyo
-        táctico para priorización de activos, no como criterio aislado de asignación.
+        En esta ventana predominan señales **favorables** ({favorables} activos). La lectura técnica luce más constructiva
+        que defensiva, aunque conviene contrastarla con riesgo, benchmark y contexto macro.
+        """
+    )
+elif desfavorables > favorables:
+    st.error(
+        f"""
+        En esta ventana predominan señales **desfavorables** ({desfavorables} activos). La lectura sugiere mayor cautela,
+        porque varios activos muestran presión bajista, pérdida de fuerza o zonas de posible agotamiento.
+        """
+    )
+else:
+    st.warning(
+        f"""
+        La lectura agregada está **empatada**: hay {favorables} activos favorables, {desfavorables} desfavorables
+        y {mixtas} neutrales o mixtos. En este caso conviene revisar activo por activo antes de tomar una decisión.
         """
     )

@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, RootModel, StringConstraints, field_validator, model_validator
 
@@ -115,6 +115,11 @@ class DynamicRecord(RootModel[dict[str, JsonScalar]]):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class RootResponse(BaseModel):
+    status: str
+    service: str
 
 
 class MacroSnapshotResponse(BaseModel):
@@ -916,6 +921,16 @@ def portfolio_summary(row: pd.Series) -> PortfolioSummary:
 @app.get("/health", response_model=HealthResponse)
 def health(settings: SettingsDep) -> HealthResponse:
     return HealthResponse(status="ok")
+
+
+@app.get("/", response_model=RootResponse)
+def root() -> RootResponse:
+    return RootResponse(status="ok", service="api")
+
+
+@app.head("/")
+def root_head() -> Response:
+    return Response(status_code=200)
 
 
 @app.get("/macro/snapshot", response_model=MacroSnapshotResponse)

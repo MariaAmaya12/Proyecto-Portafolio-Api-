@@ -8,12 +8,12 @@ from typing import Dict
 import pandas as pd
 import requests
 import wbgapi as wb
-import yfinance as yf
 from dotenv import load_dotenv
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from src.config import FRED_SERIES
+from src.services.market_service import get_prices
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -214,14 +214,9 @@ def _get_worldbank_fx() -> pd.DataFrame:
 
 def _get_yfinance_usdcop() -> float:
     try:
-        df = yf.download(
-            "USDCOP=X",
-            period="5d",
-            interval="1d",
-            auto_adjust=False,
-            progress=False,
-            threads=False,
-        )
+        end = pd.Timestamp.today().normalize().date()
+        start = (pd.Timestamp(end) - pd.DateOffset(days=7)).date()
+        df = get_prices("USDCOP=X", start=start.isoformat(), end=end.isoformat())
 
         if df is None or df.empty:
             return float("nan")

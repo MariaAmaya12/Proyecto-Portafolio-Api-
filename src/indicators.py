@@ -87,4 +87,14 @@ def compute_all_indicators(
     out = add_macd(out)
     out = add_bollinger_bands(out, window=bb_window, n_std=bb_std)
     out = add_stochastic(out, window=stoch_window)
+
+    price_col = "Adj Close" if "Adj Close" in out.columns else "Close"
+    out["SMA_50"] = out[price_col].rolling(50).mean()
+    out["SMA_200"] = out[price_col].rolling(200).mean()
+
+    out["RSI"] = out[f"RSI_{rsi_window}"]
+    out["BB_upper"] = out["BB_up"]
+    out["BB_lower"] = out["BB_low"]
+    out["STOCH_K"] = out["%K"]
+    out["STOCH_D"] = out["%D"]
     return out

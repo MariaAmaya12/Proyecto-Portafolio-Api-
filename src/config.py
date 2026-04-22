@@ -59,7 +59,7 @@ FRED_SERIES = {
 }
 
 DEFAULT_START_DATE = os.getenv("DEFAULT_START_DATE", "2021-01-01")
-DEFAULT_END_DATE = os.getenv("DEFAULT_END_DATE", str(date.today()))
+DEFAULT_END_DATE = os.getenv("DEFAULT_END_DATE") or str(date.today())
 
 TRADING_DAYS = 252
 
