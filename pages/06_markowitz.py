@@ -2,8 +2,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 import numpy as np
 import pandas as pd
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
-from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
+from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, TRADING_DAYS, ensure_project_dirs
 from src.download import data_error_message, load_market_bundle
 from src.markowitz import (
     simulate_portfolios,
@@ -98,24 +99,37 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
             }}
 
             .kpi-card {{
-                background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-                border: 1px solid rgba(15, 23, 42, 0.08);
+                background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+                border: 1px solid rgba(37, 99, 235, 0.18);
                 border-radius: 18px;
-                padding: 18px 18px 14px 18px;
-                box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-                min-height: 124px;
+                box-shadow: 0 4px 14px rgba(30, 64, 175, 0.10);
+                min-height: 195px;
+                height: 195px;
                 box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
+                overflow: visible;
             }}
 
+            .kpi-card-inner {{
+                min-height: 195px;
+                height: 195px;
+                box-sizing: border-box;
+                padding: 18px 18px 16px 18px;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start;
+            }}
+
+            .kpi-title,
             .kpi-label {{
                 font-size: 0.88rem;
                 font-weight: 600;
                 color: #475569;
                 margin-bottom: 0.35rem;
                 letter-spacing: 0.2px;
+                line-height: 1.22;
+                min-height: 44px;
+                overflow-wrap: anywhere;
+                white-space: normal;
             }}
 
             .kpi-value {{
@@ -124,7 +138,8 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
                 color: #0f172a;
                 line-height: 1.1;
                 margin-bottom: 0.45rem;
-                word-break: break-word;
+                overflow-wrap: anywhere;
+                white-space: normal;
             }}
 
             .kpi-delta {{
@@ -135,6 +150,12 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
                 padding: 0.28rem 0.55rem;
                 border-radius: 999px;
                 margin-top: 0.10rem;
+            }}
+
+            .kpi-badge-slot {{
+                min-height: 34px;
+                display: flex;
+                align-items: center;
             }}
 
             .kpi-delta.pos {{
@@ -155,25 +176,27 @@ def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
             .kpi-caption {{
                 font-size: 0.78rem;
                 color: #64748b;
-                margin-top: 0.65rem;
+                margin-top: auto;
                 line-height: 1.35;
+                overflow-wrap: anywhere;
+                white-space: normal;
             }}
         </style>
     </head>
     <body>
         <div class="kpi-card">
-            <div>
-                <div class="kpi-label">{title}</div>
+            <div class="kpi-card-inner">
+                <div class="kpi-title kpi-label">{title}</div>
                 <div class="kpi-value">{value}</div>
-                {delta_html}
+                <div class="kpi-badge-slot">{delta_html}</div>
+                <div class="kpi-caption">{caption}</div>
             </div>
-            <div class="kpi-caption">{caption}</div>
         </div>
     </body>
     </html>
     """
 
-    components.html(html, height=145)
+    components.html(html, height=215)
 
 
 def ensure_dataframe(obj):
@@ -212,6 +235,104 @@ def format_weights_df(df: pd.DataFrame) -> pd.DataFrame:
     out["Peso"] = out["Peso"].round(4)
     out = out.sort_values("Peso", ascending=False).reset_index(drop=True)
     return out
+
+
+class ModuleParams(BaseModel):
+    n_portfolios: int = Field(ge=10000)
+    target_return: float = Field(ge=0.03, le=0.20)
+    evaluate_manual: bool = False
+
+
+class ManualPortfolioInput(BaseModel):
+    weights: list[float]
+
+    @field_validator("weights")
+    @classmethod
+    def validate_weight_values(cls, weights):
+        if not weights:
+            raise ValueError("debe incluir al menos un peso")
+
+        invalid = [weight for weight in weights if weight < 0 or weight > 1]
+        if invalid:
+            raise ValueError("todos los pesos deben estar entre 0 y 1")
+
+        return weights
+
+    @model_validator(mode="after")
+    def validate_weight_sum(self):
+        if abs(sum(self.weights) - 1.0) > 1e-6:
+            raise ValueError("los pesos deben sumar 1")
+        return self
+
+
+def show_validation_error(title: str, exc: ValidationError):
+    details = "; ".join(error["msg"] for error in exc.errors())
+    st.error(f"{title}: {details}.")
+
+
+def calculate_manual_portfolio(returns_df: pd.DataFrame, weights: np.ndarray, rf_annual: float) -> dict:
+    mean_returns = returns_df.mean().values * TRADING_DAYS
+    cov_matrix = returns_df.cov().values * TRADING_DAYS
+
+    port_return = float(weights @ mean_returns)
+    port_vol = float(np.sqrt(weights.T @ cov_matrix @ weights))
+    sharpe = np.nan if port_vol <= 0 else float((port_return - rf_annual) / port_vol)
+
+    return {
+        "return": port_return,
+        "volatility": port_vol,
+        "sharpe": sharpe,
+        "weights": weights,
+    }
+
+
+def prepare_frontier_figure(sim_df, frontier_df, min_var, max_sharpe, manual_portfolio=None):
+    fig = plot_frontier(sim_df, frontier_df, min_var, max_sharpe)
+
+    if fig.data:
+        first_trace = fig.data[0]
+        if hasattr(first_trace, "marker") and first_trace.marker:
+            first_trace.marker.colorbar.update(
+                x=1.08,
+                y=0.54,
+                len=0.62,
+                thickness=12,
+                title=dict(text="Sharpe", font=dict(size=11)),
+                tickfont=dict(size=10),
+            )
+
+    if manual_portfolio is not None:
+        fig.add_scatter(
+            x=[manual_portfolio["volatility"]],
+            y=[manual_portfolio["return"]],
+            mode="markers",
+            marker=dict(
+                size=13,
+                symbol="circle-open",
+                color="#facc15",
+                line=dict(color="#854d0e", width=2),
+            ),
+            name="Portafolio manual",
+            hovertemplate=(
+                "Portafolio manual<br>"
+                "Volatilidad: %{x:.2%}<br>"
+                "Retorno: %{y:.2%}<extra></extra>"
+            ),
+        )
+
+    fig.update_layout(
+        margin=dict(l=40, r=150, t=60, b=105),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.22,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(0,0,0,0)",
+            font=dict(size=10),
+        ),
+    )
+    return fig
 
 
 inject_kpi_cards_css()
@@ -270,41 +391,41 @@ with st.sidebar:
         end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="mk_end")
 
     st.divider()
-    st.subheader("Modo de visualización")
-    modo = st.radio(
-        "Selecciona el nivel de detalle",
-        ["General", "Estadístico"],
-        index=0,
+    n_portfolios = st.slider(
+        "Número de portafolios",
+        min_value=10000,
+        max_value=50000,
+        value=10000,
+        step=1000,
     )
 
-    st.divider()
-    st.subheader("Opciones de visualización")
+    target_return = st.slider(
+        "Retorno objetivo (%)",
+        min_value=0.03,
+        max_value=0.20,
+        value=0.10,
+        step=0.01,
+    )
 
-    mostrar_tablas = st.checkbox("Mostrar tablas completas", value=False)
+    evaluar_manual = st.toggle("Evaluar portafolio manual", value=False)
 
-    mostrar_detalle_correlacion = False
-    mostrar_interpretacion_tecnica = False
+if n_portfolios < 10000:
+    st.warning("El número de portafolios no puede ser menor a 10.000. Se usará 10.000.")
+    n_portfolios = 10000
 
-    with st.expander("Filtros secundarios"):
-        n_portfolios = st.slider(
-            "Número de portafolios",
-            min_value=5000,
-            max_value=50000,
-            value=10000,
-            step=5000,
-        )
+try:
+    params = ModuleParams(
+        n_portfolios=int(n_portfolios),
+        target_return=float(target_return),
+        evaluate_manual=bool(evaluar_manual),
+    )
+except ValidationError as exc:
+    show_validation_error("Parámetros inválidos del módulo", exc)
+    st.stop()
 
-        target_return = st.slider(
-            "Retorno objetivo (%)",
-            min_value=0.0,
-            max_value=0.30,
-            value=0.10,
-            step=0.01,
-        )
-
-        if modo == "Estadístico":
-            mostrar_detalle_correlacion = st.checkbox("Mostrar matriz de correlación tabular", value=False)
-            mostrar_interpretacion_tecnica = st.checkbox("Mostrar interpretación técnica", value=True)
+n_portfolios = params.n_portfolios
+target_return = params.target_return
+evaluar_manual = params.evaluate_manual
 
 # ==============================
 # Carga de datos
@@ -332,6 +453,64 @@ rf_annual = (
     if macro["risk_free_rate_pct"] == macro["risk_free_rate_pct"]
     else 0.03
 )
+
+manual_portfolio = None
+manual_weights_df = None
+
+if evaluar_manual:
+    with st.expander("Portafolio manual (opcional)", expanded=True):
+        st.caption("Ingresa pesos en formato decimal. Ejemplo: 0.25 equivale a 25%. La participación se deriva automáticamente.")
+
+        default_weight = 1 / len(returns.columns)
+        manual_weights = []
+        weight_cols = st.columns(min(3, len(returns.columns)))
+
+        for idx, asset in enumerate(returns.columns):
+            with weight_cols[idx % len(weight_cols)]:
+                manual_weights.append(
+                    st.number_input(
+                        f"Peso {asset}",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=float(default_weight),
+                        step=0.01,
+                        format="%.6f",
+                        key=f"manual_weight_{asset}",
+                    )
+                )
+
+        manual_weights = np.array(manual_weights, dtype=float)
+        manual_weight_sum = float(manual_weights.sum())
+
+        try:
+            manual_input = ManualPortfolioInput(weights=manual_weights.tolist())
+        except ValidationError:
+            st.error(f"Suma de pesos: {manual_weight_sum:.6f} - Error. Los pesos deben estar entre 0 y 1 y sumar 1.")
+            st.stop()
+
+        st.success(f"Suma de pesos: {manual_weight_sum:.6f} - OK")
+        manual_weights = np.array(manual_input.weights, dtype=float)
+        manual_portfolio = calculate_manual_portfolio(returns, manual_weights, rf_annual)
+        manual_weights_df = pd.DataFrame(
+            {
+                "Activo": returns.columns,
+                "Peso": np.round(manual_weights, 6),
+            }
+        )
+        manual_weights_df["Participación"] = manual_weights_df["Peso"].map(lambda x: f"{x:.2%}")
+
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.metric("Retorno esperado", f"{manual_portfolio['return']:.2%}")
+        with m2:
+            st.metric("Volatilidad", f"{manual_portfolio['volatility']:.2%}")
+        with m3:
+            st.metric(
+                "Sharpe",
+                f"{manual_portfolio['sharpe']:.3f}" if np.isfinite(manual_portfolio["sharpe"]) else "N/D",
+            )
+
+        st.dataframe(manual_weights_df, width="stretch", hide_index=True)
 
 # ==============================
 # Simulación y soluciones óptimas
@@ -369,22 +548,13 @@ max_sharpe_weights_df = format_weights_df(weights_table(max_sharpe))
 # Resumen
 # ==============================
 st.markdown("### Resumen del módulo")
-if modo == "General":
-    st.write(
-        """
-        Este módulo construye múltiples combinaciones de portafolios para identificar aquellas que ofrecen
-        una mejor relación entre **retorno esperado** y **riesgo**. Se resaltan el portafolio de
-        **mínima varianza**, el de **máximo Sharpe** y una solución con **retorno objetivo**.
-        """
-    )
-else:
-    st.write(
-        """
-        Este módulo implementa el enfoque media-varianza de **Markowitz**, simulando portafolios factibles
-        para aproximar la frontera eficiente, identificar el portafolio de **mínima varianza**, el de
-        **máximo Sharpe** y resolver una optimización condicionada a un **retorno objetivo**.
-        """
-    )
+st.write(
+    """
+    Este módulo construye múltiples combinaciones de portafolios para identificar alternativas eficientes
+    entre **retorno esperado** y **riesgo**. Se resaltan el portafolio de **mínima varianza**, el de
+    **máximo Sharpe** y una solución condicionada por un **retorno objetivo**.
+    """
+)
 
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
 
@@ -436,6 +606,16 @@ with c4:
         caption="Usada para el cálculo del ratio Sharpe",
     )
 
+with st.expander("Interpretación (KPIs del módulo)"):
+    st.write(
+        f"""
+        - **Activos analizados:** se optimiza sobre {n_assets} activos; este universo define cuántas piezas tiene disponible el modelo para diversificar.
+        - **Observaciones:** se usan {n_obs} retornos alineados para estimar retornos esperados, volatilidades y correlaciones.
+        - **Portafolios simulados:** se evalúan {n_portfolios:,} combinaciones aleatorias; el control impide bajar de 10.000 simulaciones.
+        - **Tasa libre de riesgo:** la referencia anual es {rf_annual:.2%}; se usa para calcular el exceso de retorno en el ratio Sharpe.
+        """
+    )
+
 # ==============================
 # Portafolios óptimos
 # ==============================
@@ -479,6 +659,15 @@ with c8:
         caption="Portafolio con mayor ratio Sharpe",
     )
 
+with st.expander("Interpretación (portafolios destacados)", expanded=False):
+    st.write(
+        f"""
+        - **Mínima varianza:** ofrece un retorno esperado de {float(min_var_return):.2%} con volatilidad de {float(min_var_vol):.2%}; es la opción más defensiva dentro de la simulación.
+        - **Máximo Sharpe:** ofrece un retorno esperado de {float(max_sharpe_return):.2%} con Sharpe de {float(max_sharpe_ratio):.3f}; es la mejor eficiencia riesgo-retorno bajo la tasa libre usada.
+        - **Lectura conjunta:** mínima varianza prioriza estabilidad, mientras que máximo Sharpe prioriza compensación por unidad de riesgo.
+        """
+    )
+
 # ==============================
 # Correlación
 # ==============================
@@ -492,28 +681,16 @@ section_intro(
 
 st.plotly_chart(plot_correlation_heatmap(corr), width="stretch")
 
-if modo == "General":
-    st.info(
+with st.expander("Leyenda de la matriz de correlación"):
+    st.write(
         """
-        **Cómo leer esta matriz**
-
-        - Correlaciones altas indican que dos activos tienden a moverse de forma parecida.
-        - Correlaciones más bajas o moderadas ayudan a diversificar.
-        - En Markowitz, la diversificación es clave para reducir volatilidad agregada.
+        - Una correlación alta y positiva indica que dos activos tienden a moverse en la misma dirección.
+        - Una correlación negativa indica que suelen moverse en direcciones opuestas, lo que puede reducir el riesgo conjunto.
+        - Una correlación cercana a 0 sugiere poca relación lineal entre sus movimientos.
+        - En Markowitz, combinar activos con correlaciones bajas o negativas ayuda a diversificar y puede disminuir la volatilidad del portafolio.
+        - La escala de colores permite identificar rápidamente relaciones fuertes, débiles o inversas entre pares de activos.
         """
     )
-else:
-    if mostrar_detalle_correlacion:
-        with st.expander("Ver matriz de correlación en tabla"):
-            st.dataframe(corr.round(4), width="stretch")
-
-        st.info(
-            """
-            En términos de media-varianza, la matriz de correlación es fundamental porque determina cuánto riesgo
-            conjunto puede reducirse mediante diversificación. Correlaciones menores tienden a ampliar el espacio
-            de portafolios eficientes.
-            """
-        )
 
 # ==============================
 # Frontera eficiente
@@ -524,29 +701,20 @@ section_intro(
     "El gráfico resume el espacio de portafolios posibles y destaca la frontera eficiente junto con las soluciones óptimas.",
 )
 
-st.plotly_chart(plot_frontier(sim_df, frontier_df, min_var, max_sharpe), width="stretch")
+frontier_fig = prepare_frontier_figure(sim_df, frontier_df, min_var, max_sharpe, manual_portfolio)
+st.plotly_chart(frontier_fig, width="stretch")
 
-if modo == "General":
-    st.info(
+with st.expander("Interpretación: frontera eficiente"):
+    st.write(
         """
-        **Cómo leer este gráfico**
-
-        - Cada punto representa un portafolio posible.
-        - La frontera eficiente reúne las mejores combinaciones para cada nivel de riesgo.
-        - El portafolio de mínima varianza minimiza volatilidad.
-        - El portafolio de máximo Sharpe maximiza eficiencia entre retorno esperado y riesgo.
+        - Portafolios: la nube de puntos representa combinaciones simuladas de pesos entre los activos.
+        - Frontera eficiente: la línea reúne portafolios dominantes, es decir, los que ofrecen mayor retorno para un nivel de riesgo comparable.
+        - Mínima varianza: el marcador identifica el portafolio con menor volatilidad estimada.
+        - Máximo Sharpe: el marcador identifica el portafolio con mejor exceso de retorno por unidad de riesgo.
+        - Portafolio manual: si ingresas pesos válidos, aparece como un punto adicional para compararlo contra las soluciones del modelo.
+        - Escala de color: representa el ratio Sharpe de los portafolios simulados; tonos más intensos indican mayor eficiencia riesgo-retorno.
         """
     )
-else:
-    with st.expander("Ver interpretación técnica de la frontera eficiente"):
-        st.write(
-            """
-            La nube de portafolios representa combinaciones factibles generadas por simulación. La frontera eficiente
-            aproxima el conjunto de soluciones dominantes en el espacio media-varianza. El portafolio de mínima varianza
-            resuelve el problema de minimización del riesgo, mientras que el de máximo Sharpe maximiza la pendiente de
-            la línea de asignación de capital dada la tasa libre de riesgo.
-            """
-        )
 
 # ==============================
 # Pesos de portafolios óptimos
@@ -575,12 +743,27 @@ with col2:
         hide_index=True,
     )
 
-if mostrar_tablas:
-    with st.expander("Ver tablas completas de pesos y resultados"):
-        st.markdown("#### Portafolio de mínima varianza")
-        st.dataframe(min_var_df, width="stretch", hide_index=True)
-        st.markdown("#### Portafolio de máximo Sharpe")
-        st.dataframe(max_sharpe_df, width="stretch", hide_index=True)
+min_var_top = min_var_weights_df.head(2)
+max_sharpe_top = max_sharpe_weights_df.head(2)
+min_var_top_text = ", ".join(f"{row['Activo']} ({row['Participación']})" for _, row in min_var_top.iterrows())
+max_sharpe_top_text = ", ".join(f"{row['Activo']} ({row['Participación']})" for _, row in max_sharpe_top.iterrows())
+
+with st.expander("Interpretación: composición de portafolios"):
+    st.write(
+        f"""
+        - **Mínima varianza:** los mayores pesos están en {min_var_top_text}. Si uno o dos activos concentran gran parte del peso, la cartera gana estabilidad por esos activos pero reduce diversificación.
+        - **Máximo Sharpe:** los mayores pesos están en {max_sharpe_top_text}. Esta asignación prioriza eficiencia riesgo-retorno, por lo que puede concentrarse más en activos con mejor compensación histórica.
+        - Una composición más distribuida reduce dependencia de activos específicos; una más concentrada puede mejorar una métrica objetivo, pero aumenta sensibilidad a esos activos.
+        """
+    )
+
+with st.expander("Ver detalles técnicos (tablas completas)"):
+    st.markdown("#### Portafolio de mínima varianza")
+    st.dataframe(min_var_df, width="stretch", hide_index=True)
+    st.markdown("#### Portafolio de máximo Sharpe")
+    st.dataframe(max_sharpe_df, width="stretch", hide_index=True)
+    st.markdown("#### Matriz de correlación")
+    st.dataframe(corr.round(4), width="stretch")
 
 # ==============================
 # Optimización con retorno objetivo
@@ -638,6 +821,19 @@ if result is not None:
             hide_index=True,
         )
 
+    target_top = target_weights_df.head(2)
+    target_top_text = ", ".join(f"{row['Activo']} ({row['Participación']})" for _, row in target_top.iterrows())
+
+    with st.expander("Interpretación del portafolio con retorno objetivo"):
+        st.write(
+            f"""
+            - **Retorno esperado:** la solución alcanza {result['return']:.2%} frente al objetivo seleccionado de {target_return:.2%}.
+            - **Volatilidad:** el riesgo anualizado de esta cartera es {result['volatility']:.2%}; ese es el costo de riesgo asociado a la meta elegida.
+            - **Pesos:** los mayores pesos del portafolio objetivo están en {target_top_text}.
+            - Esta solución sirve para analizar una meta específica de rentabilidad; no reemplaza al portafolio de mínima varianza ni al de máximo Sharpe.
+            """
+        )
+
 else:
     st.warning("No se pudo encontrar solución para ese nivel de retorno.")
 
@@ -646,28 +842,27 @@ else:
 # ==============================
 st.markdown("### Interpretación")
 
-if modo == "General":
-    st.success(
-        """
-        **Lectura sencilla**
+st.success(
+    """
+    **Lectura sencilla**
 
-        - Este módulo muestra que no existe una única mejor cartera: todo depende del equilibrio entre retorno y riesgo.
-        - La frontera eficiente resume las combinaciones más convenientes.
-        - El portafolio de mínima varianza prioriza estabilidad.
-        - El portafolio de máximo Sharpe prioriza eficiencia.
-        - El portafolio con retorno objetivo adapta la solución a una meta concreta.
+    - La matriz de correlación muestra qué tan parecidos son los movimientos entre activos; relaciones bajas o negativas favorecen la diversificación.
+    - La frontera eficiente resume las combinaciones que logran una mejor relación entre retorno esperado y volatilidad.
+    - El portafolio de mínima varianza es la alternativa más defensiva porque prioriza reducir el riesgo estimado.
+    - El portafolio de máximo Sharpe busca la mejor compensación entre retorno adicional y riesgo asumido.
+    - El retorno objetivo agrega una meta concreta de rentabilidad y puede exigir aceptar más volatilidad para alcanzarla.
+    - La decisión final depende de si se prefiere estabilidad, eficiencia riesgo-retorno o cumplir una meta específica.
+    """
+)
+
+with st.expander("Ver interpretación técnica"):
+    st.write(
+        """
+        - Markowitz estima portafolios en el espacio media-varianza usando retornos esperados, volatilidades y covarianzas.
+        - La correlación entre activos determina cuánto riesgo conjunto puede reducirse mediante diversificación.
+        - La frontera eficiente aproxima el conjunto de portafolios no dominados frente a las combinaciones simuladas.
+        - El portafolio de mínima varianza minimiza la volatilidad total del portafolio bajo las restricciones disponibles.
+        - El portafolio de máximo Sharpe maximiza el exceso de retorno por unidad de riesgo usando la tasa libre de riesgo.
+        - La optimización con retorno objetivo impone una restricción adicional de rentabilidad; si la meta es exigente, el modelo puede requerir una asignación más riesgosa.
         """
     )
-else:
-    if mostrar_interpretacion_tecnica:
-        st.info(
-            """
-            **Interpretación técnica**
-
-            - El enfoque de Markowitz modela el problema de asignación óptima en términos de media y varianza.
-            - La frontera eficiente representa el conjunto de portafolios no dominados.
-            - El portafolio de mínima varianza minimiza el riesgo total sujeto a las restricciones del problema.
-            - El portafolio de máximo Sharpe maximiza el exceso de retorno por unidad de riesgo.
-            - La solución con retorno objetivo impone una restricción adicional sobre la rentabilidad esperada, lo que puede incrementar la volatilidad necesaria para alcanzar dicha meta.
-            """
-        )
