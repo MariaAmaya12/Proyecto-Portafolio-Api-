@@ -169,7 +169,11 @@ def _build_close_matrix(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         return pd.DataFrame()
 
     close = pd.concat(series.values(), axis=1).sort_index()
+    close.index = pd.to_datetime(close.index, errors="coerce")
+    close = close[~close.index.isna()]
+    close = close.apply(pd.to_numeric, errors="coerce")
     close = close.dropna(how="all")
+    close = close.dropna(axis=1, how="all")
     return _calendar_fill_close(close)
 
 
@@ -177,7 +181,10 @@ def _calendar_fill_close(close: pd.DataFrame) -> pd.DataFrame:
     if close.empty:
         return close
 
-    raw_close = close.sort_index()
+    if not isinstance(close.index, pd.DatetimeIndex):
+        return pd.DataFrame()
+
+    raw_close = close.apply(pd.to_numeric, errors="coerce").dropna(axis=1, how="all").sort_index()
     first_valid_dates = [
         raw_close[ticker].first_valid_index()
         for ticker in raw_close.columns
@@ -219,8 +226,12 @@ def _build_returns_matrix(close: pd.DataFrame) -> pd.DataFrame:
     if close.empty:
         return pd.DataFrame()
 
-    aligned = close.sort_index()
+    if not isinstance(close.index, pd.DatetimeIndex):
+        return pd.DataFrame()
+
+    aligned = close.apply(pd.to_numeric, errors="coerce").dropna(axis=1, how="all").sort_index()
     returns = aligned.pct_change(fill_method=None).dropna(how="all")
+    returns = returns.apply(pd.to_numeric, errors="coerce").dropna(axis=1, how="all")
     diagnostics = dict(close.attrs.get("calendar_diagnostics", {}))
     diagnostics.update(
         {

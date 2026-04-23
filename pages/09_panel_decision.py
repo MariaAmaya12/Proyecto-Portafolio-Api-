@@ -6,13 +6,14 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
-from src.download import data_error_message, load_market_bundle, download_single_ticker
-from src.preprocess import equal_weight_vector, equal_weight_portfolio
-from src.risk_metrics import risk_comparison_table, validar_serie_para_garch
+from src.api.backend_client import BackendAPIError, friendly_error_message
+from src.download import data_error_message
+from src.risk_metrics import validar_serie_para_garch
 from src.garch_models import fit_garch_models
 from src.benchmark import benchmark_summary
-from src.indicators import compute_all_indicators
-from src.signals import evaluate_signals
+from src.services.decision_engine import DecisionEngine
+from src.services.market_data_client import MarketDataClient
+from src.services.risk_analyzer import RiskAnalyzer
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
@@ -337,7 +338,7 @@ def _signal_bucket(recommendation: str) -> str:
     return "neutral"
 
 
-def _build_signal_summary(start_date, end_date) -> dict:
+def _build_signal_summary(ohlcv_by_ticker: dict[str, pd.DataFrame]) -> dict:
     favorables = 0
     neutrales = 0
     desfavorables = 0
@@ -345,7 +346,7 @@ def _build_signal_summary(start_date, end_date) -> dict:
     for asset_name, meta in ASSETS.items():
         ticker = meta["ticker"]
         try:
-            df = download_single_ticker(ticker=ticker, start=str(start_date), end=str(end_date))
+            df = ohlcv_by_ticker.get(ticker, pd.DataFrame())
             if df.empty:
                 continue
 
@@ -530,26 +531,46 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
 # ==============================
 # Datos base
 # ==============================
-tickers = [meta["ticker"] for meta in ASSETS.values()]
-bundle = load_market_bundle(tickers=tickers, start=str(start_date), end=str(end_date))
-returns = bundle["returns"].replace([np.inf, -np.inf], np.nan).dropna()
+asset_tickers = [meta["ticker"] for meta in ASSETS.values()]
+benchmark_ticker = "^GSPC"
+tickers = asset_tickers + [benchmark_ticker]
+market_client = MarketDataClient()
+try:
+    bundle = market_client.fetch_bundle(tickers=tickers, start=str(start_date), end=str(end_date))
+except BackendAPIError as exc:
+    st.error(friendly_error_message(exc, "No fue posible obtener datos de mercado desde el backend."))
+    if exc.technical_detail:
+        st.caption(exc.technical_detail)
+    st.stop()
+
+missing_tickers = market_client.missing_tickers(bundle)
+if missing_tickers:
+    st.warning(
+        "Sin datos para estos tickers en el rango seleccionado; se excluyen del panel: "
+        + ", ".join(missing_tickers)
+    )
+
+risk_analyzer = RiskAnalyzer()
+decision_engine = DecisionEngine()
+returns_all = bundle["returns"].replace([np.inf, -np.inf], np.nan)
+valid_asset_tickers = [ticker for ticker in asset_tickers if ticker in returns_all.columns]
+returns = risk_analyzer.clean_returns(returns_all[valid_asset_tickers])
 
 if returns.empty or len(returns) < 30:
     st.error(data_error_message("No hay suficientes datos para construir el panel de decisión."))
     st.stop()
 
-weights = equal_weight_vector(returns.shape[1])
-portfolio_returns = equal_weight_portfolio(returns)
+portfolio_returns, weights = risk_analyzer.portfolio_returns(returns)
 rf_annual = _get_rf_annual()
 
 # Riesgo extremo
-risk_table = risk_comparison_table(
+risk_table = risk_analyzer.compute_var_tables(
     portfolio_returns=portfolio_returns,
     asset_returns_df=returns,
     weights=weights,
-    alpha=alpha,
+    confidence_levels=[alpha],
     n_sim=n_sim,
-)
+).get(alpha, pd.DataFrame())
 
 var_hist = np.nan
 cvar_hist = np.nan
@@ -580,29 +601,14 @@ summary_df = pd.DataFrame()
 extras_df = pd.DataFrame()
 max_dd = np.nan
 
-try:
-    bench_df = download_single_ticker("^GSPC", start=str(start_date), end=str(end_date))
-
-    if not bench_df.empty:
-        if "Adj Close" in bench_df.columns:
-            benchmark_prices = bench_df["Adj Close"]
-        elif "Close" in bench_df.columns:
-            benchmark_prices = bench_df["Close"]
-        else:
-            benchmark_prices = pd.Series(dtype=float)
-
-        benchmark_prices = pd.to_numeric(benchmark_prices, errors="coerce").dropna()
-        benchmark_returns = benchmark_prices.pct_change().dropna()
-
-        if not benchmark_returns.empty:
-            summary_df, extras_df, _, _ = benchmark_summary(
-                portfolio_returns=portfolio_returns,
-                benchmark_returns=benchmark_returns,
-                rf_annual=rf_annual,
-            )
-except Exception:
-    summary_df = pd.DataFrame()
-    extras_df = pd.DataFrame()
+if benchmark_ticker in returns_all.columns:
+    benchmark_returns = pd.to_numeric(returns_all[benchmark_ticker], errors="coerce").dropna()
+    if not benchmark_returns.empty:
+        summary_df, extras_df, _, _ = benchmark_summary(
+            portfolio_returns=portfolio_returns,
+            benchmark_returns=benchmark_returns,
+            rf_annual=rf_annual,
+        )
 
 if not summary_df.empty:
     try:
@@ -611,12 +617,12 @@ if not summary_df.empty:
         max_dd = np.nan
 
 # Señales
-signal_summary = _build_signal_summary(start_date, end_date)
+signal_summary = decision_engine.build_signal_summary(bundle.get("ohlcv", {}))
 
 # Clasificaciones
-risk_view = _classify_risk(var_hist, persistencia, max_dd)
-bench_view = _classify_benchmark(summary_df, extras_df)
-decision = _final_decision(risk_view["score"], signal_summary["score"], bench_view["score"])
+risk_view = decision_engine.classify_risk(var_hist, persistencia, max_dd)
+bench_view = decision_engine.classify_benchmark(summary_df, extras_df)
+decision = decision_engine.final_decision(risk_view["score"], signal_summary["score"], bench_view["score"])
 
 
 # ==============================

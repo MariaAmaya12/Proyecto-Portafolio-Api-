@@ -4,18 +4,14 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
-from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, TRADING_DAYS, ensure_project_dirs
-from src.download import data_error_message, load_market_bundle
-from src.markowitz import (
-    simulate_portfolios,
-    efficient_frontier,
-    minimum_variance_portfolio,
-    maximum_sharpe_portfolio,
-    weights_table,
-)
+from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
+from src.api.backend_client import BackendAPIError, friendly_error_message
+from src.download import data_error_message
 from src.plots import plot_correlation_heatmap, plot_frontier
 from src.api.macro import macro_snapshot
 from src.portfolio_optimization import optimize_target_return
+from src.services.market_data_client import MarketDataClient
+from src.services.portfolio_optimizer import PortfolioOptimizer
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
@@ -221,22 +217,6 @@ def safe_get_first(obj, key):
     return None
 
 
-def format_weights_df(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    cols = {c.lower(): c for c in out.columns}
-
-    activo_col = cols.get("activo", list(out.columns)[0])
-    peso_col = cols.get("peso", list(out.columns)[1])
-
-    out = out[[activo_col, peso_col]].copy()
-    out.columns = ["Activo", "Peso"]
-    out["Peso"] = pd.to_numeric(out["Peso"], errors="coerce")
-    out["Participación"] = out["Peso"].map(lambda x: f"{x:.2%}" if pd.notna(x) else "N/D")
-    out["Peso"] = out["Peso"].round(4)
-    out = out.sort_values("Peso", ascending=False).reset_index(drop=True)
-    return out
-
-
 class ModuleParams(BaseModel):
     n_portfolios: int = Field(ge=10000)
     target_return: float = Field(ge=0.03, le=0.20)
@@ -268,22 +248,6 @@ class ManualPortfolioInput(BaseModel):
 def show_validation_error(title: str, exc: ValidationError):
     details = "; ".join(error["msg"] for error in exc.errors())
     st.error(f"{title}: {details}.")
-
-
-def calculate_manual_portfolio(returns_df: pd.DataFrame, weights: np.ndarray, rf_annual: float) -> dict:
-    mean_returns = returns_df.mean().values * TRADING_DAYS
-    cov_matrix = returns_df.cov().values * TRADING_DAYS
-
-    port_return = float(weights @ mean_returns)
-    port_vol = float(np.sqrt(weights.T @ cov_matrix @ weights))
-    sharpe = np.nan if port_vol <= 0 else float((port_return - rf_annual) / port_vol)
-
-    return {
-        "return": port_return,
-        "volatility": port_vol,
-        "sharpe": sharpe,
-        "weights": weights,
-    }
 
 
 def prepare_frontier_figure(sim_df, frontier_df, min_var, max_sharpe, manual_portfolio=None):
@@ -431,13 +395,24 @@ evaluar_manual = params.evaluate_manual
 # Carga de datos
 # ==============================
 tickers = [meta["ticker"] for meta in ASSETS.values()]
-bundle = load_market_bundle(tickers=tickers, start=str(start_date), end=str(end_date))
+market_client = MarketDataClient()
+try:
+    bundle = market_client.fetch_bundle(tickers=tickers, start=str(start_date), end=str(end_date))
+except BackendAPIError as exc:
+    st.error(friendly_error_message(exc, "No fue posible obtener datos de mercado desde el backend."))
+    if exc.technical_detail:
+        st.caption(exc.technical_detail)
+    st.stop()
 
-returns = (
-    bundle["returns"]
-    .replace([np.inf, -np.inf], np.nan)
-    .dropna(how="any")
-)
+missing_tickers = market_client.missing_tickers(bundle)
+if missing_tickers:
+    st.warning(
+        "Sin datos para estos tickers en el rango seleccionado; se excluyen de la optimización: "
+        + ", ".join(missing_tickers)
+    )
+
+optimizer = PortfolioOptimizer()
+returns = optimizer.prepare_returns(bundle["returns"])
 
 if returns.empty or returns.shape[0] < 2 or returns.shape[1] < 2:
     st.error(data_error_message("No hay suficientes datos de retornos alineados para ejecutar Markowitz."))
@@ -459,7 +434,7 @@ manual_weights_df = None
 
 if evaluar_manual:
     with st.expander("Portafolio manual (opcional)", expanded=True):
-        st.caption("Ingresa pesos en formato decimal. Ejemplo: 0.25 equivale a 25%. La participación se deriva automáticamente.")
+        st.caption("Ingresa pesos en formato decimal. Ejemplo: 0.25 equivale a 25%. La Participación se deriva automáticamente.")
 
         default_weight = 1 / len(returns.columns)
         manual_weights = []
@@ -490,7 +465,7 @@ if evaluar_manual:
 
         st.success(f"Suma de pesos: {manual_weight_sum:.6f} - OK")
         manual_weights = np.array(manual_input.weights, dtype=float)
-        manual_portfolio = calculate_manual_portfolio(returns, manual_weights, rf_annual)
+        manual_portfolio = optimizer.manual_portfolio(returns, manual_weights, rf_annual)
         manual_weights_df = pd.DataFrame(
             {
                 "Activo": returns.columns,
@@ -515,7 +490,7 @@ if evaluar_manual:
 # ==============================
 # Simulación y soluciones óptimas
 # ==============================
-sim_df = simulate_portfolios(returns, rf_annual=rf_annual, n_portfolios=n_portfolios)
+sim_df = optimizer.simulate(returns, rf_annual=rf_annual, n_portfolios=n_portfolios)
 
 if sim_df.empty:
     st.error("La simulación de portafolios no generó resultados válidos.")
@@ -526,9 +501,8 @@ if sim_df.empty:
     })
     st.stop()
 
-frontier_df = efficient_frontier(sim_df)
-min_var = minimum_variance_portfolio(sim_df)
-max_sharpe = maximum_sharpe_portfolio(sim_df)
+frontier_df = optimizer.efficient_frontier(sim_df)
+min_var, max_sharpe = optimizer.optimal_portfolios(sim_df)
 
 if min_var is None or max_sharpe is None:
     st.error("No fue posible identificar los portafolios óptimos.")
@@ -541,8 +515,8 @@ if min_var_df.empty or max_sharpe_df.empty:
     st.error("No fue posible identificar los portafolios óptimos.")
     st.stop()
 
-min_var_weights_df = format_weights_df(weights_table(min_var))
-max_sharpe_weights_df = format_weights_df(weights_table(max_sharpe))
+min_var_weights_df = optimizer.weights_frame(min_var).rename(columns={"Participacion": "Participación"})
+max_sharpe_weights_df = optimizer.weights_frame(max_sharpe).rename(columns={"Participacion": "Participación"})
 
 # ==============================
 # Resumen
@@ -722,7 +696,7 @@ with st.expander("Interpretación: frontera eficiente"):
 st.markdown("### Composición de portafolios óptimos")
 section_intro(
     "Pesos recomendados",
-    "Estas tablas muestran cómo se distribuye la participación de cada activo en las soluciones óptimas principales.",
+    "Estas tablas muestran cómo se distribuye la Participación de cada activo en las soluciones óptimas principales.",
 )
 
 col1, col2 = st.columns(2)
@@ -866,3 +840,4 @@ with st.expander("Ver interpretación técnica"):
         - La optimización con retorno objetivo impone una restricción adicional de rentabilidad; si la meta es exigente, el modelo puede requerir una asignación más riesgosa.
         """
     )
+

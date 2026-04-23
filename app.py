@@ -10,9 +10,14 @@ from src.config import (
     GLOBAL_BENCHMARK,
     ensure_project_dirs,
 )
-from src.api.backend_client import backend_base_url, last_backend_call, ping_backend_health
+from src.api.backend_client import (
+    backend_base_url,
+    fetch_market_bundle_from_backend,
+    last_backend_call,
+    ping_backend_health,
+)
 from src.date_utils import yfinance_exclusive_end
-from src.download import data_error_message, load_market_bundle
+from src.download import data_error_message
 from src.preprocess import (
     equal_weight_portfolio,
     annualize_return,
@@ -368,7 +373,10 @@ render_sidebar_navigation()
 # ---------------------------------------------------------
 @st.cache_data(show_spinner=False, ttl=3600)
 def get_market_data(tickers, start, end):
-    return load_market_bundle(tickers=tickers, start=start, end=end)
+    """Obtiene el bundle de mercado exclusivamente desde el backend FastAPI.
+    No debe usarse el flujo directo de yfinance para el bundle principal del dashboard.
+    """
+    return fetch_market_bundle_from_backend(tickers=tickers, start=start, end=end)
 
 
 def is_market_bundle_empty(market_data) -> bool:

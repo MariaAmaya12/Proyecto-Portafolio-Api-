@@ -9,11 +9,13 @@ from src.config import (
     DEFAULT_END_DATE,
     ensure_project_dirs,
 )
-from src.download import data_error_message, load_market_bundle
+from src.api.backend_client import BackendAPIError, friendly_error_message
+from src.download import data_error_message
 from src.preprocess import equal_weight_portfolio
 from src.api.macro import macro_snapshot
 from src.benchmark import benchmark_summary
 from src.plots import plot_benchmark_base100
+from src.services.market_data_client import MarketDataClient
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
@@ -288,7 +290,22 @@ st.caption(f"Periodo analizado: {start_date} a {end_date}")
 # Datos
 # ==============================
 tickers = [meta["ticker"] for meta in ASSETS.values()] + [GLOBAL_BENCHMARK]
-bundle = load_market_bundle(tickers=tickers, start=str(start_date), end=str(end_date))
+market_client = MarketDataClient()
+try:
+    bundle = market_client.fetch_bundle(tickers=tickers, start=str(start_date), end=str(end_date))
+except BackendAPIError as exc:
+    st.error(friendly_error_message(exc, "No fue posible obtener datos de mercado desde el backend."))
+    if exc.technical_detail:
+        st.caption(exc.technical_detail)
+    st.stop()
+
+missing_tickers = market_client.missing_tickers(bundle)
+if missing_tickers:
+    st.warning(
+        "Sin datos para estos tickers en el rango seleccionado; se excluyen del analisis: "
+        + ", ".join(missing_tickers)
+    )
+
 returns = bundle["returns"].dropna()
 
 if returns.empty or GLOBAL_BENCHMARK not in returns.columns:

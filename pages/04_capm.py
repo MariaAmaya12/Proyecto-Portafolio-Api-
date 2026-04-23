@@ -20,11 +20,12 @@ from src.config import (
     get_local_benchmark,
     ensure_project_dirs,
 )
-from src.download import data_error_debug, download_single_ticker, load_market_bundle
 from src.returns_analysis import compute_return_series
-from src.capm import compute_beta_and_capm
 from src.api.macro import macro_snapshot
+from src.api.backend_client import BackendAPIError, friendly_error_message
 from src.plots import plot_scatter_regression
+from src.services.capm_analyzer import CAPMAnalyzer
+from src.services.market_data_client import MarketDataClient
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
@@ -176,22 +177,14 @@ def infer_ticker_type(ticker_value):
     return "activo/accion"
 
 
-def get_price_series(df: pd.DataFrame) -> pd.Series:
-    return df["Adj Close"] if "Adj Close" in df.columns else df["Close"]
-
-
-def returns_from_ohlcv(df: pd.DataFrame) -> pd.Series:
-    return compute_return_series(get_price_series(df))["simple_return"]
-
-
 @st.cache_data(show_spinner=False, ttl=3600)
-def download_benchmark_cached(bench_ticker: str, start: str, end: str) -> pd.DataFrame:
-    return download_single_ticker(ticker=bench_ticker, start=start, end=end)
+def fetch_capm_bundle_cached(tickers: tuple[str, ...], start: str, end: str) -> dict:
+    return MarketDataClient().fetch_bundle(tickers=list(tickers), start=start, end=end)
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def load_capm_close_matrix(tickers: tuple[str, ...], start: str, end: str) -> pd.DataFrame:
-    bundle = load_market_bundle(tickers=list(tickers), start=start, end=end)
+    bundle = fetch_capm_bundle_cached(tickers=tickers, start=start, end=end)
     close = bundle.get("close", pd.DataFrame())
     if close is None:
         return pd.DataFrame()
@@ -213,41 +206,29 @@ def returns_from_close_cached(close_series: pd.Series) -> pd.Series:
     return returns_from_close(close_series)
 
 
-@st.cache_data(show_spinner=False, ttl=3600)
-def benchmark_returns_cached(bench_ticker: str, start: str, end: str) -> pd.Series:
-    bench_df = download_benchmark_cached(bench_ticker, start, end)
-    if bench_df.empty:
-        return pd.Series(dtype=float)
-    return returns_from_ohlcv(bench_df)
-
-
 def fallback_asset_returns(asset_label: str, asset_ticker: str) -> pd.Series:
-    st.warning(f"fallback Yahoo: no se encontró {asset_ticker} en la matriz de cierres del bundle.")
-    asset_data = download_single_ticker(ticker=asset_ticker, start=str(start_date), end=str(end_date))
-    if asset_data.empty:
-        st.error("No se pudieron descargar datos del activo.")
-        st.caption("Diagnostico de descarga CAPM")
-        st.code(
-            "\n".join(
-                [
-                    f"Activo seleccionado: {asset_label}",
-                    f"Ticker activo: {asset_ticker}",
-                    f"Rango: {start_date} a {end_date}",
-                    f"Filas activo descargadas: {len(asset_data)}",
-                    f"Columnas activo: {list(asset_data.columns)}",
-                    f"Detalle tecnico: {data_error_debug('No hay excepcion tecnica registrada.')}",
-                ]
-            )
-        )
+    st.warning(f"No se encontró {asset_ticker} en la matriz inicial; se consulta nuevamente al backend.")
+    try:
+        bundle = fetch_capm_bundle_cached(tickers=(asset_ticker,), start=str(start_date), end=str(end_date))
+    except BackendAPIError as exc:
+        st.error(friendly_error_message(exc, "No se pudieron obtener datos del activo desde el backend."))
+        if exc.technical_detail:
+            st.caption(exc.technical_detail)
         st.stop()
-    return returns_from_ohlcv(asset_data)
+
+    returns = bundle.get("returns", pd.DataFrame())
+    if returns.empty or asset_ticker not in returns.columns:
+        st.error("El backend no devolvió retornos válidos para el activo seleccionado.")
+        st.caption(f"Activo seleccionado: {asset_label} | Ticker: {asset_ticker}")
+        st.stop()
+    return pd.to_numeric(returns[asset_ticker], errors="coerce").dropna()
 
 
-def stop_if_benchmark_empty(bench_df: pd.DataFrame, bench_ticker: str, selected_label: str) -> None:
-    if not bench_df.empty:
+def stop_if_benchmark_empty(bench_returns: pd.Series, bench_ticker: str, selected_label: str) -> None:
+    if not bench_returns.empty:
         return
-    st.error("No hay datos del benchmark; intenta recargar o cambiar horizonte.")
-    st.caption("Diagnostico de descarga CAPM")
+    st.error("No hay datos del benchmark desde el backend; intenta recargar o cambiar horizonte.")
+    st.caption("Diagnóstico backend CAPM")
     st.code(
         "\n".join(
             [
@@ -255,9 +236,7 @@ def stop_if_benchmark_empty(bench_df: pd.DataFrame, bench_ticker: str, selected_
                 f"Benchmark usado: {bench_ticker}",
                 f"Tipo benchmark inferido: {infer_ticker_type(bench_ticker)}",
                 f"Rango: {start_date} a {end_date}",
-                f"Filas benchmark descargadas: {len(bench_df)}",
-                f"Columnas benchmark: {list(bench_df.columns)}",
-                f"Detalle tecnico: {data_error_debug('No hay excepcion tecnica registrada.')}",
+                f"Retornos benchmark disponibles: {len(bench_returns)}",
             ]
         )
     )
@@ -284,7 +263,7 @@ def build_portfolio_returns(
 
     if not returns:
         st.error("No se pudieron construir los retornos del portafolio equiponderado.")
-        st.caption("Diagnostico de descarga CAPM")
+        st.caption("Diagnóstico de descarga CAPM")
         st.code(
             "\n".join(
                 [
@@ -320,19 +299,18 @@ def build_portfolio_returns(
 
 
 def build_asset_betas_table(
-    rf_annual_value: float,
-    close_matrix: pd.DataFrame,
+    analyzer: CAPMAnalyzer,
 ) -> tuple[pd.DataFrame, list[str]]:
     rows = []
     notes = []
-    global_returns = benchmark_returns_cached(GLOBAL_BENCHMARK, str(start_date), str(end_date))
+    global_returns = analyzer.get_benchmark_returns(GLOBAL_BENCHMARK)
     global_benchmark_failed = global_returns.empty
 
     for name in ASSETS.keys():
         asset_ticker = get_ticker(name)
         bench_ticker = get_local_benchmark(name)
-        close_series = close_series_from_matrix(close_matrix, asset_ticker)
-        local_returns = benchmark_returns_cached(bench_ticker, str(start_date), str(end_date))
+        asset_returns = analyzer.get_asset_returns(asset_ticker)
+        local_returns = analyzer.get_benchmark_returns(bench_ticker)
 
         row = {
             "Activo": name,
@@ -353,17 +331,12 @@ def build_asset_betas_table(
             "p-value beta (ACWI)": "N/D",
         }
 
-        if close_series.empty:
+        if asset_returns.empty:
             notes.append(f"{name}: sin serie de cierre para {asset_ticker} en la matriz del bundle.")
         elif local_returns.empty:
             notes.append(f"{name}: sin datos del benchmark {bench_ticker}.")
         else:
-            asset_returns = returns_from_close_cached(close_series)
-            local_result = compute_beta_and_capm(
-                asset_returns,
-                local_returns,
-                rf_annual=rf_annual_value,
-            )
+            local_result = analyzer.compute_for_asset(asset_ticker, bench_ticker)
             if local_result:
                 row.update(
                     {
@@ -379,11 +352,7 @@ def build_asset_betas_table(
                 notes.append(f"{name}: no hubo suficientes retornos alineados para CAPM local.")
 
             if not global_benchmark_failed:
-                global_result = compute_beta_and_capm(
-                    asset_returns,
-                    global_returns,
-                    rf_annual=rf_annual_value,
-                )
+                global_result = analyzer.compute_for_asset(asset_ticker, GLOBAL_BENCHMARK)
                 if global_result:
                     row.update(
                         {
@@ -622,7 +591,27 @@ portfolio_components = []
 portfolio_missing_components = []
 portfolio_weights = pd.Series(dtype=float)
 asset_tickers = tuple(get_ticker(name) for name in ASSETS.keys())
-close_matrix = load_capm_close_matrix(asset_tickers, str(start_date), str(end_date))
+benchmark_tickers = tuple(
+    dict.fromkeys(
+        [GLOBAL_BENCHMARK] + [get_local_benchmark(name) for name in ASSETS.keys()]
+    )
+)
+market_tickers = asset_tickers + benchmark_tickers
+try:
+    close_matrix = load_capm_close_matrix(market_tickers, str(start_date), str(end_date))
+except BackendAPIError as exc:
+    st.error(friendly_error_message(exc, "No fue posible obtener datos de mercado desde el backend."))
+    if exc.technical_detail:
+        st.caption(exc.technical_detail)
+    st.stop()
+
+missing_backend_tickers = [ticker for ticker in asset_tickers if ticker not in close_matrix.columns]
+if missing_backend_tickers:
+    st.warning(
+        "Sin datos para estos tickers en el rango seleccionado; se excluyen del análisis: "
+        + ", ".join(missing_backend_tickers)
+    )
+capm_analyzer = CAPMAnalyzer(close=close_matrix, rf_annual=rf_annual)
 
 if is_portfolio:
     ticker = "Portafolio equiponderado"
@@ -641,9 +630,9 @@ if is_portfolio:
         st.error("No se pudo resolver el benchmark global del portafolio.")
         st.stop()
 
-    bench_df = download_benchmark_cached(benchmark_ticker, str(start_date), str(end_date))
-    stop_if_benchmark_empty(bench_df, benchmark_ticker, asset_name)
-    bench_ret = benchmark_returns_cached(benchmark_ticker, str(start_date), str(end_date))
+    bench_ret = capm_analyzer.get_benchmark_returns(benchmark_ticker)
+    stop_if_benchmark_empty(bench_ret, benchmark_ticker, asset_name)
+    res = capm_analyzer.compute_for_portfolio(asset_ret, benchmark_ticker)
 else:
     ticker = get_ticker(asset_name)
     benchmark_ticker = get_local_benchmark(asset_name)
@@ -659,14 +648,14 @@ else:
         st.caption(f"Ticker activo: {ticker}")
         st.stop()
 
-    asset_close = close_series_from_matrix(close_matrix, ticker)
-    asset_ret = fallback_asset_returns(asset_name, ticker) if asset_close.empty else returns_from_close_cached(asset_close)
+    asset_ret = capm_analyzer.get_asset_returns(ticker)
+    if asset_ret.empty:
+        st.error("El backend no devolvió retornos válidos para el activo seleccionado.")
+        st.stop()
 
-    bench_df = download_benchmark_cached(benchmark_ticker, str(start_date), str(end_date))
-    stop_if_benchmark_empty(bench_df, benchmark_ticker, asset_name)
-    bench_ret = benchmark_returns_cached(benchmark_ticker, str(start_date), str(end_date))
-
-res = compute_beta_and_capm(asset_ret, bench_ret, rf_annual=rf_annual)
+    bench_ret = capm_analyzer.get_benchmark_returns(benchmark_ticker)
+    stop_if_benchmark_empty(bench_ret, benchmark_ticker, asset_name)
+    res = capm_analyzer.compute_for_asset(ticker, benchmark_ticker)
 
 if not res:
     st.warning("No hay suficientes datos alineados para CAPM.")
@@ -915,7 +904,7 @@ with st.expander("Ver tabla técnica completa"):
 
 if is_portfolio:
     st.markdown("### Betas por activo")
-    betas_df, betas_notes = build_asset_betas_table(rf_annual, close_matrix)
+    betas_df, betas_notes = build_asset_betas_table(capm_analyzer)
     betas_summary_df = betas_df[
         [
             "Activo",

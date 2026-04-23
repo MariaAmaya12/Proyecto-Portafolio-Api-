@@ -14,9 +14,11 @@ except ImportError:
     PYDANTIC_V2 = False
 
 from src.config import ASSETS, DEFAULT_END_DATE, ensure_project_dirs
-from src.download import data_error_message, load_market_bundle
-from src.preprocess import equal_weight_vector, equal_weight_portfolio
-from src.risk_metrics import risk_comparison_table, kupiec_test
+from src.api.backend_client import BackendAPIError, friendly_error_message
+from src.download import data_error_message
+from src.risk_metrics import kupiec_test
+from src.services.market_data_client import MarketDataClient
+from src.services.risk_analyzer import RiskAnalyzer
 from src.plots import plot_var_distribution
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
@@ -357,10 +359,26 @@ with st.sidebar:
 # Carga y preparación de datos
 # ==============================
 tickers = [meta["ticker"] for meta in ASSETS.values()]
-bundle = load_market_bundle(tickers=tickers, start=str(start_date), end=str(end_date))
-returns = bundle["returns"].replace([np.inf, -np.inf], np.nan).dropna()
+market_client = MarketDataClient()
+try:
+    bundle = market_client.fetch_bundle(tickers=tickers, start=str(start_date), end=str(end_date))
+except BackendAPIError as exc:
+    st.error(friendly_error_message(exc, "No fue posible obtener datos de mercado desde el backend."))
+    if exc.technical_detail:
+        st.caption(exc.technical_detail)
+    st.stop()
 
-if returns.empty or len(returns) < 30:
+missing_tickers = market_client.missing_tickers(bundle)
+if missing_tickers:
+    st.warning(
+        "Sin datos para estos tickers en el rango seleccionado; se excluyen del analisis: "
+        + ", ".join(missing_tickers)
+    )
+
+risk_analyzer = RiskAnalyzer()
+returns = risk_analyzer.clean_returns(bundle["returns"])
+
+if not risk_analyzer.validate_sample(returns, min_rows=30):
     st.error(data_error_message("No hay suficientes datos para calcular métricas de riesgo."))
     st.stop()
 
@@ -370,24 +388,17 @@ if manual_weights_enabled:
         [manual_weights[ticker_to_asset[ticker]] for ticker in returns.columns],
         dtype=float,
     )
-    portfolio_returns = returns.mul(weights, axis=1).sum(axis=1)
+    portfolio_returns, weights = risk_analyzer.portfolio_returns(returns, weights)
 else:
-    weights = equal_weight_vector(returns.shape[1])
-    portfolio_returns = equal_weight_portfolio(returns)
+    portfolio_returns, weights = risk_analyzer.portfolio_returns(returns)
 
-tables_by_alpha = {}
-for level in CONFIDENCE_LEVELS:
-    alpha_table = risk_comparison_table(
-        portfolio_returns=portfolio_returns,
-        asset_returns_df=returns,
-        weights=weights,
-        alpha=level,
-        n_sim=n_sim,
-    )
-    if not alpha_table.empty:
-        alpha_table = alpha_table.copy()
-        alpha_table.insert(0, "confianza", level)
-    tables_by_alpha[level] = alpha_table
+tables_by_alpha = risk_analyzer.compute_var_tables(
+    portfolio_returns=portfolio_returns,
+    asset_returns_df=returns,
+    weights=weights,
+    confidence_levels=CONFIDENCE_LEVELS,
+    n_sim=n_sim,
+)
 
 table = pd.concat(
     [alpha_table for alpha_table in tables_by_alpha.values() if not alpha_table.empty],

@@ -215,13 +215,92 @@ def ping_backend_health() -> dict[str, Any]:
         }
 
 
-def records_to_dataframe(records: list[dict[str, Any]]) -> pd.DataFrame:
+def records_to_dataframe(records: list[dict[str, Any]] | dict[str, Any]) -> pd.DataFrame:
     if not records:
         return pd.DataFrame()
 
+    if isinstance(records, dict) and {"columns", "data", "index"}.issubset(records):
+        df = pd.DataFrame(records["data"], columns=records["columns"])
+        df.index = pd.to_datetime(records["index"], errors="coerce")
+        df = df[~df.index.isna()].sort_index()
+        return df
+
     df = pd.DataFrame(records)
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df = df.dropna(subset=["Date"]).set_index("Date").sort_index()
+    date_col = next((col for col in ("Date", "date") if col in df.columns), None)
+    if date_col is None and "index" in df.columns and not pd.api.types.is_numeric_dtype(df["index"]):
+        parsed_index = pd.to_datetime(df["index"], errors="coerce")
+        if parsed_index.notna().all():
+            date_col = "index"
+
+    if date_col is not None:
+        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+        df = df.dropna(subset=[date_col]).set_index(date_col).sort_index()
+        df.index.name = "Date"
 
     return df
+
+
+def fetch_market_bundle_from_backend(tickers: list[str], start: str, end: str) -> dict[str, Any]:
+    payload = {
+        "tickers": tickers,
+        "start": start,
+        "end": end,
+    }
+    data = backend_post("/market/bundle", payload)
+
+    if not isinstance(data, dict):
+        raise BackendAPIError(
+            "La respuesta del backend no tiene el formato esperado.",
+            technical_detail=f"response_type={type(data)}",
+        )
+
+    if "ohlcv" not in data or "close" not in data or "returns" not in data:
+        raise BackendAPIError(
+            "La respuesta del backend no contiene los campos requeridos: ohlcv, close y returns.",
+            technical_detail=f"missing_keys={set(['ohlcv','close','returns']) - set(data.keys())}",
+        )
+
+    ohlcv_raw = data.get("ohlcv", {})
+    if not isinstance(ohlcv_raw, dict):
+        raise BackendAPIError(
+            "El backend devolvió 'ohlcv' con un formato inválido.",
+            technical_detail=f"ohlcv_type={type(ohlcv_raw)}",
+        )
+
+    ohlcv = {
+        ticker: records_to_dataframe(records)
+        for ticker, records in ohlcv_raw.items()
+    }
+    close = records_to_dataframe(data.get("close", []))
+    returns = records_to_dataframe(data.get("returns", []))
+
+    if close.empty or returns.empty:
+        raise BackendAPIError(
+            "El backend devolvió precios o retornos vacíos. Verifica el rango y los tickers seleccionados.",
+            technical_detail=(
+                f"close_empty={close.empty} returns_empty={returns.empty} "
+                f"tickers={tickers} start={start} end={end}"
+            ),
+        )
+
+    if isinstance(close.index, pd.RangeIndex) or isinstance(returns.index, pd.RangeIndex):
+        raise BackendAPIError(
+            "El backend devolvió datos con índice RangeIndex sin fechas válidas. "
+            "Verifica que `/market/bundle` entregue fechas reales en el índice.",
+        )
+
+    metadata = {
+        "missing_tickers": data.get("missing_tickers", []),
+        "last_available_date": data.get("last_available_date"),
+        "calendar_diagnostics": data.get("calendar_diagnostics", {}),
+    }
+
+    return {
+        "ohlcv": ohlcv,
+        "close": close,
+        "returns": returns,
+        "missing_tickers": metadata["missing_tickers"],
+        "last_available_date": metadata["last_available_date"],
+        "calendar_diagnostics": metadata["calendar_diagnostics"],
+        "metadata": metadata,
+    }

@@ -14,6 +14,12 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, RootModel, StringConstraints, field_validator, model_validator
 
+try:
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+except ImportError:
+    BaseSettings = BaseModel
+    SettingsConfigDict = None
+
 from src.capm import compute_beta_and_capm
 from src.config import DEFAULT_END_DATE, DEFAULT_START_DATE, GLOBAL_BENCHMARK, TICKER_TO_NAME, get_local_benchmark
 from src.indicators import compute_all_indicators
@@ -50,7 +56,10 @@ archivo persistente data/macro_cache.json.
 """
 
 
-class BackendSettings(BaseModel):
+class BackendSettings(BaseSettings):
+    if SettingsConfigDict is not None:
+        model_config = SettingsConfigDict(env_file=".env", env_prefix="BACKEND_", extra="ignore")
+
     api_title: str = "RiskLab Backend"
     macro_cache_ttl_seconds: int = MACRO_CACHE_TTL_SECONDS
     market_cache_ttl_seconds: int = MARKET_CACHE_TTL_SECONDS
@@ -603,7 +612,10 @@ def dataframe_to_json_records(df: pd.DataFrame) -> List[dict[str, JsonScalar]]:
     if df is None or df.empty:
         return []
 
-    frame = df.reset_index()
+    frame = df.copy()
+    if isinstance(frame.index, pd.DatetimeIndex):
+        frame.index.name = "Date"
+    frame = frame.reset_index()
     frame.columns = [str(col) for col in frame.columns]
 
     records: List[dict[str, JsonScalar]] = []
