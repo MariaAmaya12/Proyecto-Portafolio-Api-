@@ -340,8 +340,8 @@ st.write(
     f"""
     Este módulo ajusta modelos ARCH/GARCH sobre los rendimientos logarítmicos de **{asset_name} ({ticker})**
     para modelar heterocedasticidad condicional, comparar especificaciones y generar pronósticos de volatilidad.
-    La lectura integra validación de datos, selección del mejor modelo, persistencia, volatilidad de largo plazo
-    y diagnóstico del ajuste.
+    La lectura integra validación de datos, selección del mejor modelo, comparación de modelos,
+    diagnóstico estadístico y pronóstico de volatilidad.
     """
 )
 
@@ -396,22 +396,17 @@ if best_row.empty and not comparison_df.empty:
 
 best_aic = None
 best_bic = None
+best_loglik = None
 best_converged = "N/D"
-long_run_vol = None
 persistence = None
 
 if not best_row.empty:
     row = best_row.iloc[0]
+    best_loglik = pd.to_numeric(row.get("loglik"), errors="coerce")
     best_aic = pd.to_numeric(row.get("AIC"), errors="coerce")
     best_bic = pd.to_numeric(row.get("BIC"), errors="coerce")
-    best_converged = row.get("convergió", row.get("convergiÃ³", "N/D"))
+    best_converged = next((row[col] for col in row.index if str(col).startswith("convergi")), "N/D")
     persistence = pd.to_numeric(row.get("persistencia"), errors="coerce")
-
-    omega = pd.to_numeric(row.get("omega"), errors="coerce")
-    if pd.notna(omega) and pd.notna(persistence) and persistence < 1:
-        long_run_var = omega / (1 - persistence)
-        if long_run_var > 0:
-            long_run_vol = long_run_var ** 0.5
 
 forecast_last = None
 try:
@@ -458,7 +453,7 @@ else:
 st.markdown("### KPIs del mejor modelo")
 section_intro(
     "Resumen analítico del ajuste",
-    "Estos indicadores resumen la selección, persistencia y riesgo prospectivo del modelo ganador.",
+    "Estos indicadores resumen la selección del mejor modelo, su ajuste estadístico y el pronóstico de volatilidad.",
 )
 
 k1, k2, k3 = st.columns(3)
@@ -472,34 +467,32 @@ with k1:
 
 with k2:
     kpi_card(
-        "AIC",
-        fmt_num(best_aic),
-        caption="Criterio de información del modelo ganador",
+        "Log-Likelihood",
+        fmt_num(best_loglik),
+        caption="Log-verosimilitud del modelo ganador",
     )
 
 with k3:
     kpi_card(
-        "Persistencia",
-        fmt_num(persistence),
-        delta=persistence_label,
-        delta_type=persistence_delta,
-        caption="Suma alpha + beta cuando aplica",
+        "AIC",
+        fmt_num(best_aic),
+        caption="Criterio de información del modelo ganador",
     )
 
 k4, k5 = st.columns(2)
 
 with k4:
     kpi_card(
-        "Forecast final",
-        fmt_num(forecast_last),
-        caption="Último valor pronosticado de volatilidad",
+        "BIC",
+        fmt_num(best_bic),
+        caption="Criterio bayesiano del modelo ganador",
     )
 
 with k5:
     kpi_card(
-        "Vol. largo plazo",
-        fmt_num(long_run_vol),
-        caption="Nivel de reversión si el modelo es estacionario",
+        "Pronóstico final de volatilidad",
+        fmt_num(forecast_last),
+        caption="Último valor del pronóstico N-pasos",
     )
 
 with st.expander("¿Qué significa cada KPI?"):
@@ -507,13 +500,13 @@ with st.expander("¿Qué significa cada KPI?"):
         """
         **Mejor modelo:** especificación que tuvo mejor desempeño comparativo entre los modelos estimados.
 
+        **Log-Likelihood:** resume qué tan bien el modelo explica los datos observados.
+
         **AIC:** criterio de información; un valor más bajo suele indicar mejor equilibrio entre ajuste y complejidad.
 
-        **Persistencia:** mide qué tanto duran los choques de volatilidad. Si es alta, los episodios de incertidumbre pueden prolongarse.
+        **BIC:** criterio de información bayesiano; penaliza con mayor fuerza la complejidad del modelo.
 
-        **Forecast final:** volatilidad esperada al final del horizonte pronosticado.
-
-        **Volatilidad de largo plazo:** nivel al que tendería la volatilidad si el modelo es estacionario.
+        **Pronóstico final de volatilidad:** último valor estimado dentro del horizonte N-pasos.
         """
     )
 
@@ -543,7 +536,6 @@ if best_model is not None:
     st.info(" ".join(lectura))
 else:
     st.warning("No se generó una lectura automática del mejor modelo.")
-
 # ==============================
 # Comparación de modelos
 # ==============================
@@ -705,27 +697,21 @@ forecast_title = (
 )
 st.markdown(forecast_title)
 st.caption(
-    "El gráfico muestra un pronóstico de volatilidad a varios pasos hacia adelante. "
-    "La línea de volatilidad de largo plazo se incluye cuando el modelo seleccionado es estacionario."
+    "El gráfico muestra un pronóstico de volatilidad a varios pasos hacia adelante."
 )
 st.plotly_chart(
-    plot_forecast(
-        results["forecast"],
-        long_run_vol=long_run_vol,
-    ),
+    plot_forecast(results["forecast"]),
     width="stretch",
 )
 soft_note(
     "Lectura del pronóstico",
-    "Este forecast resume la volatilidad esperada para un horizonte futuro de varios pasos. "
-    "Si el modelo es estacionario, la trayectoria pronosticada tiende a acercarse a la volatilidad de largo plazo.",
+    "Este pronóstico de volatilidad resume la volatilidad esperada para un horizonte futuro de varios pasos.",
 )
 
 # ==============================
 # Conclusión
 # ==============================
 st.markdown("### Conclusión")
-
 if best_model is not None:
     conclusion_parts = [
         f"El modelo ganador fue **{best_model}** por criterio AIC.",
@@ -740,7 +726,7 @@ if best_model is not None:
 
     if forecast_last is not None:
         conclusion_parts.append(
-            f"El forecast final de **{fmt_num(forecast_last)}** resume la volatilidad esperada al cierre del horizonte."
+            f"El pronóstico final de volatilidad de **{fmt_num(forecast_last)}** resume la volatilidad esperada al cierre del horizonte."
         )
 
     conclusion_parts.append(
