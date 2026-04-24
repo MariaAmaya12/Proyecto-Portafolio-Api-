@@ -1,4 +1,5 @@
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -7,6 +8,7 @@ from src.date_utils import yfinance_exclusive_end
 from src.download import data_error_message, download_single_ticker
 from src.indicators import compute_all_indicators
 from src.signals import evaluate_signals
+from src.ui_components import render_explanation_expander, render_section, render_table
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
@@ -40,7 +42,7 @@ def inject_ui_css():
     st.markdown(
         """
         <style>
-        .section-box {
+        .section-intro-box {
             background: #ffffff;
             border: 1px solid rgba(15, 23, 42, 0.08);
             border-radius: 18px;
@@ -48,30 +50,18 @@ def inject_ui_css():
             box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
             margin-bottom: 0.8rem;
         }
-        .section-title {
+        .section-intro-title {
             font-size: 1rem;
             font-weight: 700;
             color: #0f172a;
             margin-bottom: 0.2rem;
         }
-        .section-subtitle {
+        .section-intro-subtitle {
             font-size: 0.86rem;
             color: #64748b;
             line-height: 1.45;
         }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def section_intro(title: str, subtitle: str):
-    st.markdown(
-        f"""
-        <div class="section-box">
-            <div class="section-title">{title}</div>
-            <div class="section-subtitle">{subtitle}</div>
-        </div>
         """,
         unsafe_allow_html=True,
     )
@@ -316,6 +306,187 @@ def diagnostic_column_summary(ind: pd.DataFrame) -> tuple[pd.DataFrame, list]:
     return pd.DataFrame(rows), existing_columns
 
 
+def build_historical_signal_points(ind: pd.DataFrame, thresholds: dict) -> pd.DataFrame:
+    if ind is None or ind.empty:
+        return pd.DataFrame(columns=["date", "signal", "side", "price"])
+
+    working = ind.copy()
+
+    def first_match(*aliases_groups: list[str]) -> str | None:
+        for aliases in aliases_groups:
+            matches = find_matching_columns(working.columns, aliases)
+            if matches:
+                return matches[0]
+        return None
+
+    price_col = first_match(
+        ["Close", "Adj Close", "close", "adj_close", "adj close"],
+    )
+    if price_col is None:
+        return pd.DataFrame(columns=["date", "signal", "side", "price"])
+
+    price = pd.to_numeric(working[price_col], errors="coerce")
+    signal_rows = []
+
+    def append_mask(mask: pd.Series, signal_name: str, side: str):
+        if mask is None:
+            return
+        valid_mask = mask.fillna(False)
+        if not valid_mask.any():
+            return
+        selected = working.loc[valid_mask].copy()
+        if selected.empty:
+            return
+        selected_price = pd.to_numeric(selected[price_col], errors="coerce")
+        selected = selected.assign(
+            date=selected.index,
+            signal=signal_name,
+            side=side,
+            price=selected_price,
+        )[["date", "signal", "side", "price"]]
+        selected = selected.dropna(subset=["price"])
+        if not selected.empty:
+            signal_rows.append(selected)
+
+    macd_col = first_match(["macd", "MACD"])
+    macd_signal_col = first_match(["macd_signal", "signal", "MACD_signal", "MACD Signal"])
+    if macd_col and macd_signal_col:
+        macd = pd.to_numeric(working[macd_col], errors="coerce")
+        macd_signal = pd.to_numeric(working[macd_signal_col], errors="coerce")
+        append_mask((macd > macd_signal) & (macd.shift(1) <= macd_signal.shift(1)), "MACD compra", "buy")
+        append_mask((macd < macd_signal) & (macd.shift(1) >= macd_signal.shift(1)), "MACD venta", "sell")
+
+    rsi_col = first_match(["rsi", "RSI", "RSI_14", "RSI(14)", "rsi_14"])
+    if rsi_col:
+        rsi = pd.to_numeric(working[rsi_col], errors="coerce")
+        append_mask(
+            (rsi <= thresholds["rsi_oversold"]) & (rsi.shift(1) > thresholds["rsi_oversold"]),
+            "RSI sobreventa",
+            "buy",
+        )
+        append_mask(
+            (rsi >= thresholds["rsi_overbought"]) & (rsi.shift(1) < thresholds["rsi_overbought"]),
+            "RSI sobrecompra",
+            "sell",
+        )
+
+    boll_upper_col = first_match(["BB_upper", "BB_up", "boll_upper", "bb_upper", "upper_band", "Bollinger Upper"])
+    boll_lower_col = first_match(["BB_lower", "BB_low", "boll_lower", "bb_lower", "lower_band", "Bollinger Lower"])
+    if boll_lower_col:
+        boll_lower = pd.to_numeric(working[boll_lower_col], errors="coerce")
+        append_mask(
+            (price <= boll_lower) & (price.shift(1) > boll_lower.shift(1)),
+            "Bollinger compra",
+            "buy",
+        )
+    if boll_upper_col:
+        boll_upper = pd.to_numeric(working[boll_upper_col], errors="coerce")
+        append_mask(
+            (price >= boll_upper) & (price.shift(1) < boll_upper.shift(1)),
+            "Bollinger venta",
+            "sell",
+        )
+
+    sma_50_col = first_match(["sma_50", "SMA_50", "ma_50", "MA_50"])
+    sma_200_col = first_match(["sma_200", "SMA_200", "ma_200", "MA_200"])
+    if sma_50_col and sma_200_col:
+        sma_50 = pd.to_numeric(working[sma_50_col], errors="coerce")
+        sma_200 = pd.to_numeric(working[sma_200_col], errors="coerce")
+        append_mask((sma_50 > sma_200) & (sma_50.shift(1) <= sma_200.shift(1)), "Golden cross", "buy")
+        append_mask((sma_50 < sma_200) & (sma_50.shift(1) >= sma_200.shift(1)), "Death cross", "sell")
+
+    stoch_k_col = first_match(["STOCH_K", "stoch_k", "Stoch_K", "%K", "stochastic_k"])
+    stoch_d_col = first_match(["STOCH_D", "stoch_d", "Stoch_D", "%D", "stochastic_d"])
+    if stoch_k_col and stoch_d_col:
+        stoch_k = pd.to_numeric(working[stoch_k_col], errors="coerce")
+        stoch_d = pd.to_numeric(working[stoch_d_col], errors="coerce")
+        append_mask(
+            (stoch_k > stoch_d)
+            & (stoch_k.shift(1) <= stoch_d.shift(1))
+            & (stoch_k <= thresholds["stoch_oversold"]),
+            "Estocástico compra",
+            "buy",
+        )
+        append_mask(
+            (stoch_k < stoch_d)
+            & (stoch_k.shift(1) >= stoch_d.shift(1))
+            & (stoch_k >= thresholds["stoch_overbought"]),
+            "Estocástico venta",
+            "sell",
+        )
+
+    if not signal_rows:
+        return pd.DataFrame(columns=["date", "signal", "side", "price"])
+
+    signal_points = pd.concat(signal_rows, ignore_index=True)
+    signal_points["date"] = pd.to_datetime(signal_points["date"], errors="coerce")
+    signal_points["price"] = pd.to_numeric(signal_points["price"], errors="coerce")
+    signal_points = signal_points.dropna(subset=["date", "price"]).sort_values(["date", "signal"]).reset_index(drop=True)
+    return signal_points
+
+
+def plot_asset_signals(ind: pd.DataFrame, asset_name: str, ticker: str, signal_points: pd.DataFrame):
+    price_matches = find_matching_columns(ind.columns, ["Close", "Adj Close", "close", "adj_close", "adj close"])
+    price_col = price_matches[0] if price_matches else None
+    if price_col is None:
+        fig = go.Figure()
+        fig.update_layout(title=f"Señales históricas - {asset_name}")
+        return fig
+
+    price_series = pd.to_numeric(ind[price_col], errors="coerce")
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=ind.index,
+            y=price_series,
+            mode="lines",
+            name=f"Precio ({ticker})",
+            line=dict(color="#1d4ed8", width=2),
+            hovertemplate="Fecha: %{x|%Y-%m-%d}<br>Precio: %{y:.2f}<extra></extra>",
+        )
+    )
+
+    if signal_points is not None and not signal_points.empty:
+        buy_points = signal_points.loc[signal_points["side"] == "buy"]
+        sell_points = signal_points.loc[signal_points["side"] == "sell"]
+
+        if not buy_points.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=buy_points["date"],
+                    y=buy_points["price"],
+                    mode="markers",
+                    name="Señales de compra",
+                    marker=dict(color="#16a34a", size=10, symbol="triangle-up"),
+                    customdata=buy_points["signal"],
+                    hovertemplate="Fecha: %{x|%Y-%m-%d}<br>Señal: %{customdata}<br>Precio: %{y:.2f}<extra></extra>",
+                )
+            )
+
+        if not sell_points.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=sell_points["date"],
+                    y=sell_points["price"],
+                    mode="markers",
+                    name="Señales de venta",
+                    marker=dict(color="#dc2626", size=10, symbol="triangle-down"),
+                    customdata=sell_points["signal"],
+                    hovertemplate="Fecha: %{x|%Y-%m-%d}<br>Señal: %{customdata}<br>Precio: %{y:.2f}<extra></extra>",
+                )
+            )
+
+    fig.update_layout(
+        title=f"Señales históricas - {asset_name}",
+        xaxis_title="Fecha",
+        yaxis_title="Precio",
+        hovermode="closest",
+        legend_title="Serie",
+        margin=dict(l=20, r=20, t=60, b=20),
+    )
+    return fig
+
+
 def render_diagnostic(
     asset_name: str,
     ticker: str,
@@ -350,7 +521,7 @@ def render_diagnostic(
 
         summary, key_columns = diagnostic_column_summary(ind)
         st.markdown("**Estado de columnas clave**")
-        st.dataframe(summary, width="stretch", hide_index=True)
+        render_table(summary, hide_index=True, width="stretch")
 
         missing_critical = summary.loc[
             summary["Columnas encontradas"].eq("NO EXISTE"),
@@ -361,7 +532,7 @@ def render_diagnostic(
 
         if key_columns:
             st.markdown("**Últimas 5 filas de columnas clave existentes**")
-            st.dataframe(ind[key_columns].tail(5), width="stretch")
+            render_table(ind[key_columns].tail(5), hide_index=True, width="stretch")
         else:
             st.warning("No se encontró ninguna columna clave esperada en el DataFrame de indicadores.")
 
@@ -369,7 +540,7 @@ def render_diagnostic(
             st.markdown("**Evaluación de señales**")
             signal_diag = pd.DataFrame(signal["diagnostics"])
             signal_diag["Señal"] = signal_diag["signal"].map(SIGNAL_LABELS).fillna(signal_diag["signal"])
-            st.dataframe(
+            render_table(
                 signal_diag[
                     [
                         "Señal",
@@ -380,13 +551,13 @@ def render_diagnostic(
                         "missing_columns",
                     ]
                 ],
-                width="stretch",
                 hide_index=True,
+                width="stretch",
             )
 
         if len(ind.columns) <= 20:
             st.markdown("**Últimas 5 filas completas**")
-            st.dataframe(ind.tail(5), width="stretch")
+            render_table(ind.tail(5), hide_index=True, width="stretch")
         else:
             st.caption(
                 f"Se omite ind.tail(5) completo porque el DataFrame tiene {len(ind.columns)} columnas."
@@ -501,20 +672,19 @@ with st.sidebar:
 # ==============================
 # Introducción
 # ==============================
-section_intro(
+render_section(
     "Cómo leer este módulo",
     "Cada activo se resume en una tarjeta con recomendación, semáforo técnico, score de compra/venta y señales activas más relevantes.",
 )
 
-st.info(
-    """
-    **Semáforo interpretativo**
-    - **Favorable**: predominan señales de entrada o fortaleza técnica.
-    - **Neutral / Precaución**: señales mixtas o sin ventaja clara.
-    - **Desfavorable**: predominan señales de venta, agotamiento o deterioro técnico.
-
-    Estas señales orientan la lectura táctica, pero no reemplazan el análisis de riesgo, benchmark ni contexto macro.
-    """
+render_explanation_expander(
+    "Cómo interpretar el semáforo técnico",
+    [
+        "Favorable: predominan señales de entrada o fortaleza técnica.",
+        "Neutral / Precaución: señales mixtas o sin ventaja clara.",
+        "Desfavorable: predominan señales de venta, agotamiento o deterioro técnico.",
+        "Estas señales son tácticas y deben complementarse con riesgo, CAPM, VaR/CVaR y benchmark.",
+    ],
 )
 
 
@@ -554,6 +724,8 @@ for asset_name, meta in ASSETS.items():
         {
             "asset_name": asset_name,
             "ticker": ticker,
+            "df": df,
+            "ind": ind,
             "recommendation": signal.get("recommendation", "Sin recomendación"),
             "semaforo_estado": semaforo["estado"],
             "semaforo_msg": semaforo["mensaje"],
@@ -568,6 +740,49 @@ for asset_name, meta in ASSETS.items():
 if not cards_data:
     st.warning(data_error_message("No fue posible construir señales para los activos en la ventana seleccionada."))
     st.stop()
+
+
+# ==============================
+# Gráfico de señales por activo
+# ==============================
+st.markdown("### Gráfico de señales por activo")
+render_section(
+    "Señales sobre el precio",
+    "El gráfico ubica señales históricas de compra y venta sobre la serie de precios del activo seleccionado.",
+)
+
+chart_asset_options = [item["asset_name"] for item in cards_data]
+selected_chart_asset = st.selectbox("Activo para gráfico", chart_asset_options)
+selected_chart_item = next(item for item in cards_data if item["asset_name"] == selected_chart_asset)
+
+signal_thresholds = {
+    "rsi_overbought": rsi_overbought,
+    "rsi_oversold": rsi_oversold,
+    "stoch_overbought": stoch_overbought,
+    "stoch_oversold": stoch_oversold,
+}
+signal_points = build_historical_signal_points(selected_chart_item["ind"], signal_thresholds)
+
+st.plotly_chart(
+    plot_asset_signals(
+        ind=selected_chart_item["ind"],
+        asset_name=selected_chart_item["asset_name"],
+        ticker=selected_chart_item["ticker"],
+        signal_points=signal_points,
+    ),
+    width="stretch",
+)
+
+render_explanation_expander(
+    "Cómo interpretar el gráfico de señales",
+    [
+        "Los marcadores de compra indican activación histórica de señales técnicas alcistas.",
+        "Los marcadores de venta indican activación histórica de señales técnicas bajistas.",
+        "Varias señales cercanas en el tiempo pueden indicar confirmación técnica.",
+        "Señales aisladas deben interpretarse con cautela.",
+        "El gráfico es táctico y debe complementarse con riesgo, CAPM, VaR/CVaR y benchmark.",
+    ],
+)
 
 
 # ==============================
@@ -594,10 +809,10 @@ for i in range(0, len(cards_data), 2):
             )
 
             with st.expander(f"Ver detalle de señales - {item['asset_name']}"):
-                st.dataframe(
+                render_table(
                     signal_table(item["flags"]),
-                    width="stretch",
                     hide_index=True,
+                    width="stretch",
                 )
 
 
