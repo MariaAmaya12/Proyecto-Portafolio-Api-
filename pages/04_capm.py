@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from pydantic import BaseModel, ValidationError
 
@@ -26,6 +25,7 @@ from src.api.backend_client import BackendAPIError, friendly_error_message
 from src.plots import plot_scatter_regression
 from src.services.capm_analyzer import CAPMAnalyzer
 from src.services.market_data_client import MarketDataClient
+from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
@@ -67,73 +67,6 @@ else:
         def validate_weights(cls, values):
             _validate_weights_dict(values.get("pesos") or {})
             return values
-
-
-# ==============================
-# Estilos UI
-# ==============================
-def inject_kpi_cards_css():
-    st.markdown(
-        """
-        <style>
-        .section-intro-box {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 16px 18px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-            margin-bottom: 0.75rem;
-        }
-
-        .section-intro-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.2rem;
-        }
-
-        .section-intro-subtitle {
-            font-size: 0.86rem;
-            color: #64748b;
-            line-height: 1.45;
-        }
-
-        .soft-explain-box {
-            background: #eff6ff;
-            border: 1px solid rgba(37, 99, 235, 0.16);
-            border-radius: 14px;
-            padding: 14px 16px;
-            margin: 0.65rem 0 0.9rem 0;
-        }
-
-        .soft-explain-title {
-            color: #0f172a;
-            font-size: 0.95rem;
-            font-weight: 750;
-            margin-bottom: 0.25rem;
-        }
-
-        .soft-explain-body {
-            color: #334155;
-            font-size: 0.88rem;
-            line-height: 1.5;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def section_intro(title: str, subtitle: str):
-    st.markdown(
-        f"""
-        <div class="section-intro-box">
-            <div class="section-intro-title">{title}</div>
-            <div class="section-intro-subtitle">{subtitle}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def soft_note(title: str, body: str):
@@ -375,119 +308,75 @@ def build_asset_betas_table(
     return pd.DataFrame(rows), notes
 
 
-def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
-    title = sanitize_text(title)
-    value = sanitize_text(value)
-    delta = sanitize_text(delta) if delta is not None else ""
-    caption = sanitize_text(caption)
+def build_asset_summary_table(betas_df: pd.DataFrame) -> pd.DataFrame:
+    return betas_df[
+        [
+            "Activo",
+            "Ticker",
+            "Benchmark usado (local)",
+            "Beta (local)",
+            "Retorno esperado (CAPM local)",
+            "Clasificación (local)",
+        ]
+    ].rename(
+        columns={
+            "Benchmark usado (local)": "Benchmark local",
+            "Beta (local)": "Beta local",
+            "Retorno esperado (CAPM local)": "Retorno CAPM local",
+            "Clasificación (local)": "Clasificación local",
+        }
+    )
 
-    delta_html = ""
-    if delta:
-        delta_html = f'<div class="kpi-delta {delta_type}">{delta}</div>'
 
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{
-                margin: 0;
-                padding: 0;
-                background: transparent;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }}
-
-            .kpi-card {{
-                background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
-                border: 1px solid rgba(37, 99, 235, 0.16);
-                border-radius: 14px;
-                padding: 16px 16px 14px 16px;
-                box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
-                min-height: 156px;
-                box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                gap: 0.55rem;
-                overflow: visible;
-            }}
-
-            .kpi-label {{
-                font-size: 0.82rem;
-                font-weight: 700;
-                color: #334155;
-                margin-bottom: 0.35rem;
-                letter-spacing: 0;
-                line-height: 1.25;
-            }}
-
-            .kpi-value {{
-                font-size: 1.55rem;
-                font-weight: 800;
-                color: #0f172a;
-                line-height: 1.12;
-                margin-bottom: 0.45rem;
-                overflow-wrap: anywhere;
-                word-break: normal;
-                white-space: normal;
-            }}
-
-            .kpi-delta {{
-                display: inline-block;
-                width: fit-content;
-                max-width: 100%;
-                font-size: 0.76rem;
-                font-weight: 700;
-                padding: 0.28rem 0.55rem;
-                border-radius: 999px;
-                margin-top: 0.10rem;
-                line-height: 1.2;
-                white-space: normal;
-            }}
-
-            .kpi-delta.pos {{
-                background-color: rgba(22, 163, 74, 0.10);
-                color: #15803d;
-            }}
-
-            .kpi-delta.neg {{
-                background-color: rgba(220, 38, 38, 0.10);
-                color: #b91c1c;
-            }}
-
-            .kpi-delta.neu {{
-                background-color: rgba(100, 116, 139, 0.10);
-                color: #475569;
-            }}
-
-            .kpi-caption {{
-                font-size: 0.76rem;
-                color: #475569;
-                margin-top: 0.45rem;
-                line-height: 1.38;
-                overflow-wrap: normal;
-                word-break: normal;
-                white-space: normal;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-label">{title}</div>
-                <div class="kpi-value">{value}</div>
-                {delta_html}
-            </div>
-            <div class="kpi-caption">{caption}</div>
-        </div>
-    </body>
-    </html>
+st.markdown(
     """
+    <style>
+    .section-intro-box {
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 18px;
+        padding: 16px 18px;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+        margin-bottom: 0.75rem;
+    }
 
-    components.html(html, height=178)
+    .section-intro-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 0.2rem;
+    }
 
+    .section-intro-subtitle {
+        font-size: 0.86rem;
+        color: #64748b;
+        line-height: 1.45;
+    }
 
-inject_kpi_cards_css()
+    .soft-explain-box {
+        background: #eff6ff;
+        border: 1px solid rgba(37, 99, 235, 0.16);
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin: 0.65rem 0 0.9rem 0;
+    }
+
+    .soft-explain-title {
+        color: #0f172a;
+        font-size: 0.95rem;
+        font-weight: 750;
+        margin-bottom: 0.25rem;
+    }
+
+    .soft-explain-body {
+        color: #334155;
+        font-size: 0.88rem;
+        line-height: 1.5;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 render_page_title(
     "Módulo 4 - CAPM y Beta",
@@ -743,20 +632,12 @@ else:
 # ==============================
 st.markdown("### Resumen del módulo")
 if is_portfolio:
-    st.write(
-        f"""
-        Este módulo estima la beta del **{asset_name}** frente al benchmark global **{benchmark_ticker}**,
-        evalúa la regresión CAPM y calcula el retorno esperado usando una tasa libre de riesgo tomada
-        automáticamente del módulo macro.
-        """
+    st.caption(
+        f"Beta del portafolio frente a {benchmark_ticker} y CAPM con tasa libre de riesgo tomada del módulo macro."
     )
 else:
-    st.write(
-        f"""
-        Este módulo estima la beta de **{asset_name} ({ticker})** frente a su benchmark local
-        **{benchmark_ticker}**, evalúa la regresión CAPM y calcula el retorno esperado usando una tasa
-        libre de riesgo tomada automáticamente del módulo macro.
-        """
+    st.caption(
+        f"Beta de {asset_name} ({ticker}) frente a {benchmark_ticker} y retorno CAPM con tasa libre de riesgo macro."
     )
 
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
@@ -784,9 +665,9 @@ if is_portfolio:
 # KPIs
 # ==============================
 st.markdown("### KPIs CAPM")
-section_intro(
+render_section(
     "Resumen ejecutivo del modelo",
-    "Aquí se condensan la sensibilidad al mercado, el ajuste del modelo y el retorno esperado estimado bajo CAPM.",
+    "Beta, ajuste estadístico y retorno esperado del elemento seleccionado.",
 )
 
 c1, c2, c3, c4 = st.columns(4)
@@ -827,19 +708,54 @@ with c4:
         caption="Rendimiento estimado bajo CAPM",
     )
 
+render_explanation_expander(
+    "Cómo interpretar los KPI CAPM",
+    [
+        "Beta: sensibilidad frente al benchmark y medida del riesgo sistemático.",
+        "Alpha diaria: rendimiento no explicado por el benchmark.",
+        "R²: proporción explicada por la regresión CAPM.",
+        "Retorno esperado anual: estimación CAPM usando la tasa libre de riesgo desde la API macro.",
+    ],
+)
+
 # ==============================
 # Clasificación
 # ==============================
 st.markdown(f"### {classification_title}")
 soft_note("Lectura rápida de la beta", class_msg)
 
+if is_portfolio:
+    betas_df, betas_notes = build_asset_betas_table(capm_analyzer)
+    betas_summary_df = build_asset_summary_table(betas_df)
+
+    # ==============================
+    # Tabla resumen por activo
+    # ==============================
+    st.markdown("### Tabla resumen por activo")
+    render_table(
+        betas_summary_df,
+        hide_index=True,
+        width="stretch",
+    )
+
+    with st.expander("Ver tabla técnica por activo", expanded=False):
+        render_table(
+            betas_df,
+            hide_index=True,
+            width="stretch",
+        )
+        if betas_notes:
+            st.caption("Notas técnicas por fallos de descarga o falta de datos alineados.")
+            for note in betas_notes:
+                st.caption(f"- {note}")
+
 # ==============================
 # Regresión CAPM
 # ==============================
 st.markdown("### Regresión CAPM")
-section_intro(
+render_section(
     "Relación activo-mercado",
-    f"El diagrama de dispersión muestra cómo responde el {entity_label} a los movimientos del benchmark y permite interpretar visualmente la beta.",
+    f"Dispersión de rendimientos del {entity_label} frente al benchmark con su línea de regresión.",
 )
 
 fig = plot_scatter_regression(
@@ -853,23 +769,15 @@ st.plotly_chart(fig, width="stretch")
 # ==============================
 # Cómo leer el gráfico
 # ==============================
-st.markdown("### Cómo leer el gráfico")
-st.info(
-    f"""
-    - Cada punto representa una observación del {entity_label} frente al benchmark.
-    - La línea resume la relación promedio entre ambos excesos de retorno.
-    - La pendiente de esa línea es la beta: una pendiente mayor implica mayor exposición al riesgo sistemático.
-    """
+render_explanation_expander(
+    "Cómo interpretar el gráfico CAPM",
+    [
+        f"Cada punto representa una observación del {entity_label} frente al benchmark.",
+        "La línea de regresión resume la relación promedio.",
+        "La pendiente de la línea corresponde a la beta.",
+        "La dispersión alrededor de la recta se relaciona con riesgo no sistemático o componente idiosincrático.",
+    ],
 )
-
-with st.expander("Ver interpretación técnica del gráfico"):
-    st.write(
-        f"""
-        El diagrama de dispersión muestra la relación entre el exceso de retorno del benchmark
-        y el exceso de retorno del {entity_label}. La pendiente de la recta estimada corresponde a la beta,
-        mientras que la dispersión alrededor de la recta se relaciona con el componente idiosincrático.
-        """
-    )
 
 # ==============================
 # Tabla técnica
@@ -900,73 +808,28 @@ summary_df = pd.DataFrame(
 )
 
 with st.expander("Ver tabla técnica completa"):
-    st.dataframe(summary_df, width="stretch")
-
-if is_portfolio:
-    st.markdown("### Betas por activo")
-    betas_df, betas_notes = build_asset_betas_table(capm_analyzer)
-    betas_summary_df = betas_df[
-        [
-            "Activo",
-            "Ticker",
-            "Benchmark usado (local)",
-            "Beta (local)",
-            "Retorno esperado (CAPM local)",
-            "Clasificación (local)",
-            "Benchmark global",
-            "Beta (ACWI)",
-            "Retorno esperado (CAPM ACWI)",
-            "Clasificación (ACWI)",
-        ]
-    ].rename(
-        columns={
-            "Benchmark usado (local)": "Benchmark local",
-            "Beta (local)": "Beta local",
-            "Retorno esperado (CAPM local)": "Retorno CAPM local",
-            "Clasificación (local)": "Clasificación local",
-            "Beta (ACWI)": "Beta ACWI",
-            "Retorno esperado (CAPM ACWI)": "Retorno CAPM ACWI",
-            "Clasificación (ACWI)": "Clasificación ACWI",
-        }
-    )
-    st.dataframe(
-        betas_summary_df,
-        use_container_width=True,
-        hide_index=True,
-        height=260,
-    )
-
-    with st.expander("Ver tabla técnica completa (comparación local vs ACWI)"):
-        st.dataframe(
-            betas_df,
-            use_container_width=True,
-            hide_index=True,
-            height=320,
-        )
-        if betas_notes:
-            st.caption("Algunas filas aparecen como 'Sin datos' o 'N/D' por fallos de descarga o falta de datos alineados.")
-            for note in betas_notes:
-                st.caption(f"- {note}")
+    render_table(summary_df, hide_index=True, width="stretch")
 
 # ==============================
 # Interpretación económica
 # ==============================
 st.markdown("### Interpretación económica del CAPM")
-
-expected_text = (
-    f"El retorno esperado anual bajo CAPM es **{fmt_pct(expected_return, digits=2)}**. "
-    f"Este cálculo usa una tasa libre de riesgo anual de **{fmt_pct(rf_annual, digits=2)}** "
-    "obtenida automáticamente desde el contexto macro."
-)
-
 st.info(
-    f"""
-    La beta estimada de **{fmt_num(beta)}** indica la sensibilidad del {entity_label} frente al benchmark
-    **{benchmark_ticker}**. {class_msg} {expected_text}
-    """
+    f"Beta: **{fmt_num(beta)}** | Retorno CAPM: **{fmt_pct(expected_return, digits=2)}** | Tasa libre usada: **{fmt_pct(rf_annual, digits=2)}**."
 )
 
-with st.expander("Riesgo sistemático, no sistemático y diversificación"):
+with st.expander("Ver conclusión e interpretación económica", expanded=False):
+    st.write(
+        f"""
+        La beta estimada de **{fmt_num(beta)}** indica la sensibilidad del {entity_label} frente al benchmark
+        **{benchmark_ticker}**. {class_msg}
+
+        El retorno esperado anual bajo CAPM es **{fmt_pct(expected_return, digits=2)}** y se calcula con una
+        tasa libre de riesgo anual de **{fmt_pct(rf_annual, digits=2)}** obtenida automáticamente desde la API macro.
+        """
+    )
+
+with st.expander("Riesgo sistemático, no sistemático y diversificación", expanded=False):
     st.write(
         """
         - **Riesgo sistemático:** depende del mercado y no se elimina fácilmente con diversificación.
