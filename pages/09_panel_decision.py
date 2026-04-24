@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
+from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, GLOBAL_BENCHMARK, ensure_project_dirs
 from src.api.backend_client import BackendAPIError, friendly_error_message
 from src.download import data_error_message
 from src.risk_metrics import validar_serie_para_garch
@@ -14,6 +14,7 @@ from src.benchmark import benchmark_summary
 from src.services.decision_engine import DecisionEngine
 from src.services.market_data_client import MarketDataClient
 from src.services.risk_analyzer import RiskAnalyzer
+from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
@@ -40,7 +41,7 @@ def inject_ui_css():
     st.markdown(
         """
         <style>
-        .section-box {
+        .section-intro-box {
             background: #ffffff;
             border: 1px solid rgba(15, 23, 42, 0.08);
             border-radius: 18px;
@@ -48,13 +49,13 @@ def inject_ui_css():
             box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
             margin-bottom: 0.8rem;
         }
-        .section-title {
+        .section-intro-title {
             font-size: 1rem;
             font-weight: 700;
             color: #0f172a;
             margin-bottom: 0.2rem;
         }
-        .section-subtitle {
+        .section-intro-subtitle {
             font-size: 0.86rem;
             color: #64748b;
             line-height: 1.45;
@@ -63,107 +64,6 @@ def inject_ui_css():
         """,
         unsafe_allow_html=True,
     )
-
-
-def section_intro(title: str, subtitle: str):
-    st.markdown(
-        f"""
-        <div class="section-box">
-            <div class="section-title">{sanitize_text(title)}</div>
-            <div class="section-subtitle">{sanitize_text(subtitle)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
-    title = sanitize_text(title)
-    value = sanitize_text(value)
-    delta = sanitize_text(delta) if delta is not None else ""
-    caption = sanitize_text(caption)
-
-    delta_html = ""
-    if delta:
-        delta_html = f'<div class="kpi-delta {delta_type}">{delta}</div>'
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{
-                margin: 0; padding: 0; background: transparent;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }}
-            .kpi-card {{
-                background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-                border: 1px solid rgba(15, 23, 42, 0.08);
-                border-radius: 18px;
-                padding: 18px 18px 14px 18px;
-                box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-                min-height: 126px;
-                box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-            }}
-            .kpi-label {{
-                font-size: 0.88rem;
-                font-weight: 600;
-                color: #475569;
-                margin-bottom: 0.35rem;
-            }}
-            .kpi-value {{
-                font-size: 1.85rem;
-                font-weight: 800;
-                color: #0f172a;
-                line-height: 1.1;
-                margin-bottom: 0.45rem;
-                word-break: break-word;
-            }}
-            .kpi-delta {{
-                display: inline-block;
-                width: fit-content;
-                font-size: 0.80rem;
-                font-weight: 700;
-                padding: 0.28rem 0.55rem;
-                border-radius: 999px;
-                margin-top: 0.10rem;
-            }}
-            .kpi-delta.pos {{
-                background-color: rgba(22, 163, 74, 0.10);
-                color: #15803d;
-            }}
-            .kpi-delta.neg {{
-                background-color: rgba(220, 38, 38, 0.10);
-                color: #b91c1c;
-            }}
-            .kpi-delta.neu {{
-                background-color: rgba(234, 179, 8, 0.14);
-                color: #a16207;
-            }}
-            .kpi-caption {{
-                font-size: 0.78rem;
-                color: #64748b;
-                margin-top: 0.65rem;
-                line-height: 1.35;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-label">{title}</div>
-                <div class="kpi-value">{value}</div>
-                {delta_html}
-            </div>
-            <div class="kpi-caption">{caption}</div>
-        </div>
-    </body>
-    </html>
-    """
-    components.html(html, height=150)
 
 
 def hero_decision(title, subtitle, level="neutral"):
@@ -175,10 +75,10 @@ def hero_decision(title, subtitle, level="neutral"):
             "badge": "rgba(22, 163, 74, 0.14)",
         },
         "warning": {
-            "bg": "linear-gradient(135deg, #fffbeb 0%, #fefce8 100%)",
-            "border": "rgba(234, 179, 8, 0.28)",
-            "accent": "#a16207",
-            "badge": "rgba(234, 179, 8, 0.16)",
+            "bg": "linear-gradient(135deg, #eff6ff 0%, #f8fbff 100%)",
+            "border": "rgba(37, 99, 235, 0.18)",
+            "accent": "#1d4ed8",
+            "badge": "rgba(37, 99, 235, 0.12)",
         },
         "danger": {
             "bg": "linear-gradient(135deg, #fff1f2 0%, #fef2f2 100%)",
@@ -187,10 +87,10 @@ def hero_decision(title, subtitle, level="neutral"):
             "badge": "rgba(220, 38, 38, 0.14)",
         },
         "neutral": {
-            "bg": "linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)",
-            "border": "rgba(100, 116, 139, 0.20)",
-            "accent": "#334155",
-            "badge": "rgba(100, 116, 139, 0.12)",
+            "bg": "linear-gradient(135deg, #eff6ff 0%, #f8fbff 100%)",
+            "border": "rgba(37, 99, 235, 0.16)",
+            "accent": "#1e3a8a",
+            "badge": "rgba(37, 99, 235, 0.10)",
         },
     }
     s = styles.get(level, styles["neutral"])
@@ -207,32 +107,32 @@ def hero_decision(title, subtitle, level="neutral"):
             .hero {{
                 background: {s["bg"]};
                 border: 1px solid {s["border"]};
-                border-radius: 24px;
-                padding: 24px;
-                box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-                min-height: 185px;
+                border-radius: 22px;
+                padding: 22px;
+                box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
+                min-height: 172px;
                 box-sizing: border-box;
             }}
             .badge {{
                 display: inline-block;
-                padding: 7px 12px;
+                padding: 6px 11px;
                 border-radius: 999px;
                 background: {s["badge"]};
                 color: {s["accent"]};
-                font-size: 0.82rem;
+                font-size: 0.78rem;
                 font-weight: 800;
-                margin-bottom: 0.85rem;
+                margin-bottom: 0.75rem;
             }}
             .title {{
-                font-size: 2rem;
-                line-height: 1.1;
+                font-size: 1.8rem;
+                line-height: 1.08;
                 font-weight: 800;
                 color: #0f172a;
-                margin-bottom: 0.6rem;
+                margin-bottom: 0.5rem;
             }}
             .subtitle {{
-                font-size: 0.95rem;
-                line-height: 1.55;
+                font-size: 0.9rem;
+                line-height: 1.5;
                 color: #334155;
             }}
         </style>
@@ -246,7 +146,7 @@ def hero_decision(title, subtitle, level="neutral"):
     </body>
     </html>
     """
-    components.html(html, height=210)
+    components.html(html, height=190)
 
 
 inject_ui_css()
@@ -297,23 +197,17 @@ with st.sidebar:
         end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="decision_end")
 
     st.divider()
-    st.subheader("Modo de visualización")
-    modo = st.radio("Selecciona el nivel de detalle", ["General", "Estadístico"], index=0)
-
-    st.divider()
-    st.subheader("Opciones de visualización")
-    mostrar_detalle = st.checkbox("Mostrar detalle técnico", value=(modo == "Estadístico"))
-
-    with st.expander("Filtros secundarios"):
-        alpha = st.selectbox("Nivel de confianza VaR", [0.95, 0.99], index=0, key="decision_alpha")
-        n_sim = st.slider(
-            "Simulaciones Monte Carlo",
-            min_value=5000,
-            max_value=50000,
-            value=10000,
-            step=5000,
-            key="decision_nsim",
-        )
+    st.subheader("Opciones de análisis")
+    mostrar_detalle = st.checkbox("Mostrar detalle técnico", value=False)
+    alpha = st.selectbox("Nivel de confianza VaR", [0.95, 0.99], index=0, key="decision_alpha")
+    n_sim = st.slider(
+        "Simulaciones Monte Carlo",
+        min_value=5000,
+        max_value=50000,
+        value=10000,
+        step=5000,
+        key="decision_nsim",
+    )
 
 
 # ==============================
@@ -528,11 +422,73 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
     }
 
 
+def extract_garch_persistence(garch_results: dict) -> float:
+    diagnostics_df = garch_results.get("diagnostics", pd.DataFrame())
+    if isinstance(diagnostics_df, pd.DataFrame) and not diagnostics_df.empty:
+        if {"metrica", "valor"}.issubset(diagnostics_df.columns):
+            persist_row = diagnostics_df.loc[
+                diagnostics_df["metrica"] == "persistencia_alpha_mas_beta"
+            ]
+            if not persist_row.empty:
+                persist_value = pd.to_numeric(persist_row["valor"], errors="coerce").dropna()
+                if not persist_value.empty:
+                    return float(persist_value.iloc[0])
+
+    comparison_df = garch_results.get("comparison", pd.DataFrame())
+    if not isinstance(comparison_df, pd.DataFrame) or comparison_df.empty:
+        return np.nan
+
+    working = comparison_df.copy()
+
+    def _sorted_if_aic(df: pd.DataFrame) -> pd.DataFrame:
+        if "AIC" not in df.columns:
+            return df
+        df = df.copy()
+        df["AIC"] = pd.to_numeric(df["AIC"], errors="coerce")
+        valid_aic = df.dropna(subset=["AIC"])
+        if not valid_aic.empty:
+            return valid_aic.sort_values("AIC", ascending=True)
+        return df
+
+    if "persistencia" in working.columns:
+        working["persistencia"] = pd.to_numeric(working["persistencia"], errors="coerce")
+        sorted_df = _sorted_if_aic(working)
+        valid_persist = sorted_df.dropna(subset=["persistencia"])
+        if not valid_persist.empty:
+            return float(valid_persist.iloc[0]["persistencia"])
+
+        valid_persist_any = working.dropna(subset=["persistencia"])
+        if not valid_persist_any.empty:
+            return float(valid_persist_any.iloc[0]["persistencia"])
+
+    alpha_candidates = ["alpha_1", "alpha[1]", "alpha1", "alpha"]
+    beta_candidates = ["beta_1", "beta[1]", "beta1", "beta"]
+    alpha_col = next((col for col in alpha_candidates if col in working.columns), None)
+    beta_col = next((col for col in beta_candidates if col in working.columns), None)
+
+    if alpha_col and beta_col:
+        alpha_series = pd.to_numeric(working[alpha_col], errors="coerce")
+        beta_series = pd.to_numeric(working[beta_col], errors="coerce")
+        rebuilt = working.copy()
+        rebuilt["persistencia_reconstruida"] = alpha_series + beta_series
+
+        sorted_df = _sorted_if_aic(rebuilt)
+        valid_rebuilt = sorted_df.dropna(subset=["persistencia_reconstruida"])
+        if not valid_rebuilt.empty:
+            return float(valid_rebuilt.iloc[0]["persistencia_reconstruida"])
+
+        valid_rebuilt_any = rebuilt.dropna(subset=["persistencia_reconstruida"])
+        if not valid_rebuilt_any.empty:
+            return float(valid_rebuilt_any.iloc[0]["persistencia_reconstruida"])
+
+    return np.nan
+
+
 # ==============================
 # Datos base
 # ==============================
 asset_tickers = [meta["ticker"] for meta in ASSETS.values()]
-benchmark_ticker = "^GSPC"
+benchmark_ticker = GLOBAL_BENCHMARK
 tickers = asset_tickers + [benchmark_ticker]
 market_client = MarketDataClient()
 try:
@@ -581,7 +537,6 @@ if not risk_table.empty and "Histórico" in risk_table["método"].values:
 
 # GARCH
 garch_validation = validar_serie_para_garch(portfolio_returns, min_obs=120, max_null_ratio=0.05)
-persistencia = np.nan
 
 if garch_validation["ok"]:
     serie_garch = garch_validation["serie_limpia"] * 100.0
@@ -589,12 +544,7 @@ if garch_validation["ok"]:
 else:
     garch_results = {"comparison": pd.DataFrame(), "diagnostics": pd.DataFrame(), "summary_text": ""}
 
-if not garch_results["diagnostics"].empty:
-    persist_row = garch_results["diagnostics"].loc[
-        garch_results["diagnostics"]["metrica"] == "persistencia_alpha_mas_beta"
-    ]
-    if not persist_row.empty:
-        persistencia = pd.to_numeric(persist_row["valor"], errors="coerce").iloc[0]
+persistencia = extract_garch_persistence(garch_results)
 
 # Benchmark
 summary_df = pd.DataFrame()
@@ -629,28 +579,17 @@ decision = decision_engine.final_decision(risk_view["score"], signal_summary["sc
 # UI principal
 # ==============================
 st.markdown("### Resumen del módulo")
-if modo == "General":
-    st.write(
-        """
-        Este panel transforma varios resultados técnicos y estadísticos en una postura de acción
-        más concreta para el portafolio: comprar, mantener, reducir exposición o vender.
-        """
-    )
-else:
-    st.write(
-        """
-        Este panel sintetiza evidencia de riesgo extremo, persistencia de volatilidad, señales técnicas
-        agregadas y desempeño relativo frente al benchmark para producir una postura integrada de decisión.
-        """
-    )
+st.caption(
+    "Panel integrador opcional para resumir riesgo, técnica y benchmark en una postura de acción del portafolio."
+)
 
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
 
-hero_text = decision["mensaje_general"] if modo == "General" else decision["mensaje_formal"]
+hero_text = decision["mensaje_general"]
 hero_decision(decision["titulo"], hero_text, level=decision["ui"])
 
 st.markdown("### Pilares de la decisión")
-section_intro(
+render_section(
     "Qué está empujando la decisión",
     "La postura final se construye combinando riesgo agregado, lectura técnica y comparación frente al benchmark.",
 )
@@ -663,7 +602,7 @@ with c1:
         risk_view["nivel"],
         delta="Pilar 1",
         delta_type="neg" if risk_view["nivel"] == "Alto" else "neu" if risk_view["nivel"] == "Medio" else "pos",
-        caption=risk_view["mensaje"],
+        caption="Nivel agregado de riesgo del portafolio.",
     )
 
 with c2:
@@ -672,11 +611,7 @@ with c2:
         signal_summary["lectura"],
         delta="Pilar 2",
         delta_type=signal_summary["ui"] == "positive" and "pos" or signal_summary["ui"] == "danger" and "neg" or "neu",
-        caption=(
-            f"Favorables: {signal_summary['favorables']} | "
-            f"Neutrales: {signal_summary['neutrales']} | "
-            f"Desfavorables: {signal_summary['desfavorables']}"
-        ),
+        caption="Balance de señales por activo.",
     )
 
 with c3:
@@ -685,11 +620,21 @@ with c3:
         bench_view["nivel"],
         delta="Pilar 3",
         delta_type="pos" if bench_view["nivel"] == "Superior" else "neg" if bench_view["nivel"] == "Inferior" else "neu",
-        caption=bench_view["mensaje"],
+        caption="Comparación frente al benchmark global.",
     )
 
+render_explanation_expander(
+    "Cómo interpretar los pilares",
+    [
+        "Riesgo: resume VaR histórico, persistencia GARCH y drawdown.",
+        "Técnica: resume señales favorables, neutrales y desfavorables.",
+        "Benchmark: resume desempeño relativo y Alpha de Jensen.",
+        "La decisión final combina esos tres componentes.",
+    ],
+)
+
 st.markdown("### Métricas mínimas de soporte")
-section_intro(
+render_section(
     "Indicadores clave",
     "Estas métricas respaldan la decisión sin repetir todo el detalle de módulos anteriores.",
 )
@@ -700,7 +645,7 @@ with k1:
     kpi_card(
         "VaR histórico",
         f"{var_hist:.2%}" if pd.notna(var_hist) else "N/D",
-        caption="Pérdida umbral estimada del portafolio",
+        caption="Pérdida umbral estimada.",
     )
 
 with k2:
@@ -713,7 +658,7 @@ with k2:
             else None
         ),
         delta_type="neg" if pd.notna(persistencia) and persistencia >= 0.90 else "neu",
-        caption="Memoria de la volatilidad del portafolio",
+        caption="Memoria de la volatilidad.",
     )
 
 alpha_jensen = np.nan
@@ -729,7 +674,7 @@ with k3:
         f"{alpha_jensen:.4f}" if pd.notna(alpha_jensen) else "N/D",
         delta="Comparación relativa",
         delta_type="pos" if pd.notna(alpha_jensen) and alpha_jensen > 0 else "neg" if pd.notna(alpha_jensen) and alpha_jensen < 0 else "neu",
-        caption="Exceso de desempeño ajustado por riesgo",
+        caption="Desempeño ajustado por riesgo.",
     )
 
 balance_signals = signal_summary["favorables"] - signal_summary["desfavorables"]
@@ -743,43 +688,40 @@ with k4:
             else "Balance neutro"
         ),
         delta_type="pos" if balance_signals > 0 else "neg" if balance_signals < 0 else "neu",
-        caption="Diferencia entre señales favorables y desfavorables",
+        caption="Favorables menos desfavorables.",
     )
+
+render_explanation_expander(
+    "Cómo interpretar las métricas de soporte",
+    [
+        "VaR histórico: aproxima la pérdida umbral del portafolio en la ventana analizada.",
+        "Persistencia GARCH: refleja cuánta memoria conserva la volatilidad.",
+        "Alpha de Jensen: mide desempeño relativo ajustado por riesgo frente al benchmark.",
+        "Balance de señales: resume la diferencia entre señales favorables y desfavorables.",
+    ]
+    + (
+        ["Si la persistencia aparece como N/D, significa que el modelo GARCH no entregó un valor alpha + beta válido para la ventana seleccionada."]
+        if pd.isna(persistencia)
+        else []
+    ),
+)
 
 st.markdown("### Cómo interpretar el resultado")
-if modo == "General":
-    st.success(
-        f"""
-        **Decisión sugerida: {decision['titulo']}**
+st.success(
+    f"Decisión sugerida: **{decision['titulo']}**. {decision['mensaje_general']}"
+)
 
-        - Esta salida **sí toma una decisión**: no se queda en un “depende”.
-        - La postura surge de combinar el nivel de riesgo del portafolio, la señal técnica agregada y su comparación frente al benchmark.
-        - **Qué significa esta postura:** {decision['mensaje_general']}
-        - **Qué riesgo asumes si sigues esta decisión:** {decision['mensaje_riesgo']}
-        - En otras palabras, este panel no reemplaza el juicio de inversión, pero sí resume si el contexto actual favorece comprar, mantener, reducir o vender.
-        """
-    )
-else:
-    st.info(
-        f"""
-        **Interpretación formal**
-
-        La postura final del panel es **{decision['titulo']}**. Esta clasificación surge de una regla de agregación
-        simple pero consistente entre tres dimensiones: **riesgo agregado**, **lectura técnica** y **desempeño relativo
-        frente al benchmark**.
-
-        - **Riesgo agregado:** se aproxima mediante VaR histórico, persistencia GARCH y drawdown.
-        - **Lectura técnica:** se resume a partir del balance entre señales favorables y desfavorables de los activos.
-        - **Benchmark:** se evalúa en términos de retorno relativo y Alpha de Jensen.
-
-        Desde una perspectiva metodológica, la decisión no debe entenderse como una predicción puntual,
-        sino como una **postura estadísticamente razonable de acción** bajo la evidencia observada en la ventana analizada.
-
-        **Conclusión formal:** {decision['mensaje_formal']}
-
-        **Riesgo de implementación de la postura:** {decision['mensaje_riesgo']}
-        """
-    )
+render_explanation_expander(
+    "Cómo interpretar la decisión integrada",
+    [
+        "La postura final surge de combinar riesgo agregado, lectura técnica y desempeño relativo frente al benchmark.",
+        "Riesgo agregado: se aproxima mediante VaR histórico, persistencia GARCH y drawdown.",
+        "Lectura técnica: se resume a partir del balance entre señales favorables y desfavorables de los activos.",
+        "Benchmark: se evalúa en términos de retorno relativo y Alpha de Jensen.",
+        f"Conclusión formal: {decision['mensaje_formal']}",
+        f"Riesgo de implementación de la postura: {decision['mensaje_riesgo']}",
+    ],
+)
 
 if mostrar_detalle:
     with st.expander("Ver detalle técnico del score"):
@@ -800,4 +742,4 @@ if mostrar_detalle:
                 ],
             }
         )
-        st.dataframe(detalle_df, width="stretch", hide_index=True)
+        render_table(detalle_df, hide_index=True, width="stretch")
