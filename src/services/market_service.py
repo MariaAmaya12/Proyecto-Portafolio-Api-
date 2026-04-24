@@ -130,8 +130,8 @@ def _get_prices(ticker: str, start: str, end: str) -> pd.DataFrame:
         df = _standardize_ohlcv(df)
         return _validate_ohlcv(df, ticker)
 
-    except Exception as e:
-        logger.error(f"[YFINANCE ERROR] {ticker}: {e}")
+    except Exception as exc:
+        logger.error(f"[YFINANCE ERROR] {ticker}: {exc}")
         raise RuntimeError(f"No se pudo descargar datos para {ticker}")
 
 
@@ -140,10 +140,50 @@ def _get_multiple_prices(tickers: List[str], start: str, end: str) -> Dict[str, 
     for ticker in tickers:
         try:
             data[ticker] = _get_prices(ticker, start, end)
-        except Exception as e:
-            logger.warning(f"[WARNING] {ticker} falló: {e}")
+        except Exception as exc:
+            logger.warning(f"[WARNING] {ticker} falló: {exc}")
             data[ticker] = pd.DataFrame()
     return data
+
+
+def _missing_tickers_from_data(data: Dict[str, pd.DataFrame], tickers: List[str]) -> List[str]:
+    return [
+        ticker
+        for ticker in tickers
+        if data.get(ticker) is None or data.get(ticker).empty
+    ]
+
+
+def _retry_missing_tickers(
+    data: Dict[str, pd.DataFrame],
+    tickers: List[str],
+    start: str,
+    end: str,
+) -> dict[str, object]:
+    initial_missing = _missing_tickers_from_data(data, tickers)
+    retried_tickers: List[str] = []
+    recovered_tickers: List[str] = []
+
+    for ticker in initial_missing:
+        retried_tickers.append(ticker)
+        try:
+            recovered_df = _get_prices(ticker=ticker, start=start, end=end)
+            if recovered_df is not None and not recovered_df.empty:
+                data[ticker] = recovered_df
+                recovered_tickers.append(ticker)
+            else:
+                data[ticker] = pd.DataFrame()
+        except Exception as exc:
+            logger.warning(f"[RETRY WARNING] {ticker} falló en reintento individual: {exc}")
+            data[ticker] = pd.DataFrame()
+
+    still_missing_tickers = _missing_tickers_from_data(data, tickers)
+    return {
+        "retry_missing_tickers_applied": bool(initial_missing),
+        "retried_tickers": retried_tickers,
+        "recovered_tickers": recovered_tickers,
+        "still_missing_tickers": still_missing_tickers,
+    }
 
 
 def _build_close_matrix(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -245,14 +285,20 @@ def _build_returns_matrix(close: pd.DataFrame) -> pd.DataFrame:
 
 def _load_market_bundle_service(tickers: List[str], start: str, end: str) -> Dict[str, object]:
     data = _get_multiple_prices(tickers=tickers, start=start, end=end)
+    retry_diagnostics = _retry_missing_tickers(data=data, tickers=tickers, start=start, end=end)
     close = _build_close_matrix(data)
     returns = _build_returns_matrix(close)
+
+    calendar_diagnostics = dict(returns.attrs.get("calendar_diagnostics", {}))
+    calendar_diagnostics.update(retry_diagnostics)
+    close.attrs["calendar_diagnostics"] = calendar_diagnostics
+    returns.attrs["calendar_diagnostics"] = calendar_diagnostics
 
     return {
         "ohlcv": data,
         "close": close,
         "returns": returns,
-        "calendar_diagnostics": returns.attrs.get("calendar_diagnostics", {}),
+        "calendar_diagnostics": calendar_diagnostics,
     }
 
 
