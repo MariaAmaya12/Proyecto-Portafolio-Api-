@@ -551,7 +551,6 @@ with st.expander("Ver comparación completa entre modelos"):
         "AIC",
         "BIC",
         "convergió",
-        "convergiÃ³",
         "mu",
         "omega",
         "alpha_1",
