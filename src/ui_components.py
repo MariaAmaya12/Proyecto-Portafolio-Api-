@@ -95,9 +95,9 @@ def kpi_card(
                 background: linear-gradient(180deg, #e0f2fe 0%, #f0f9ff 100%);
                 border: 1px solid rgba(14, 116, 144, 0.16);
                 border-radius: 18px;
-                padding: 18px 18px 14px 18px;
+                padding: 14px 15px 12px 15px;
                 box-shadow: 0 4px 14px rgba(14, 116, 144, 0.10);
-                min-height: 126px;
+                min-height: 138px;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
@@ -105,30 +105,30 @@ def kpi_card(
             }}
 
             .kpi-label {{
-                font-size: 0.88rem;
+                font-size: 0.84rem;
                 font-weight: 600;
                 color: #0f3b57;
-                margin-bottom: 0.35rem;
+                margin-bottom: 0.25rem;
                 letter-spacing: 0.2px;
             }}
 
             .kpi-value {{
-                font-size: 1.75rem;
+                font-size: 1.58rem;
                 font-weight: 800;
                 color: #082f49;
                 line-height: 1.1;
-                margin-bottom: 0.45rem;
+                margin-bottom: 0.28rem;
                 word-break: break-word;
             }}
 
             .kpi-delta {{
                 display: inline-block;
                 width: fit-content;
-                font-size: 0.80rem;
+                font-size: 0.74rem;
                 font-weight: 700;
-                padding: 0.28rem 0.55rem;
+                padding: 0.20rem 0.48rem;
                 border-radius: 999px;
-                margin-top: 0.10rem;
+                margin-top: 0.02rem;
             }}
 
             .kpi-delta.pos {{
@@ -147,10 +147,11 @@ def kpi_card(
             }}
 
             .kpi-caption {{
-                font-size: 0.78rem;
+                font-size: 0.74rem;
                 color: #27536d;
-                margin-top: 0.65rem;
-                line-height: 1.35;
+                margin-top: 0.45rem;
+                line-height: 1.28;
+                overflow-wrap: anywhere;
             }}
         </style>
     </head>
@@ -167,7 +168,7 @@ def kpi_card(
     </html>
     """
 
-    components.html(html, height=150)
+    components.html(html, height=158)
 
 
 def render_table(df: pd.DataFrame, hide_index: bool = True, width: str = "stretch") -> None:

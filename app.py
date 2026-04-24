@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import streamlit.components.v1 as components
 
 from src.config import (
     APP_TITLE,
@@ -14,7 +13,6 @@ from src.api.backend_client import (
     backend_base_url,
     fetch_market_bundle_from_backend,
     last_backend_call,
-    ping_backend_health,
 )
 from src.date_utils import yfinance_exclusive_end
 from src.download import data_error_message
@@ -24,6 +22,12 @@ from src.preprocess import (
     annualize_volatility,
 )
 from src.plots import plot_normalized_prices
+from src.ui_components import (
+    kpi_card,
+    render_explanation_expander,
+    render_section,
+    render_table,
+)
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
@@ -208,18 +212,6 @@ def inject_ui_css():
     )
 
 
-def section_intro(title: str, subtitle: str):
-    st.markdown(
-        f"""
-        <div class="section-box">
-            <div class="section-title">{title}</div>
-            <div class="section-subtitle">{subtitle}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def sanitize_text(text):
     if text is None:
         return ""
@@ -236,132 +228,6 @@ def summary_chip(label: str, value: str):
         """,
         unsafe_allow_html=True,
     )
-
-
-def insight_box(title: str, items, tone: str = "info"):
-    if isinstance(items, str):
-        body = f"<div>{sanitize_text(items)}</div>"
-    else:
-        body = "<ul>" + "".join(f"<li>{sanitize_text(item)}</li>" for item in items) + "</ul>"
-
-    st.markdown(
-        f"""
-        <div class="insight-box {sanitize_text(tone)}">
-            <div class="insight-title">{sanitize_text(title)}</div>
-            {body}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
-    title = sanitize_text(title)
-    value = sanitize_text(value)
-    delta = sanitize_text(delta) if delta is not None else ""
-    caption = sanitize_text(caption)
-
-    delta_html = ""
-    if delta:
-        delta_html = f'<div class="kpi-delta {delta_type}">{delta}</div>'
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{
-                margin: 0;
-                padding: 0;
-                background: transparent;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }}
-
-            .kpi-card {{
-                background: linear-gradient(180deg, #f4f8ff 0%, #eaf3ff 100%);
-                border: 1px solid #c9ddfc;
-                border-radius: 18px;
-                padding: 18px;
-                box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08);
-                min-height: 156px;
-                height: 156px;
-                box-sizing: border-box;
-                display: grid;
-                grid-template-rows: auto auto 30px 1fr;
-                align-items: start;
-            }}
-
-            .kpi-label {{
-                font-size: 0.88rem;
-                font-weight: 600;
-                color: #274c77;
-                line-height: 1.25;
-                margin-bottom: 0.45rem;
-                min-height: 1.1rem;
-            }}
-
-            .kpi-value {{
-                font-size: 1.78rem;
-                font-weight: 800;
-                color: #0f3d75;
-                line-height: 1.1;
-                margin-bottom: 0.35rem;
-                word-break: break-word;
-            }}
-
-            .kpi-delta-slot {{
-                min-height: 30px;
-                display: flex;
-                align-items: flex-start;
-            }}
-
-            .kpi-delta {{
-                display: inline-block;
-                width: fit-content;
-                font-size: 0.80rem;
-                font-weight: 700;
-                padding: 0.28rem 0.55rem;
-                border-radius: 999px;
-                margin-top: 0.10rem;
-            }}
-
-            .kpi-delta.pos {{
-                background-color: #dcfce7;
-                border: 1px solid #bbf7d0;
-                color: #166534;
-            }}
-
-            .kpi-delta.neg {{
-                background-color: #fee2e2;
-                border: 1px solid #fecaca;
-                color: #991b1b;
-            }}
-
-            .kpi-delta.neu {{
-                background-color: #e0ecff;
-                border: 1px solid #c9ddfc;
-                color: #274c77;
-            }}
-
-            .kpi-caption {{
-                font-size: 0.78rem;
-                color: #5f6f86;
-                line-height: 1.35;
-                align-self: end;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="kpi-card">
-            <div class="kpi-label">{title}</div>
-            <div class="kpi-value">{value}</div>
-            <div class="kpi-delta-slot">{delta_html}</div>
-            <div class="kpi-caption">{caption}</div>
-        </div>
-    </body>
-    </html>
-    """
-    components.html(html, height=172)
 
 
 inject_ui_css()
@@ -517,16 +383,6 @@ def market_data_diagnostics(horizonte, start_date, end_date, market_data, stage:
     }
 
 
-def render_market_empty_diagnostic(horizonte, start_date, end_date, market_data, stage: str):
-    with st.expander("Diagnóstico de datos de mercado"):
-        st.write(market_data_diagnostics(horizonte, start_date, end_date, market_data, stage))
-
-
-def render_market_data_diagnostic(horizonte, start_date, end_date, market_data, stage: str):
-    with st.expander("Diagnóstico de datos de mercado"):
-        st.write(market_data_diagnostics(horizonte, start_date, end_date, market_data, stage))
-
-
 def load_market_data_with_business_day_fallback(tickers, start_date, end_date, horizonte):
     attempts = []
     today = pd.Timestamp.today().normalize().date()
@@ -558,7 +414,7 @@ def load_market_data_with_business_day_fallback(tickers, start_date, end_date, h
 all_tickers = list(ASSET_TICKERS.values())
 ASSET_DISPLAY_LABELS = {
     "CA.PA": "Carrefour (CA.PA)",
-    "3382.T": "Honda (3382.T)",
+    "3382.T": "Seven & i Holdings (3382.T)",
     "ATD.TO": "Alimentation Couche-Tard (ATD.TO)",
     "FEMSAUBD.MX": "FEMSA (FEMSAUBD.MX)",
     "BP.L": "BP (BP.L)",
@@ -570,6 +426,10 @@ default_home_tickers = [
 ]
 if "home_selected_tickers" not in st.session_state:
     st.session_state["home_selected_tickers"] = default_home_tickers
+
+
+def asset_display_label(ticker: str) -> str:
+    return ASSET_DISPLAY_LABELS.get(ticker, ticker)
 
 
 def toggle_home_ticker(ticker: str) -> None:
@@ -584,12 +444,13 @@ def toggle_home_ticker(ticker: str) -> None:
     ]
 
 
-def asset_display_label(ticker: str) -> str:
-    return ASSET_DISPLAY_LABELS.get(ticker, ticker)
+def default_visible_trace_tickers(tickers: list[str]) -> list[str]:
+    preferred = ["BP.L", "CA.PA"]
+    if all(ticker in tickers for ticker in preferred):
+        return preferred
+    return tickers[:2]
 
 with st.sidebar:
-    st.header("Parámetros")
-
     horizonte = st.selectbox(
         "Horizonte de análisis",
         [
@@ -637,42 +498,28 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-    with st.expander("Diagnóstico API"):
-        st.caption("API_BASE_URL efectivo")
-        st.code(backend_base_url())
-        health = ping_backend_health()
-        if health["ok"]:
-            st.success(f"/health OK · status {health['status_code']}")
-        else:
-            status_text = f"status {health['status_code']}" if health["status_code"] else "sin status code"
-            st.error(f"/health error · {status_text}")
-            if health["error"]:
-                st.caption(str(health["error"]))
-
     st.divider()
     st.subheader("Selección de activos")
-    st.caption("Activos del portafolio")
 
-    asset_cols = st.columns(2)
-    for index, ticker in enumerate(all_tickers):
-        is_selected = ticker in st.session_state["home_selected_tickers"]
-        with asset_cols[index % 2]:
-            if st.button(
-                asset_display_label(ticker),
-                key=f"home_asset_chip_{ticker}",
-                type="primary" if is_selected else "secondary",
-                use_container_width=True,
-            ):
-                toggle_home_ticker(ticker)
-                st.rerun()
-
-    selected_tickers = st.session_state["home_selected_tickers"]
-    st.caption(f"{len(selected_tickers)} de {len(all_tickers)} activos seleccionados.")
     if st.button("Restablecer selección", use_container_width=True):
         st.session_state["home_selected_tickers"] = default_home_tickers
         st.rerun()
 
-    st.caption("Estos activos alimentan los KPIs, el gráfico normalizado y el resumen de la portada.")
+    for ticker in all_tickers:
+        is_selected = ticker in st.session_state["home_selected_tickers"]
+        if st.button(
+            asset_display_label(ticker),
+            key=f"home_asset_chip_{ticker}",
+            type="primary" if is_selected else "secondary",
+            use_container_width=True,
+        ):
+            toggle_home_ticker(ticker)
+            st.rerun()
+
+    selected_tickers = st.session_state["home_selected_tickers"]
+    st.caption(f"{len(selected_tickers)} de {len(all_tickers)} activos seleccionados.")
+
+
 
 
 # ---------------------------------------------------------
@@ -692,7 +539,6 @@ if not selected_tickers:
 # ---------------------------------------------------------
 render_page_title(
     APP_TITLE,
-    "Vista ejecutiva para analizar riesgo, rendimiento y comportamiento relativo del portafolio.",
 )
 
 # Periodo y contexto se muestran de forma compacta en el resumen ejecutivo.
@@ -711,13 +557,6 @@ try:
         )
 except Exception as e:
     st.error(data_error_message(f"Ocurrió un error al descargar los datos: {e}"))
-    render_market_empty_diagnostic(
-        horizonte,
-        start_date,
-        end_date,
-        None,
-        "error al llamar backend",
-    )
     st.stop()
 
 if market_data is None:
@@ -733,12 +572,10 @@ if "close" not in market_data or market_data["close"].empty:
             f"Último día disponible: {last_available}."
         )
     )
-    render_market_empty_diagnostic(horizonte, start_date, effective_end_date, market_data, "close vacío")
     st.stop()
 
 if "returns" not in market_data or market_data["returns"].empty:
     st.error("No fue posible calcular rendimientos con los datos descargados.")
-    render_market_empty_diagnostic(horizonte, start_date, effective_end_date, market_data, "returns vacío")
     st.stop()
 
 
@@ -784,7 +621,6 @@ if dropped_tickers:
 
 if not valid_tickers:
     st.error("No quedan activos con precios y retornos válidos para calcular el portafolio.")
-    render_market_data_diagnostic(horizonte, start_date, effective_end_date, market_data, "sin tickers válidos")
     st.stop()
 
 close_prices = close_prices.loc[:, valid_tickers]
@@ -804,15 +640,12 @@ if effective_end_date != end_date:
 portfolio_returns = equal_weight_portfolio(returns)
 if portfolio_returns.empty:
     st.error("No fue posible calcular retornos efectivos del portafolio con los activos válidos.")
-    render_market_data_diagnostic(horizonte, start_date, effective_end_date, market_data, "portafolio vacío")
     st.stop()
 
 ann_return = annualize_return(portfolio_returns)
 ann_vol = annualize_volatility(portfolio_returns)
 obs_count = int(portfolio_returns.dropna().shape[0])
 asset_count = len(valid_tickers)
-
-render_market_data_diagnostic(horizonte, start_date, effective_end_date, market_data, "datos cargados")
 
 ret_delta = "Sesgo positivo" if ann_return > 0 else "Sesgo negativo" if ann_return < 0 else "Sin sesgo"
 ret_delta_type = "pos" if ann_return > 0 else "neg" if ann_return < 0 else "neu"
@@ -824,9 +657,9 @@ vol_delta_type = "neg" if ann_vol > 0.20 else "neu"
 # ---------------------------------------------------------
 # Resumen ejecutivo
 # ---------------------------------------------------------
-st.markdown("### Resumen ejecutivo")
-section_intro(
-    "Lectura general del dashboard",
+st.markdown("### Resumen ")
+render_section(
+    
     "Este bloque resume los activos seleccionados, la ventana temporal analizada y el comportamiento agregado del portafolio equiponderado.",
 )
 
@@ -881,12 +714,23 @@ with metric_col4:
         caption="Riesgo agregado estimado del portafolio",
     )
 
+render_explanation_expander(
+    "Cómo interpretar los KPIs del portafolio",
+    [
+        "Número de activos: indica cuántos activos están incluidos en el análisis actual.",
+        "Observaciones: corresponde a los días efectivos disponibles para calcular retornos y riesgo.",
+        "Rendimiento anualizado: resume el retorno estimado del portafolio equiponderado llevado a escala anual.",
+        "Volatilidad anualizada: mide la dispersión anualizada de los retornos; valores más altos indican mayor variabilidad del portafolio.",
+        "Estos KPIs son una lectura inicial y deben complementarse con los módulos de rendimientos, GARCH, VaR/CVaR, Markowitz y benchmark.",
+    ],
+)
+
 
 # ---------------------------------------------------------
 # Gráfico principal
 # ---------------------------------------------------------
 st.markdown("### Precios normalizados (base 100)")
-section_intro(
+render_section(
     "Evolución comparativa de los activos",
     "El gráfico permite comparar visualmente la trayectoria relativa de precios desde una base común.",
 )
@@ -911,30 +755,26 @@ else:
 
 close_prices_chart = close_prices_chart.apply(pd.to_numeric, errors="coerce")
 close_prices_chart = close_prices_chart.dropna(axis=1, how="all")
-
-with st.expander("Diagnóstico close_prices_chart"):
-    st.write("close_prices_chart.columns", list(close_prices_chart.columns))
-    st.write("close_prices_chart.dtypes", close_prices_chart.dtypes)
-    st.write("type(close_prices_chart.index)", type(close_prices_chart.index))
-    st.write("close_prices_chart.head(3)")
-    st.dataframe(close_prices_chart.head(3), width="stretch")
-
 if close_prices_chart.empty or close_prices_chart.dropna(how="all").empty:
     st.warning("No hay datos numéricos para graficar base 100")
 else:
     fig_norm = plot_normalized_prices(close_prices_chart)
+    initially_visible_tickers = default_visible_trace_tickers(list(close_prices_chart.columns))
+    for trace in fig_norm.data:
+        if trace.name not in initially_visible_tickers:
+            trace.visible = "legendonly"
     st.plotly_chart(fig_norm, width="stretch")
 st.caption(
     "Nota visual: la continuidad de las líneas se suaviza solo para la visualización, "
     "debido a calendarios bursátiles distintos entre mercados. Esto no afecta cálculos financieros ni métricas del dashboard."
 )
 
-insight_box(
-    "Cómo leer el gráfico (Base 100)",
+render_explanation_expander(
+    "Cómo interpretar el gráfico base 100",
     [
         "Todas las líneas arrancan en 100 (misma base) para comparar desempeño relativo, no precios reales.",
         "Si un activo como BP (BP.L) termina en 120, significa que subió aprox. +20% desde el inicio del periodo seleccionado.",
-        "Si un activo como Honda (3382.T) termina en 90, significa que cayó aprox. −10% desde el inicio del periodo.",
+        "Si un activo como Seven & i Holdings (3382.T) termina en 90, significa que cayó aprox. −10% desde el inicio del periodo.",
         "La curva que esté más arriba al final del periodo fue la de mejor rendimiento relativo en esa ventana.",
         "Una serie con subidas y bajadas más fuertes (por ejemplo, Carrefour (CA.PA) si presenta picos pronunciados) suele indicar mayor volatilidad.",
         "Nota: cuando comparas mercados distintos (Tokio, Toronto, México, Londres, París), puede haber ajustes visuales por calendario; esto no cambia las métricas.",
@@ -946,7 +786,7 @@ insight_box(
 # Resumen del portafolio
 # ---------------------------------------------------------
 st.markdown("### Resumen rápido del portafolio equiponderado")
-section_intro(
+render_section(
     "Métricas descriptivas del portafolio",
     "Este resumen concentra medidas básicas que ayudan a caracterizar retorno medio y dispersión del portafolio construido con pesos iguales.",
 )
@@ -968,19 +808,16 @@ summary = pd.DataFrame(
     }
 )
 
-with st.expander("Resumen estadístico del portafolio"):
-    st.dataframe(summary, width="stretch", hide_index=True)
+with st.expander("Resumen estadístico del portafolio", expanded=False):
+    render_table(summary)
 
 
 # ---------------------------------------------------------
 # Últimos precios
 # ---------------------------------------------------------
 st.markdown("### Últimos precios disponibles")
-with st.expander("Últimos precios"):
-    st.dataframe(
-        close_prices.tail(10).style.format("{:.2f}"),
-        width="stretch",
-    )
+with st.expander("Últimos precios", expanded=False):
+    render_table(close_prices.tail(10).style.format("{:.2f}"), hide_index=False)
 
 
 # ---------------------------------------------------------
@@ -988,15 +825,17 @@ with st.expander("Últimos precios"):
 # ---------------------------------------------------------
 st.markdown("### Interpretación general")
 
-insight_box(
-    "Lectura rápida de la portada",
+st.info(
+    "La portada resume activos, periodo, rendimiento, volatilidad y evolución relativa para una primera lectura del portafolio equiponderado."
+)
+render_explanation_expander(
+    "Cómo interpretar la portada",
     [
-        "Esta portada resume el universo de activos (Honda (3382.T), Couche-Tard (ATD.TO), FEMSA (FEMSAUBD.MX), BP (BP.L) y Carrefour (CA.PA)), el horizonte y un primer perfil riesgo–retorno.",
+        "Esta portada resume el universo de activos (Seven & i Holdings (3382.T), Couche-Tard (ATD.TO), FEMSA (FEMSAUBD.MX), BP (BP.L) y Carrefour (CA.PA)), el horizonte y un primer perfil riesgo–retorno.",
         "Los KPIs muestran una lectura agregada del portafolio equiponderado: rendimiento anualizado y volatilidad anualizada.",
         "El gráfico base 100 permite ver rápidamente qué activo lidera y cuál es más inestable en el periodo elegido.",
         "Si quieres profundizar, los módulos M1–M9 separan el análisis en técnica, rendimientos, volatilidad, riesgo, optimización y decisión.",
     ],
-    tone="positive",
 )
 
 
@@ -1004,7 +843,7 @@ insight_box(
 # Estructura del dashboard
 # ---------------------------------------------------------
 st.markdown("### Estructura del dashboard")
-with st.expander("Ver módulos del dashboard"):
+with st.expander("Ver módulos del dashboard", expanded=False):
     st.markdown(
         """
         - **Contextualización:** lectura cualitativa y rol de los activos en el portafolio.
