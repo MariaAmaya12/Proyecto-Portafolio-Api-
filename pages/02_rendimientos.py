@@ -340,6 +340,25 @@ norm_df["interpretacion"] = norm_df["p_value"].apply(
 )
 qq_df = qq_plot_data(series)
 
+comparison_df = pd.DataFrame(
+    [
+        {
+            "tipo_rendimiento": "Simple",
+            "media": ret_df["simple_return"].mean(),
+            "volatilidad": ret_df["simple_return"].std(ddof=1),
+            "minimo": ret_df["simple_return"].min(),
+            "maximo": ret_df["simple_return"].max(),
+        },
+        {
+            "tipo_rendimiento": "Logarítmico",
+            "media": ret_df["log_return"].mean(),
+            "volatilidad": ret_df["log_return"].std(ddof=1),
+            "minimo": ret_df["log_return"].min(),
+            "maximo": ret_df["log_return"].max(),
+        },
+    ]
+)
+
 skew_value = float(desc_df.loc["asimetria", "valor"]) if "asimetria" in desc_df.index else None
 kurt_value = float(desc_df.loc["curtosis", "valor"]) if "curtosis" in desc_df.index else None
 jb_rows = norm_df[norm_df["test"] == "Jarque-Bera"]
@@ -370,6 +389,10 @@ else:
     jb_delta = f"p-value {format_p_value(jb_p_value)}"
     jb_delta_type = "pos"
 
+comparison_display_df = comparison_df.copy()
+for column in ["media", "volatilidad", "minimo", "maximo"]:
+    comparison_display_df[column] = comparison_display_df[column].apply(lambda value: f"{value:.4%}")
+
 # ==============================
 # Resumen
 # ==============================
@@ -384,13 +407,14 @@ st.write(
 )
 
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
+st.caption("El análisis principal se mantiene sobre rendimientos logarítmicos y se compara explícitamente con rendimientos simples.")
 
 # ==============================
 # KPIs
 # ==============================
 st.markdown("### KPIs de rendimientos")
 section_intro(
-    "Resumen ejecutivo de la distribución",
+    "Resumende la distribución",
     "Aquí se sintetizan la rentabilidad media, la volatilidad y los extremos observados en la serie de rendimientos seleccionada.",
 )
 
@@ -523,16 +547,19 @@ outlier_text = (
     else f"aparecen {outlier_count} observaciones atípicas bajo el criterio IQR"
 )
 
-st.info(
-    f"""
-    **Lectura analítica de la distribución**
-
-    En **{asset_name}**, los rendimientos se ven **{dispersion_text}**. La forma observada sugiere
-    **{skew_distribution_text}** y en el boxplot **{outlier_text}**. Esto importa para riesgo porque una
-    distribución más dispersa, asimétrica o con valores extremos puede hacer que las pérdidas potenciales sean
-    mayores que las sugeridas por una lectura basada solo en el promedio.
-    """
+st.caption(
+    f"Se observa una distribución {dispersion_text}, con {skew_distribution_text} y donde {outlier_text}."
 )
+
+with st.expander("Interpretación del histograma y boxplot"):
+    st.markdown(
+        f"""
+        - **Dispersión:** la volatilidad diaria de **{vol_ret:.4%}** sugiere rendimientos **{dispersion_text}**.
+        - **Asimetría:** el valor de **{"Sin datos" if skew_value is None else f"{skew_value:.2f}"}** apunta a **{skew_distribution_text}**.
+        - **Extremos:** el boxplot indica que **{outlier_text}**, coherente con un mínimo de **{min_ret:.4%}** y un máximo de **{max_ret:.4%}**.
+        - **Lectura de riesgo:** una distribución con más dispersión o con extremos visibles puede subestimar riesgo si se resume solo con media y desviación estándar.
+        """
+    )
 
 # ==============================
 # Gráfico Q-Q
@@ -548,14 +575,16 @@ qq_fig.update_yaxes(scaleanchor="x", scaleratio=1)
 qq_fig.update_layout(height=540)
 st.plotly_chart(qq_fig, width="stretch")
 
-st.info(
-    """
-    El gráfico Q-Q compara los cuantiles observados del activo contra los que tendría una distribución
-    normal. Si los puntos se separan de la diagonal, especialmente en las colas, la evidencia visual
-    refuerza la presencia de no normalidad y posibles eventos extremos. Para riesgo, esas desviaciones
-    indican que una aproximación normal simple puede no capturar bien pérdidas o ganancias inusuales.
-    """
-)
+st.caption("El Q-Q plot permite contrastar visualmente la normalidad, especialmente en las colas.")
+
+with st.expander("Interpretación del gráfico Q-Q"):
+    st.markdown(
+        f"""
+        - Si los puntos siguen la diagonal, la serie se aproxima a una normal; desviaciones marcadas en las colas sugieren no normalidad.
+        - Este contraste visual debe leerse junto con **Jarque-Bera = {jb_decision.lower()}** y **Shapiro-Wilk = {format_p_value(shapiro_p_value)}**.
+        - Cuando las colas se apartan de la diagonal, la evidencia visual refuerza la presencia de eventos extremos y limita una aproximación normal simple para medir riesgo.
+        """
+    )
 
 # ==============================
 # Tablas principales
@@ -574,20 +603,167 @@ with col2:
     st.markdown("#### Pruebas de normalidad")
     st.dataframe(norm_display_df, width="stretch")
 
-render_statistical_interpretation(
-    mean_ret,
-    vol_ret,
-    skew_value,
-    kurt_value,
-    jb_p_value,
-    shapiro_p_value,
+with st.expander("Interpretación de estadísticos y pruebas"):
+    render_statistical_interpretation(
+        mean_ret,
+        vol_ret,
+        skew_value,
+        kurt_value,
+        jb_p_value,
+        shapiro_p_value,
+    )
+
+st.markdown("### Comparación de tipos de rendimiento")
+section_intro(
+    "Rendimiento simple vs. logarítmico",
+    "La comparación es descriptiva y reutiliza directamente las columnas calculadas en la serie de rendimientos.",
 )
+st.dataframe(comparison_display_df, width="stretch", hide_index=True)
+
+with st.expander("Interpretación de la comparación de rendimientos"):
+    simple_mean = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Simple", "media"].iloc[0]
+    log_mean = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Logarítmico", "media"].iloc[0]
+    simple_vol = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Simple", "volatilidad"].iloc[0]
+    log_vol = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Logarítmico", "volatilidad"].iloc[0]
+    st.markdown(
+        f"""
+        - La comparación usa las columnas ya calculadas en `ret_df`: `simple_return` y `log_return`.
+        - En esta muestra, la media simple es **{simple_mean:.4%}** y la media logarítmica es **{log_mean:.4%}**.
+        - La volatilidad simple es **{simple_vol:.4%}** y la volatilidad logarítmica es **{log_vol:.4%}**.
+        - Para el resto del módulo se mantiene el enfoque principal sobre **{return_type_label.lower()}**, que es la base de las pruebas y gráficos principales.
+        """
+    )
+
+# ==============================
+# Hechos estilizados
+# ==============================
+st.markdown("### Hechos estilizados")
+section_intro(
+    "Lectura empírica de la serie",
+    "Se resume si la muestra exhibe rasgos frecuentes en retornos financieros, usando las estadísticas y extremos observados.",
+)
+
+rolling_vol = series.rolling(20).std()
+high_vol_threshold = rolling_vol.quantile(0.75)
+high_vol_days = rolling_vol > high_vol_threshold if pd.notna(high_vol_threshold) else pd.Series(False, index=rolling_vol.index)
+high_vol_clusters = int((high_vol_days & high_vol_days.shift(1).fillna(False)).sum())
+negative_extremes = int((series < lower_fence).sum())
+positive_extremes = int((series > upper_fence).sum())
+skew_metric_display = "Sin datos" if skew_value is None else f"{skew_value:.2f}"
+heavy_tails_text = (
+    f"La curtosis de {kurt_value:.2f} y Jarque-Bera con p-value {format_p_value(jb_p_value)} sugieren colas pesadas; hay señal cuando la curtosis supera 3 o cuando Jarque-Bera rechaza normalidad."
+    if kurt_value is not None and jb_p_value is not None and (kurt_value > 3 or jb_p_value < 0.05)
+    else "La muestra no muestra una señal fuerte de colas pesadas con las métricas disponibles."
+)
+volatility_clustering_text = (
+    f"La volatilidad móvil de 20 periodos muestra {high_vol_clusters} coincidencias consecutivas por encima del percentil 75, lo que aporta evidencia descriptiva de agrupamiento de volatilidad."
+    if high_vol_clusters > 0
+    else "La volatilidad móvil de 20 periodos no muestra suficientes coincidencias consecutivas por encima del percentil 75 como para sugerir agrupamiento claro en esta muestra."
+)
+leverage_text = (
+    f"La asimetría de {skew_metric_display}, el mínimo de {min_ret:.4%} y {negative_extremes} outliers negativos frente a {positive_extremes} positivos sugieren una lectura exploratoria compatible con efecto apalancamiento."
+    if skew_value is not None and skew_value < 0 and abs(min_ret) > abs(max_ret)
+    else f"La asimetría de {skew_metric_display}, el mínimo de {min_ret:.4%} y el máximo de {max_ret:.4%} no bastan para afirmar un efecto apalancamiento; la lectura es exploratoria."
+)
+
+heavy_tails_detected = bool(
+    kurt_value is not None
+    and jb_p_value is not None
+    and (kurt_value > 3 or jb_p_value < 0.05)
+)
+leverage_signal = bool(
+    skew_value is not None and skew_value < 0 and abs(min_ret) > abs(max_ret)
+)
+
+stylized_cards = [
+    {
+        "title": "Colas pesadas",
+        "status": "Señal detectada" if heavy_tails_detected else "Sin señal fuerte",
+        "summary": (
+            "Curtosis elevada o rechazo de normalidad sugieren eventos extremos más frecuentes."
+            if heavy_tails_detected
+            else "La muestra no muestra una desviación fuerte frente a una normal en esta lectura."
+        ),
+    },
+    {
+        "title": "Agrupamiento de volatilidad",
+        "status": "Señal descriptiva" if high_vol_clusters > 0 else "Sin señal clara",
+        "summary": (
+            "La volatilidad móvil alta aparece en días consecutivos y apunta a persistencia temporal."
+            if high_vol_clusters > 0
+            else "La volatilidad móvil no muestra persistencia alta suficientemente clara en la muestra."
+        ),
+    },
+    {
+        "title": "Efecto apalancamiento",
+        "status": "Señal exploratoria" if leverage_signal else "No concluyente",
+        "summary": (
+            "Los extremos negativos dominan la lectura y son compatibles con mayor sensibilidad al riesgo bajista."
+            if leverage_signal
+            else "La asimetría y los extremos observados no alcanzan para una lectura concluyente."
+        ),
+    },
+]
+
+card_columns = st.columns(3)
+for column, card in zip(card_columns, stylized_cards):
+    with column:
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+                border: 1px solid rgba(37, 99, 235, 0.20);
+                border-radius: 18px;
+                padding: 18px 16px;
+                box-shadow: 0 6px 18px rgba(37, 99, 235, 0.10);
+                min-height: 170px;
+                margin-bottom: 0.5rem;
+            ">
+                <div style="font-size: 0.86rem; font-weight: 700; color: #1e3a8a; margin-bottom: 0.45rem;">
+                    {card["title"]}
+                </div>
+                <div style="
+                    display: inline-block;
+                    font-size: 0.78rem;
+                    font-weight: 700;
+                    color: #1e40af;
+                    background: rgba(255, 255, 255, 0.7);
+                    border-radius: 999px;
+                    padding: 0.28rem 0.55rem;
+                    margin-bottom: 0.75rem;
+                ">
+                    {card["status"]}
+                </div>
+                <div style="font-size: 0.82rem; line-height: 1.45; color: #334155;">
+                    {card["summary"]}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+with st.expander("Interpretación de hechos estilizados"):
+    st.markdown(
+        f"""
+        - **Colas pesadas:** {heavy_tails_text}
+        - **Agrupamiento de volatilidad:** {volatility_clustering_text} Esta lectura usa volatilidad móvil como evidencia descriptiva y no constituye una prueba formal ARCH/GARCH.
+        - **Efecto apalancamiento:** {leverage_text} Como en este módulo no se estima una relación formal entre choques negativos y volatilidad futura, debe leerse como una señal exploratoria y no como prueba concluyente.
+        """
+    )
 
 # ==============================
 # Datos recientes
 # ==============================
 st.markdown("### Últimos rendimientos")
 st.dataframe(ret_df.tail(15), width="stretch")
+
+with st.expander("Interpretación de la tabla de rendimientos recientes"):
+    st.markdown(
+        """
+        - La tabla permite contrastar observaciones recientes de `simple_return` y `log_return` sin recalcularlas manualmente.
+        - Es útil para identificar si los episodios extremos del periodo también se concentran en las fechas más recientes.
+        """
+    )
 
 # ==============================
 # Conclusión
