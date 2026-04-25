@@ -461,9 +461,9 @@ python scripts/update_macro_cache.py
 
 ---
 
-## Autora
+## Autores
 
-**María Amaya**
+**María Amaya & Esteban Díaz**
 Proyecto académico de análisis financiero, riesgo y optimización de portafolios.
 
 
