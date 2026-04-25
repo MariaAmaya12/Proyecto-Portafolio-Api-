@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
-from scipy.stats import chi2, norm
+from scipy.stats import chi2, gaussian_kde, norm
 
 from src.config import TRADING_DAYS
 
@@ -364,6 +364,82 @@ def monte_carlo_var_cvar(
         "simulated_returns": port_sim,
     }
 
+
+def monte_carlo_kde_var_cvar(
+    returns_df: pd.DataFrame,
+    weights: np.ndarray,
+    alpha: float = 0.95,
+    n_sim: int = 10000,
+    seed: int = 42,
+    min_obs: int = 30,
+) -> dict:
+    """
+    VaR y CVaR de Monte Carlo con KDE univariada sobre el portafolio.
+
+    Convencion:
+    - Se construye R_p = returns @ weights.
+    - La KDE gaussiana se ajusta sobre los rendimientos historicos de R_p.
+    - VaR y CVaR se calculan sobre perdidas positivas L = -R_p simulado.
+    """
+    validate_confidence_level(alpha)
+
+    if n_sim < 1000:
+        raise ValueError("El numero de simulaciones debe ser al menos 1000.")
+
+    if returns_df is None or returns_df.empty:
+        return {}
+
+    clean = returns_df.copy()
+    clean = clean.apply(pd.to_numeric, errors="coerce")
+    clean = clean.replace([np.inf, -np.inf], np.nan).dropna()
+
+    if clean.empty or len(clean) < min_obs:
+        return {}
+
+    try:
+        w = validate_weights(weights, n_assets=clean.shape[1])
+    except ValueError:
+        return {}
+
+    portfolio_returns = clean.to_numpy(dtype=float) @ w
+    portfolio_returns = pd.Series(portfolio_returns, index=clean.index)
+
+    try:
+        r = validate_returns_series(portfolio_returns, min_obs=min_obs)
+    except ValueError:
+        return {}
+
+    try:
+        kde = gaussian_kde(r.to_numpy(dtype=float), bw_method="scott")
+    except (ValueError, np.linalg.LinAlgError):
+        return {}
+
+    rng = np.random.default_rng(seed)
+    simulated_returns = kde.resample(size=n_sim, seed=rng).reshape(-1)
+    simulated_returns = simulated_returns[np.isfinite(simulated_returns)]
+
+    if len(simulated_returns) < min_obs:
+        return {}
+
+    losses = -simulated_returns
+    var_daily = max(0.0, float(np.quantile(losses, alpha)))
+    tail_losses = losses[losses >= var_daily]
+
+    if len(tail_losses) > 0:
+        cvar_daily = max(0.0, float(tail_losses.mean()))
+    else:
+        cvar_daily = var_daily
+
+    cvar_daily = max(var_daily, cvar_daily)
+
+    return {
+        "VaR_diario": float(var_daily),
+        "CVaR_diario": float(cvar_daily),
+        "VaR_anualizado": float(var_daily * np.sqrt(TRADING_DAYS)),
+        "CVaR_anualizado": float(cvar_daily * np.sqrt(TRADING_DAYS)),
+    }
+
+
 def risk_comparison_table(
     portfolio_returns: pd.Series,
     asset_returns_df: pd.DataFrame,
@@ -382,9 +458,20 @@ def risk_comparison_table(
         alpha=alpha,
         n_sim=n_sim,
     )
+    mk = monte_carlo_kde_var_cvar(
+        asset_returns_df,
+        weights=weights,
+        alpha=alpha,
+        n_sim=n_sim,
+    )
 
     rows = []
-    for name, res in [("Paramétrico", p), ("Histórico", h), ("Monte Carlo", m)]:
+    for name, res in [
+        ("Paramétrico", p),
+        ("Histórico", h),
+        ("Monte Carlo", m),
+        ("Monte Carlo KDE", mk),
+    ]:
         if res:
             rows.append(
                 {

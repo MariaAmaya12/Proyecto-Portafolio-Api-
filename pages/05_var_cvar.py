@@ -538,7 +538,8 @@ section_intro(
 st.caption(
     "El histograma muestra la distribución de rendimientos. Las líneas punteadas representan VaR y CVaR por método."
 )
-fig_var = plot_var_distribution(portfolio_returns, selected_table)
+plot_table = selected_table[selected_table["método"] != "Monte Carlo KDE"].copy()
+fig_var = plot_var_distribution(portfolio_returns, plot_table)
 fig_var.update_traces(marker_line_width=0.6, marker_line_color="rgba(15, 23, 42, 0.35)", selector=dict(type="histogram"))
 line_styles = {
     "Paramétrico": "#2563eb",
@@ -615,6 +616,16 @@ for col in ["VaR diario", "CVaR diario", "VaR anualizado", "CVaR anualizado"]:
 
 with st.expander("Ver tabla completa de VaR y CVaR"):
     st.dataframe(style_risk_table(complete_table), use_container_width=True)
+
+with st.expander("Interpretación de la tabla comparativa"):
+    st.write(
+        """
+        - **Monte Carlo KDE:** usa una distribución empírica suavizada de los rendimientos históricos del portafolio.
+        - A diferencia del enfoque Monte Carlo normal, no asume normalidad estricta en los rendimientos del portafolio.
+        - Sirve para comparar la sensibilidad del VaR/CVaR frente al supuesto normal.
+        - No debe interpretarse como el método “real” o necesariamente superior, sino como una aproximación alternativa.
+        """
+    )
 
 st.info(
     f"""
