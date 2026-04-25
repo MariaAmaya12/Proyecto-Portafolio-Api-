@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 
 from src.config import (
@@ -13,6 +12,7 @@ from src.garch_models import fit_garch_models
 from src.plots import plot_forecast, plot_standardized_residuals, plot_volatility
 from src.returns_analysis import compute_return_series
 from src.risk_metrics import validar_serie_para_garch
+from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 
@@ -24,7 +24,7 @@ render_sidebar_navigation()
 # ==============================
 # Estilos UI
 # ==============================
-def inject_kpi_cards_css():
+def inject_module_css():
     st.markdown(
         """
         <style>
@@ -50,60 +50,10 @@ def inject_kpi_cards_css():
             line-height: 1.45;
         }
 
-        .soft-explain-box {
-            background: #eff6ff;
-            border: 1px solid rgba(37, 99, 235, 0.16);
-            border-radius: 14px;
-            padding: 14px 16px;
-            margin: 0.65rem 0 0.9rem 0;
-        }
-
-        .soft-explain-title {
-            color: #0f172a;
-            font-size: 0.95rem;
-            font-weight: 750;
-            margin-bottom: 0.25rem;
-        }
-
-        .soft-explain-body {
-            color: #334155;
-            font-size: 0.88rem;
-            line-height: 1.5;
-        }
         </style>
         """,
         unsafe_allow_html=True,
     )
-
-
-def section_intro(title: str, subtitle: str):
-    st.markdown(
-        f"""
-        <div class="section-intro-box">
-            <div class="section-intro-title">{title}</div>
-            <div class="section-intro-subtitle">{subtitle}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def soft_note(title: str, body: str):
-    st.markdown(
-        f"""
-        <div class="soft-explain-box">
-            <div class="soft-explain-title">{sanitize_text(title)}</div>
-            <div class="soft-explain-body">{sanitize_text(body)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def sanitize_text(text):
-    if text is None:
-        return ""
-    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def fmt_num(value):
@@ -120,136 +70,19 @@ def fmt_pvalue(value):
     return f"{numeric_value:.3f}"
 
 
-def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
-    title = sanitize_text(title)
-    value = sanitize_text(value)
-    delta = sanitize_text(delta) if delta is not None else ""
-    caption = sanitize_text(caption)
-
-    delta_html = ""
-    if delta:
-        delta_html = f'<div class="kpi-delta {delta_type}">{delta}</div>'
-
-    caption_html = f'<div class="kpi-caption">{caption}</div>' if caption else ""
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{
-                margin: 0;
-                padding: 0;
-                background: transparent;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }}
-
-            .kpi-card {{
-                background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
-                border: 1px solid rgba(37, 99, 235, 0.16);
-                border-radius: 14px;
-                padding: 16px 16px 14px 16px;
-                box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
-                min-height: 156px;
-                box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                align-items: center;
-                gap: 0.55rem;
-                overflow: visible;
-                text-align: center;
-            }}
-
-            .kpi-label {{
-                font-size: 0.82rem;
-                font-weight: 700;
-                color: #334155;
-                margin-bottom: 0.35rem;
-                letter-spacing: 0;
-                line-height: 1.25;
-            }}
-
-            .kpi-value {{
-                font-size: 1.82rem;
-                font-weight: 800;
-                color: #0f172a;
-                line-height: 1.08;
-                margin-bottom: 0.45rem;
-                overflow-wrap: anywhere;
-                word-break: normal;
-                white-space: normal;
-                width: 100%;
-            }}
-
-            .kpi-delta {{
-                display: inline-block;
-                width: fit-content;
-                max-width: 100%;
-                font-size: 0.76rem;
-                font-weight: 700;
-                padding: 0.28rem 0.55rem;
-                border-radius: 999px;
-                margin-top: 0.10rem;
-                line-height: 1.2;
-                white-space: normal;
-            }}
-
-            .kpi-delta.pos {{
-                background-color: rgba(22, 163, 74, 0.10);
-                color: #15803d;
-            }}
-
-            .kpi-delta.neg {{
-                background-color: rgba(220, 38, 38, 0.10);
-                color: #b91c1c;
-            }}
-
-            .kpi-delta.neu {{
-                background-color: rgba(100, 116, 139, 0.10);
-                color: #475569;
-            }}
-
-            .kpi-caption {{
-                font-size: 0.76rem;
-                color: #475569;
-                margin-top: 0.45rem;
-                line-height: 1.38;
-                overflow-wrap: normal;
-                word-break: normal;
-                white-space: normal;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-label">{title}</div>
-                <div class="kpi-value">{value}</div>
-                {delta_html}
-            </div>
-            {caption_html}
-        </div>
-    </body>
-    </html>
-    """
-
-    components.html(html, height=194)
-
-
-inject_kpi_cards_css()
+inject_module_css()
 
 render_page_title(
-    "Módulo 3 - Modelos ARCH/GARCH",
-    "Analiza volatilidad condicional y pronósticos de riesgo a partir de rendimientos del activo.",
+    "Módulo 3: ARCH/GARCH",
+    "Modela volatilidad condicional y pronósticos de riesgo sobre rendimientos del activo.",
 )
 
 # ==============================
 # Sidebar
 # ==============================
 with st.sidebar:
-    st.header("Parámetros GARCH")
-    asset_name = st.selectbox("Activo representativo", list(ASSETS.keys()), index=0)
+    st.header("Filtros")
+    asset_name = st.selectbox("Activo", list(ASSETS.keys()), index=0)
 
     horizonte = st.selectbox(
         "Horizonte de análisis",
@@ -331,43 +164,24 @@ for adv in validacion["advertencias"]:
     st.warning(adv)
 
 serie_garch = validacion["serie_limpia"] * 100.0
+volatilidad_movil_21d = serie_garch.rolling(window=21).std()
 
 # ==============================
-# Resumen
+# Encabezado del módulo
 # ==============================
-st.markdown("### Resumen del módulo")
-st.write(
-    f"""
-    Este módulo ajusta modelos ARCH/GARCH sobre los rendimientos logarítmicos de **{asset_name} ({ticker})**
-    para modelar heterocedasticidad condicional, comparar especificaciones y generar pronósticos de volatilidad.
-    La lectura integra validación de datos, selección del mejor modelo, comparación de modelos,
-    diagnóstico estadístico y pronóstico de volatilidad.
-    """
+render_section(
+    "Volatilidad condicional",
+    f"Evalúa modelos ARCH/GARCH para comparar especificaciones y pronosticar la volatilidad de {asset_name} ({ticker}).",
 )
-
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
-
-# ==============================
-# Fundamento teórico
-# ==============================
-with st.expander("Ver fundamento teórico"):
-    st.caption(
-        "Este bloque justifica por qué se usan modelos de volatilidad condicional antes de revisar resultados."
-    )
-    st.write(
-        """
-        La volatilidad condicional se usa cuando la varianza no es constante en el tiempo.
-        En finanzas esto ocurre con frecuencia por clustering de volatilidad: periodos de calma
-        suelen alternarse con periodos de turbulencia.
-
-        Los modelos GARCH permiten modelar la persistencia de la volatilidad y generar
-        pronósticos de riesgo más realistas que una volatilidad histórica constante.
-
-        Para este ajuste, la serie cumple condiciones mínimas de longitud, limpieza y variabilidad.
-        Además, los rendimientos logarítmicos se escalan por 100 para mejorar la estabilidad numérica
-        del ajuste en modelos ARCH/GARCH.
-        """
-    )
+render_explanation_expander(
+    "Fundamento del módulo",
+    [
+        "La volatilidad condicional cambia en el tiempo y suele agruparse en periodos de calma o turbulencia.",
+        "Los modelos ARCH/GARCH permiten estimar esa dinámica sin asumir una volatilidad histórica constante.",
+        "La serie validada se escala por 100 antes del ajuste para mejorar la estabilidad numérica del modelo.",
+    ],
+)
 
 # ==============================
 # Ajuste de modelos
@@ -451,123 +265,120 @@ else:
 # KPIs del mejor modelo
 # ==============================
 st.markdown("### KPIs del mejor modelo")
-section_intro(
-    "Resumen analítico del ajuste",
-    "Estos indicadores resumen la selección del mejor modelo, su ajuste estadístico y el pronóstico de volatilidad.",
+render_section(
+    "Modelo seleccionado",
+    "Indicadores principales de la especificación ganadora bajo el criterio de selección disponible.",
 )
 
 k1, k2, k3 = st.columns(3)
-
 with k1:
     kpi_card(
         "Mejor modelo",
         str(best_model) if best_model is not None else "N/D",
-        caption="Modelo con menor AIC",
+        caption="Referencia seleccionada por menor AIC",
+    )
+with k2:
+    kpi_card(
+        "AIC",
+        fmt_num(best_aic),
+        caption="Menor valor favorece el ajuste relativo",
+    )
+with k3:
+    kpi_card(
+        "BIC",
+        fmt_num(best_bic),
+        caption="Criterio con penalización por complejidad",
     )
 
-with k2:
+k4, k5, k6 = st.columns(3)
+with k4:
+    kpi_card(
+        "Persistencia",
+        fmt_num(persistence),
+        delta=persistence_label,
+        delta_type=persistence_delta,
+        caption="Memoria de la volatilidad estimada",
+    )
+with k5:
+    kpi_card(
+        "Volatilidad pronosticada",
+        fmt_num(forecast_last),
+        caption="Último valor del pronóstico a 10 pasos",
+    )
+with k6:
     kpi_card(
         "Log-Likelihood",
         fmt_num(best_loglik),
         caption="Log-verosimilitud del modelo ganador",
     )
 
-with k3:
-    kpi_card(
-        "AIC",
-        fmt_num(best_aic),
-        caption="Criterio de información del modelo ganador",
-    )
-
-k4, k5 = st.columns(2)
-
-with k4:
-    kpi_card(
-        "BIC",
-        fmt_num(best_bic),
-        caption="Criterio bayesiano del modelo ganador",
-    )
-
-with k5:
-    kpi_card(
-        "Pronóstico final de volatilidad",
-        fmt_num(forecast_last),
-        caption="Último valor del pronóstico N-pasos",
-    )
-
-with st.expander("¿Qué significa cada KPI?"):
-    st.write(
-        """
-        **Mejor modelo:** especificación que tuvo mejor desempeño comparativo entre los modelos estimados.
-
-        **Log-Likelihood:** resume qué tan bien el modelo explica los datos observados.
-
-        **AIC:** criterio de información; un valor más bajo suele indicar mejor equilibrio entre ajuste y complejidad.
-
-        **BIC:** criterio de información bayesiano; penaliza con mayor fuerza la complejidad del modelo.
-
-        **Pronóstico final de volatilidad:** último valor estimado dentro del horizonte N-pasos.
-        """
-    )
-
-# ==============================
-# Lectura del modelo seleccionado
-# ==============================
-st.markdown("### Lectura del modelo seleccionado")
-
-if best_model is not None:
-    lectura = [
-        f"El modelo **{best_model}** fue seleccionado por presentar el menor AIC dentro de las especificaciones estimadas."
-    ]
-
-    if pd.notna(persistence):
-        lectura.append(
-            f"La persistencia estimada es **{fmt_num(persistence)}**, lo que indica qué tan rápido se disipan los choques de volatilidad."
-        )
-        if persistence >= 0.90:
-            lectura.append(
-                "Este nivel es consistente con clustering de volatilidad: los episodios de alta incertidumbre tienden a mantenerse por varios periodos."
-            )
-        else:
-            lectura.append(
-                "La persistencia no es extrema, por lo que los choques de volatilidad tienden a disiparse con mayor rapidez."
-            )
-
-    st.info(" ".join(lectura))
-else:
+if best_model is None:
     st.warning("No se generó una lectura automática del mejor modelo.")
+
+render_explanation_expander(
+    "Cómo interpretar los KPI del modelo GARCH",
+    [
+        "El AIC/BIC sirven para comparar modelos; menor valor indica mejor ajuste relativo.",
+        "La persistencia cercana a 1 indica alta memoria de la volatilidad.",
+        "La volatilidad estimada/pronosticada mide la magnitud esperada de fluctuación del activo.",
+        "El mejor modelo no significa predicción perfecta, sino mejor ajuste relativo dentro de los modelos evaluados.",
+    ],
+)
 # ==============================
 # Comparación de modelos
 # ==============================
-with st.expander("Ver comparación completa entre modelos"):
-    section_intro(
-        "Selección de especificación",
-        "Se comparan modelos candidatos mediante log-verosimilitud, AIC, BIC, convergencia y parámetros estimados.",
+st.markdown("### 2. Comparación entre modelos")
+render_section(
+    "Tabla comparativa",
+    "Se comparan las especificaciones candidatas con criterios de ajuste y métricas de volatilidad.",
+)
+
+preferred_columns = [
+    "modelo",
+    "AIC",
+    "BIC",
+    "loglik",
+    "persistencia",
+]
+visible_columns = [col for col in preferred_columns if col in comparison_df.columns]
+comparison_display_df = comparison_df[visible_columns].copy()
+if "AIC" in comparison_display_df.columns:
+    comparison_display_df = comparison_display_df.sort_values("AIC", ascending=True).reset_index(drop=True)
+if "modelo" in comparison_display_df.columns:
+    comparison_display_df["Selección"] = comparison_display_df["modelo"].apply(
+        lambda model_name: "Mejor modelo" if model_name == best_model else ""
     )
+comparison_display_df = comparison_display_df.rename(
+    columns={
+        "modelo": "Modelo",
+        "loglik": "Log-Likelihood",
+        "persistencia": "Persistencia",
+    }
+)
+for column in comparison_display_df.columns:
+    if column not in {"Modelo", "Selección"}:
+        comparison_display_df[column] = pd.to_numeric(comparison_display_df[column], errors="coerce").apply(fmt_num)
 
-    preferred_columns = [
-        "modelo",
-        "loglik",
-        "AIC",
-        "BIC",
-        "convergió",
-        "mu",
-        "omega",
-        "alpha_1",
-        "beta_1",
-        "persistencia",
-    ]
-    visible_columns = [col for col in preferred_columns if col in comparison_df.columns]
-    st.dataframe(comparison_df[visible_columns], width="stretch")
+render_table(comparison_display_df, width="stretch", hide_index=True)
 
-    if best_model is not None:
-        criterio = f"AIC = {fmt_num(best_aic)}" if pd.notna(best_aic) else "menor AIC disponible"
-        st.caption(f"El modelo con mejor criterio de información es **{best_model}** ({criterio}).")
+render_explanation_expander(
+    "Cómo leer la comparación de modelos",
+    [
+        "Se comparan modelos por ajuste relativo.",
+        "AIC/BIC penalizan complejidad.",
+        "El modelo con menor AIC se toma como referencia si esa es la regla usada.",
+        "La tabla ayuda a justificar por qué se seleccionó el mejor modelo.",
+    ],
+)
 
 # ==============================
 # Diagnóstico
 # ==============================
-st.markdown("### Diagnóstico del modelo")
+st.markdown("### 3. Diagnóstico del modelo seleccionado")
+render_section(
+    "Diagnóstico",
+    "Se resume si el ajuste converge y si los residuos estandarizados mantienen señales relevantes.",
+)
 
 d1, d2, d3, d4 = st.columns(4)
 
@@ -603,81 +414,90 @@ with d4:
         caption="Memoria de la volatilidad",
     )
 
-with st.expander("¿Cómo interpretar este diagnóstico?"):
-    st.write(
-        """
-        **Convergencia:** indica si el modelo logró estimarse correctamente.
+st.caption(normality_decision)
 
-        **JB residuos est.:** prueba de Jarque-Bera aplicada a los residuos estandarizados del modelo.
-
-        **p-value JB:** ayuda a decidir si se rechaza normalidad. Si es muy pequeño, como **< 0.001**, se rechaza normalidad en residuos.
-
-        **Persistencia:** indica si los choques de volatilidad duran poco o mucho.
-
-        Si el p-value es muy pequeño, el modelo puede estar capturando la volatilidad, pero todavía pueden quedar colas o comportamientos extremos no explicados por completo.
-        """
-    )
-
-if normality_rejected:
-    soft_note(
-        "Lectura del diagnóstico",
-        "Se rechaza normalidad en residuos estandarizados; el modelo captura la dinámica de volatilidad, "
-        "pero no elimina completamente rasgos no normales. Esto sugiere que el riesgo extremo puede no estar "
-        "totalmente capturado por una aproximación normal.",
-    )
-elif normality_rejected is False:
-    soft_note(
-        "Lectura del diagnóstico",
-        "No se rechaza normalidad en residuos estandarizados; bajo esta prueba, los residuos no muestran "
-        "evidencia estadística fuerte contra normalidad.",
-    )
-else:
-    soft_note("Lectura del diagnóstico", normality_decision)
+render_explanation_expander(
+    "Cómo interpretar el diagnóstico",
+    [
+        "La convergencia indica si el modelo logró estimarse correctamente.",
+        "Jarque-Bera se aplica a residuos estandarizados para revisar normalidad residual.",
+        "Un p-value muy pequeño sugiere que pueden persistir colas o eventos extremos no explicados por completo.",
+        "Una persistencia alta indica que los choques de volatilidad tardan más en disiparse.",
+    ],
+)
 
 if not diagnostics_df.empty:
     with st.expander("Ver detalle técnico del diagnóstico"):
-        st.dataframe(diagnostics_df, width="stretch")
+        diagnostics_display_df = diagnostics_df.copy()
+        if "valor" in diagnostics_display_df.columns:
+            diagnostics_display_df["valor"] = diagnostics_display_df["valor"].apply(
+                lambda value: fmt_num(value) if pd.notna(pd.to_numeric(value, errors="coerce")) else value
+            )
+        render_table(diagnostics_display_df, width="stretch", hide_index=True)
 else:
     st.info("No se generaron diagnósticos adicionales para el modelo seleccionado.")
 
+# ==============================
+# Residuos estandarizados
+# ==============================
+st.markdown("### 4. Residuos estandarizados")
 if "std_resid" in results and results["std_resid"] is not None:
     st.plotly_chart(plot_standardized_residuals(results["std_resid"]), width="stretch")
-    soft_note(
-        "Lectura de los residuos estandarizados",
-        "Si los residuos oscilan alrededor de cero, el modelo está capturando buena parte de la estructura media. "
-        "Si persisten picos extremos, todavía hay episodios que el modelo no absorbe completamente; esto es importante "
-        "para evaluar riesgo extremo.",
+    render_explanation_expander(
+        "Cómo interpretar los residuos estandarizados",
+        [
+            "Residuos alrededor de cero sugieren que el modelo captura buena parte de la estructura media.",
+            "Picos extremos persistentes indican episodios que el modelo no absorbe completamente.",
+            "Esta revisión complementa el diagnóstico formal y ayuda a evaluar riesgo extremo.",
+        ],
     )
 
     with st.expander("Ver residuos estandarizados"):
-        st.dataframe(results["std_resid"].tail(20), width="stretch")
+        render_table(results["std_resid"].tail(20), width="stretch", hide_index=False)
+else:
+    st.info("No se generaron residuos estandarizados para el modelo seleccionado.")
 
 # ==============================
 # Volatilidad condicional estimada
 # ==============================
-st.markdown("### Volatilidad condicional estimada")
+st.markdown("### 5. Volatilidad condicional estimada")
 st.caption(
     "La gráfica compara cómo cada especificación modela la evolución de la volatilidad condicional a lo largo del tiempo."
 )
-st.plotly_chart(plot_volatility(results["volatility"]), width="stretch")
+volatility_plot_df = results["volatility"].copy()
+volatility_plot_df.insert(
+    0,
+    "Volatilidad móvil 21 días",
+    volatilidad_movil_21d.reindex(volatility_plot_df.index),
+)
+volatility_fig = plot_volatility(volatility_plot_df)
+volatility_fig.update_traces(
+    selector=dict(name="Volatilidad móvil 21 días"),
+    line=dict(color="#64748B", width=2.6, dash="dot"),
+)
+st.plotly_chart(volatility_fig, width="stretch")
 
-with st.expander("¿Qué significan ARCH, GARCH y EGARCH?"):
-    st.write(
-        """
-        **ARCH** se enfoca en cómo los choques recientes afectan la volatilidad actual.
+render_explanation_expander(
+    "Cómo interpretar la volatilidad estimada",
+    [
+        "La Volatilidad móvil 21 días es una referencia empírica aproximada calculada a partir de los rendimientos recientes.",
+        "Los modelos ARCH, GARCH y EGARCH son estimaciones suavizadas de la volatilidad condicional.",
+        "Un buen modelo no tiene que replicar exactamente todos los movimientos de la Volatilidad móvil 21 días.",
+        "Lo importante es que capture los principales cambios de régimen o episodios de mayor riesgo.",
+        "Si las líneas de los modelos aumentan en los mismos periodos que la Volatilidad móvil 21 días, están capturando adecuadamente episodios de mayor incertidumbre.",
+        "La volatilidad condicional permite identificar tramos donde la incertidumbre se concentra.",
+        "Una persistencia elevada refuerza la lectura de episodios de riesgo agrupado.",
+        "ARCH, GARCH y EGARCH modelan la volatilidad con distintos supuestos sobre choques y memoria.",
+    ],
+)
 
-        **GARCH** combina el efecto de choques recientes con la persistencia de la volatilidad pasada.
-        Por eso suele capturar mejor periodos donde la incertidumbre se mantiene durante varios días.
-
-        **EGARCH** permite capturar respuestas asimétricas: por ejemplo, cuando malas noticias aumentan
-        la volatilidad más que buenas noticias de tamaño similar.
-        """
-    )
-
-soft_note(
-    "Lectura de la volatilidad estimada",
-    "La volatilidad condicional permite identificar clustering: tramos donde la incertidumbre se concentra "
-    "y tarda en disiparse. Una persistencia elevada refuerza la lectura de episodios de riesgo agrupado.",
+render_explanation_expander(
+    "Qué significan ARCH, GARCH y EGARCH",
+    [
+        "ARCH se enfoca en cómo los choques recientes afectan la volatilidad actual.",
+        "GARCH combina choques recientes con persistencia de volatilidad pasada.",
+        "EGARCH permite capturar respuestas asimétricas ante choques positivos y negativos.",
+    ],
 )
 
 # ==============================
@@ -690,9 +510,9 @@ except Exception:
     horizon_steps = None
 
 forecast_title = (
-    f"### Pronóstico de volatilidad ({horizon_steps} pasos)"
+    f"### 6. Pronóstico de volatilidad ({horizon_steps} pasos)"
     if horizon_steps is not None
-    else "### Pronóstico de volatilidad (N pasos)"
+    else "### 6. Pronóstico de volatilidad (10 pasos)"
 )
 st.markdown(forecast_title)
 st.caption(
@@ -702,9 +522,14 @@ st.plotly_chart(
     plot_forecast(results["forecast"]),
     width="stretch",
 )
-soft_note(
-    "Lectura del pronóstico",
-    "Este pronóstico de volatilidad resume la volatilidad esperada para un horizonte futuro de varios pasos.",
+render_explanation_expander(
+    "Cómo interpretar el pronóstico de volatilidad",
+    [
+        "El pronóstico no predice dirección del precio.",
+        "Pronostica intensidad esperada de la volatilidad.",
+        "Mayor volatilidad implica mayor incertidumbre/riesgo.",
+        "Debe complementarse con VaR/CVaR, CAPM y benchmark.",
+    ],
 )
 
 # ==============================

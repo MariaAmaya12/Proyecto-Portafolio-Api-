@@ -97,11 +97,12 @@ def kpi_card(
                 border-radius: 18px;
                 padding: 14px 15px 12px 15px;
                 box-shadow: 0 4px 14px rgba(14, 116, 144, 0.10);
-                min-height: 138px;
+                min-height: 156px;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
                 justify-content: space-between;
+                overflow: visible;
             }}
 
             .kpi-label {{
@@ -110,6 +111,8 @@ def kpi_card(
                 color: #0f3b57;
                 margin-bottom: 0.25rem;
                 letter-spacing: 0.2px;
+                line-height: 1.22;
+                overflow-wrap: anywhere;
             }}
 
             .kpi-value {{
@@ -119,6 +122,7 @@ def kpi_card(
                 line-height: 1.1;
                 margin-bottom: 0.28rem;
                 word-break: break-word;
+                overflow-wrap: anywhere;
             }}
 
             .kpi-delta {{
@@ -168,7 +172,7 @@ def kpi_card(
     </html>
     """
 
-    components.html(html, height=158)
+    components.html(html, height=178)
 
 
 def render_table(df: pd.DataFrame, hide_index: bool = True, width: str = "stretch") -> None:

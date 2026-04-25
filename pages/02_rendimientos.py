@@ -414,7 +414,7 @@ st.caption("El análisis principal se mantiene sobre rendimientos logarítmicos 
 # ==============================
 st.markdown("### KPIs de rendimientos")
 section_intro(
-    "Resumende la distribución",
+    "Resumen de la distribución",
     "Aquí se sintetizan la rentabilidad media, la volatilidad y los extremos observados en la serie de rendimientos seleccionada.",
 )
 
@@ -572,7 +572,7 @@ section_intro(
 
 qq_fig = plot_qq(qq_df)
 qq_fig.update_yaxes(scaleanchor="x", scaleratio=1)
-qq_fig.update_layout(height=540)
+qq_fig.update_layout(height=480, margin=dict(l=48, r=28, t=58, b=46))
 st.plotly_chart(qq_fig, width="stretch")
 
 st.caption("El Q-Q plot permite contrastar visualmente la normalidad, especialmente en las colas.")
@@ -656,14 +656,14 @@ heavy_tails_text = (
     else "La muestra no muestra una señal fuerte de colas pesadas con las métricas disponibles."
 )
 volatility_clustering_text = (
-    f"La volatilidad móvil de 20 periodos muestra {high_vol_clusters} coincidencias consecutivas por encima del percentil 75, lo que aporta evidencia descriptiva de agrupamiento de volatilidad."
+    f"La volatilidad móvil de 20 periodos muestra {high_vol_clusters} coincidencias consecutivas por encima del percentil 75, lo que aporta un indicio descriptivo de agrupamiento de volatilidad."
     if high_vol_clusters > 0
-    else "La volatilidad móvil de 20 periodos no muestra suficientes coincidencias consecutivas por encima del percentil 75 como para sugerir agrupamiento claro en esta muestra."
+    else "La volatilidad móvil de 20 periodos no muestra suficientes coincidencias consecutivas por encima del percentil 75 como para sugerir un indicio claro de agrupamiento en esta muestra."
 )
 leverage_text = (
-    f"La asimetría de {skew_metric_display}, el mínimo de {min_ret:.4%} y {negative_extremes} outliers negativos frente a {positive_extremes} positivos sugieren una lectura exploratoria compatible con efecto apalancamiento."
+    f"La asimetría de {skew_metric_display}, el mínimo de {min_ret:.4%} y {negative_extremes} outliers negativos frente a {positive_extremes} positivos son compatibles con riesgo bajista. Esta lectura es exploratoria y no permite afirmar efecto apalancamiento de forma concluyente."
     if skew_value is not None and skew_value < 0 and abs(min_ret) > abs(max_ret)
-    else f"La asimetría de {skew_metric_display}, el mínimo de {min_ret:.4%} y el máximo de {max_ret:.4%} no bastan para afirmar un efecto apalancamiento; la lectura es exploratoria."
+    else f"La asimetría de {skew_metric_display}, el mínimo de {min_ret:.4%}, el máximo de {max_ret:.4%} y los extremos observados no bastan para afirmar efecto apalancamiento; la lectura se limita a una evaluación descriptiva de riesgo bajista."
 )
 
 heavy_tails_detected = bool(
@@ -686,19 +686,19 @@ stylized_cards = [
         ),
     },
     {
-        "title": "Agrupamiento de volatilidad",
+        "title": "Indicio de agrupamiento de volatilidad",
         "status": "Señal descriptiva" if high_vol_clusters > 0 else "Sin señal clara",
         "summary": (
-            "La volatilidad móvil alta aparece en días consecutivos y apunta a persistencia temporal."
+            "La volatilidad móvil alta aparece en días consecutivos y apunta a persistencia temporal descriptiva."
             if high_vol_clusters > 0
             else "La volatilidad móvil no muestra persistencia alta suficientemente clara en la muestra."
         ),
     },
     {
-        "title": "Efecto apalancamiento",
+        "title": "Riesgo bajista / posible efecto apalancamiento",
         "status": "Señal exploratoria" if leverage_signal else "No concluyente",
         "summary": (
-            "Los extremos negativos dominan la lectura y son compatibles con mayor sensibilidad al riesgo bajista."
+            "Los extremos negativos dominan la lectura y son compatibles con riesgo bajista, sin constituir prueba formal."
             if leverage_signal
             else "La asimetría y los extremos observados no alcanzan para una lectura concluyente."
         ),
@@ -746,8 +746,8 @@ with st.expander("Interpretación de hechos estilizados"):
     st.markdown(
         f"""
         - **Colas pesadas:** {heavy_tails_text}
-        - **Agrupamiento de volatilidad:** {volatility_clustering_text} Esta lectura usa volatilidad móvil como evidencia descriptiva y no constituye una prueba formal ARCH/GARCH.
-        - **Efecto apalancamiento:** {leverage_text} Como en este módulo no se estima una relación formal entre choques negativos y volatilidad futura, debe leerse como una señal exploratoria y no como prueba concluyente.
+        - **Indicio de agrupamiento de volatilidad:** {volatility_clustering_text} Esta lectura usa volatilidad móvil como evidencia descriptiva y no constituye una prueba formal ARCH/GARCH.
+        - **Riesgo bajista / posible efecto apalancamiento:** {leverage_text} Una prueba formal requeriría modelos como **EGARCH** o **GJR-GARCH**, o estimar explícitamente la relación entre choques negativos y volatilidad futura.
         """
     )
 
@@ -766,45 +766,61 @@ with st.expander("Interpretación de la tabla de rendimientos recientes"):
     )
 
 # ==============================
-# Conclusión
+# Conclusión del módulo
 # ==============================
-st.markdown("### Conclusión")
+st.markdown("### Conclusión del módulo")
 
-normality_conclusion = (
-    "no hay suficientes datos para una decisión formal de normalidad"
+interpretacion_media = (
+    "cercana a cero"
+    if abs(mean_ret) < 0.0005
+    else "positiva"
+    if mean_ret > 0
+    else "negativa"
+)
+interpretacion_volatilidad = (
+    "baja"
+    if vol_ret < 0.01
+    else "moderada"
+    if vol_ret < 0.02
+    else "alta"
+)
+resultado_normalidad = (
+    "no ofrecen suficientes datos para una decisión formal de normalidad"
     if jb_p_value is None
-    else "se rechaza normalidad"
+    else f"rechazan normalidad bajo Jarque-Bera al 5% (p-value {format_p_value(jb_p_value)})"
     if jb_p_value < 0.05
-    else "no se rechaza normalidad"
+    else f"no rechazan normalidad bajo Jarque-Bera al 5% (p-value {format_p_value(jb_p_value)})"
 )
-tails_conclusion = (
-    "no hay suficientes datos para evaluar colas"
-    if kurt_value is None
-    else "hay señal de colas pesadas"
-    if kurt_value > 3
-    else "no aparece una señal fuerte de colas pesadas"
+interpretacion_normalidad = (
+    "se aparta de una normal simple y puede concentrar riesgos en colas o extremos"
+    if jb_p_value is not None and jb_p_value < 0.05
+    else "no muestra evidencia estadística fuerte contra normalidad en esta prueba, aunque sigue siendo necesario revisar colas y extremos"
+    if jb_p_value is not None
+    else "no puede contrastarse formalmente con los datos disponibles"
 )
-skew_conclusion = (
-    "no hay suficientes datos para evaluar asimetría"
+asimetria_conclusion = (
+    "asimetría no disponible"
     if skew_value is None
-    else "predomina riesgo de cola izquierda"
+    else f"asimetría negativa ({skew_value:.2f}), compatible con mayor peso relativo de pérdidas extremas"
     if skew_value < -0.5
-    else "predomina sesgo positivo"
+    else f"asimetría positiva ({skew_value:.2f}), compatible con mayor peso relativo de movimientos favorables extremos"
     if skew_value > 0.5
-    else "la asimetría no muestra sesgo direccional fuerte"
+    else f"asimetría moderada ({skew_value:.2f}), sin sesgo direccional fuerte"
 )
-var_conclusion = (
-    "conviene contrastar el VaR paramétrico normal con métodos históricos o no normales."
-    if (jb_p_value is not None and jb_p_value < 0.05) or (kurt_value is not None and kurt_value > 3)
-    else "el VaR paramétrico puede usarse como referencia, pero debe validarse contra métodos históricos."
+curtosis_conclusion = (
+    "curtosis no disponible"
+    if kurt_value is None
+    else f"curtosis elevada ({kurt_value:.2f}), consistente con colas más pesadas"
+    if kurt_value > 3
+    else f"curtosis de {kurt_value:.2f}, sin señal fuerte de colas pesadas bajo el umbral usado"
 )
-kurt_display = "sin datos" if kurt_value is None else f"{kurt_value:.2f}"
-skew_display = "sin datos" if skew_value is None else f"{skew_value:.2f}"
+extremos_conclusion = (
+    f"mínimo observado de {min_ret:.4%}, máximo de {max_ret:.4%} y {outlier_count} observaciones atípicas bajo criterio IQR"
+)
 st.info(
     f"""
-    - **Normalidad:** {normality_conclusion} con Jarque-Bera (p-value {format_p_value(jb_p_value)}).
-    - **Colas:** {tails_conclusion} (curtosis {kurt_display}).
-    - **Asimetría:** {skew_conclusion} (asimetría {skew_display}).
-    - **Puente a VaR:** {var_conclusion}
+    En el periodo analizado, los rendimientos logarítmicos de **{asset_name} ({ticker})** presentan una media diaria **{interpretacion_media}** ({mean_ret:.4%}) y una volatilidad **{interpretacion_volatilidad}** ({vol_ret:.4%}). Las pruebas de normalidad **{resultado_normalidad}**, lo que indica que la distribución **{interpretacion_normalidad}**.
+
+    La **{asimetria_conclusion}**, la **{curtosis_conclusion}** y los valores extremos observados ({extremos_conclusion}) sugieren que el riesgo no debe resumirse únicamente con media y desviación estándar. Por esta razón, para la medición de riesgo en módulos posteriores, especialmente **VaR/CVaR** y **GARCH**, es recomendable complementar el análisis con enfoques empíricos y modelos de volatilidad.
     """
 )
