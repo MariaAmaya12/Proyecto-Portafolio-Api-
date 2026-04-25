@@ -626,7 +626,7 @@ technical_signal_detail = signal_detail(technical_signal)
 # ==============================
 # Encabezado
 # ==============================
-st.markdown("### Resumen del módulo")
+st.markdown("### Resumen")
 section_intro(
     "Lectura técnica unificada",
     (
@@ -693,9 +693,14 @@ with col4:
         caption="Precio vs SMA/EMA + RSI",
     )
 
-with st.expander("¿Cómo se calcula la señal técnica?", expanded=False):
+with st.expander("Cómo interpretar", expanded=False):
     st.markdown(
         """
+
+- El precio actual muestra el último cierre disponible del activo. Este valor se usa como referencia para compararlo con las medias móviles, las bandas de Bollinger y los indicadores de momentum.
+- La variación previa muestra el cambio frente al cierre anterior. En este caso, al ser negativa, indica presión bajista reciente, pero no se interpreta sola; se contrasta con los indicadores de tendencia y momentum.
+- El RSI permite leer la fuerza reciente del movimiento. En este caso no alcanza una zona extrema de sobreventa, pero se ubica en una zona baja-neutral, lo que sugiere pérdida de impulso comprador y debilidad reciente.
+
 **Criterio de la señal**  
 - Alcista ↗: precio > SMA y EMA **y** RSI ≥ 55  
 - Bajista ↘: precio < SMA y EMA **y** RSI ≤ 45  
@@ -718,7 +723,8 @@ st.plotly_chart(
     config=PLOT_CONFIG,
 )
 
-st.info(explain_moving_averages(close_now, sma_now, ema_now))
+with st.expander("Lectura actual de medias móviles", expanded=False):
+    st.markdown(explain_moving_averages(close_now, sma_now, ema_now))
 
 # ==============================
 # Indicadores esenciales
@@ -734,14 +740,16 @@ st.plotly_chart(
     width="stretch",
     config=PLOT_CONFIG,
 )
-st.info(explain_rsi(rsi_now))
+with st.expander("Lectura actual del RSI", expanded=False):
+    st.markdown(explain_rsi(rsi_now))
 
 st.plotly_chart(
     prepare_bollinger_fig(plot_bollinger(chart_df)),
     width="stretch",
     config=PLOT_CONFIG,
 )
-st.info(explain_bollinger(close_now, bb_low_now, bb_mid_now, bb_up_now))
+with st.expander("Lectura actual de Bandas de Bollinger", expanded=False):
+    st.markdown(explain_bollinger(close_now, bb_low_now, bb_mid_now, bb_up_now))
 with st.expander("¿Cómo leer las Bandas de Bollinger?", expanded=False):
     st.markdown(
         """
@@ -768,7 +776,8 @@ st.plotly_chart(
     width="stretch",
     config=PLOT_CONFIG,
 )
-st.info(explain_macd(macd_now, macd_signal_now, macd_hist_now))
+with st.expander("Lectura actual del MACD", expanded=False):
+    st.markdown(explain_macd(macd_now, macd_signal_now, macd_hist_now))
 with st.expander("¿Cómo leer el MACD?", expanded=False):
     st.markdown(
         """
@@ -786,7 +795,8 @@ st.plotly_chart(
     width="stretch",
     config=PLOT_CONFIG,
 )
-st.info(explain_stochastic(stoch_k_now, stoch_d_now))
+with st.expander("Lectura actual del oscilador estocástico", expanded=False):
+    st.markdown(explain_stochastic(stoch_k_now, stoch_d_now))
 with st.expander("¿Cómo leer el oscilador estocástico?", expanded=False):
     st.markdown(
         """

@@ -693,7 +693,7 @@ with metric_col2:
     kpi_card(
         "Observaciones",
         str(obs_count),
-        caption="Días efectivos usados para retorno y riesgo (con precios forward-filled en días sin trading)",
+        caption="Días efectivos usados para retorno y riesgo",
     )
 
 with metric_col3:
@@ -718,8 +718,8 @@ render_explanation_expander(
     "Cómo interpretar los KPIs del portafolio",
     [
         "Número de activos: indica cuántos activos están incluidos en el análisis actual.",
-        "Observaciones: corresponde a los días efectivos disponibles para calcular retornos y riesgo.",
-        "Rendimiento anualizado: resume el retorno estimado del portafolio equiponderado llevado a escala anual.",
+        "Observaciones: corresponde a los días efectivos disponibles para calcular retornos y riesgo(con precios forward-filled en días sin trading).",
+        "Rendimiento anualizado: resume el desempeño histórico del portafolio durante el periodo seleccionado. Es una medida descriptiva basada en los datos observados y no debe interpretarse como una garantía de rendimiento futuro.",
         "Volatilidad anualizada: mide la dispersión anualizada de los retornos; valores más altos indican mayor variabilidad del portafolio.",
         "Estos KPIs son una lectura inicial y deben complementarse con los módulos de rendimientos, GARCH, VaR/CVaR, Markowitz y benchmark.",
     ],
@@ -808,8 +808,24 @@ summary = pd.DataFrame(
     }
 )
 
-with st.expander("Resumen estadístico del portafolio", expanded=False):
-    render_table(summary)
+render_table(summary)
+
+with st.expander("Cómo interpretar las métricas del resumen estadístico", expanded=False):
+    st.markdown(
+        """
+        ### Rendimiento anualizado
+        Indica el desempeño del portafolio llevado a una escala anual. Sirve para entender si, durante el periodo analizado, el portafolio generó una rentabilidad positiva o negativa. No debe interpretarse como una predicción futura, sino como una medida histórica del comportamiento observado.
+
+        ### Volatilidad anualizada
+        Mide qué tanto fluctuaron los retornos del portafolio en escala anual. Representa el nivel de variabilidad o incertidumbre asociado al desempeño del portafolio. Una mayor volatilidad implica movimientos más fuertes y, por tanto, mayor riesgo.
+
+        ### Promedio diario
+        Resume el retorno promedio que obtuvo el portafolio en cada día bursátil. Permite ver la tendencia diaria general del portafolio, aunque no significa que todos los días hayan tenido ese mismo comportamiento.
+
+        ### Desviación estándar diaria
+        Mide qué tanto se alejaron los retornos diarios respecto al promedio diario. Sirve para identificar si los movimientos diarios fueron estables o si presentaron variaciones importantes de un día a otro.
+        """
+    )
 
 
 # ---------------------------------------------------------
