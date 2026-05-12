@@ -4,7 +4,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
-from src.date_utils import yfinance_exclusive_end
 from src.download import data_error_message
 from src.indicators import compute_all_indicators
 from src.services.market_data_client import MarketDataClient
@@ -503,7 +502,7 @@ def render_diagnostic(
             {
                 "start_date_usuario": str(start_date),
                 "end_date_usuario": str(end_date),
-                "end_date_enviado_a_yfinance": yfinance_exclusive_end(str(end_date)),
+                "end_date_enviado_al_backend": str(end_date),
                 "filas_descargadas": len(df),
                 "fecha_min": df.index.min() if not df.empty else None,
                 "fecha_max": df.index.max() if not df.empty else None,
