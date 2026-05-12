@@ -5,8 +5,9 @@ import streamlit.components.v1 as components
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, ensure_project_dirs
 from src.date_utils import yfinance_exclusive_end
-from src.download import data_error_message, download_single_ticker
+from src.download import data_error_message
 from src.indicators import compute_all_indicators
+from src.services.market_data_client import MarketDataClient
 from src.signals import evaluate_signals
 from src.ui_components import render_explanation_expander, render_section, render_table
 from src.ui_navigation import render_sidebar_navigation
@@ -692,14 +693,49 @@ render_explanation_expander(
 # Construcción de tarjetas
 # ==============================
 cards_data = []
+market_client = MarketDataClient()
+tickers = [meta["ticker"] for meta in ASSETS.values()]
+
+try:
+    bundle = market_client.fetch_bundle(
+        tickers=tickers,
+        start=str(start_date),
+        end=str(end_date),
+    )
+except Exception:
+    st.error(
+        data_error_message(
+            "No se pudieron obtener datos desde el backend para los activos del portafolio."
+        )
+    )
+    st.stop()
+
+ohlcv_map = bundle.get("ohlcv", {})
+missing_tickers = market_client.missing_tickers(bundle)
+
+if missing_tickers:
+    st.warning(
+        "Algunos activos no tienen datos suficientes en el rango seleccionado "
+        "y fueron excluidos del análisis de señales: "
+        + ", ".join(missing_tickers)
+    )
+
+    if "3382.T" in missing_tickers:
+        st.info(
+            "Nota: 3382.T puede requerir un horizonte más amplio, por ejemplo 2 años, "
+            "debido a disponibilidad o alineación de datos."
+        )
 
 for asset_name, meta in ASSETS.items():
     ticker = meta["ticker"]
-    df = download_single_ticker(ticker=ticker, start=str(start_date), end=str(end_date))
+    df = ohlcv_map.get(ticker)
+
+    if df is None:
+        df = pd.DataFrame()
 
     if df.empty:
         if modo_diagnostico:
-            render_diagnostic(asset_name, ticker, start_date, end_date, df)
+            render_diagnostic(asset_name, ticker, start_date, end_date, pd.DataFrame())
         continue
 
     ind = compute_all_indicators(df)
@@ -738,7 +774,10 @@ for asset_name, meta in ASSETS.items():
     )
 
 if not cards_data:
-    st.warning(data_error_message("No fue posible construir señales para los activos en la ventana seleccionada."))
+    st.warning(
+        "No fue posible calcular señales porque no hay datos suficientes "
+        "para los activos en el rango seleccionado. Prueba con un horizonte más amplio."
+    )
     st.stop()
 
 
