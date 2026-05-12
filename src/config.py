@@ -58,8 +58,8 @@ FRED_SERIES = {
     "cop_usd": "COLCCUSMA02STM",
 }
 
-DEFAULT_START_DATE = os.getenv("DEFAULT_START_DATE", "2021-01-01")
-DEFAULT_END_DATE = os.getenv("DEFAULT_END_DATE") or str(date.today())
+DEFAULT_START_DATE = os.getenv("DEFAULT_START_DATE", "2021-01-01").strip()
+DEFAULT_END_DATE = (os.getenv("DEFAULT_END_DATE") or str(date.today())).strip()
 
 TRADING_DAYS = 252
 

@@ -38,6 +38,7 @@ from src.services.macro_service import MacroService
 from src.services.market_service import MarketService
 from src.signals import evaluate_signals
 from backend.cache import TTLCache
+from backend.database import check_database_connection
 
 
 logger = logging.getLogger(__name__)
@@ -286,9 +287,11 @@ class MarketBundleResponse(BaseModel):
     ohlcv: dict[str, List[OhlcvRecord]]
     close: List[DynamicRecord]
     returns: List[DynamicRecord]
+    included_tickers: List[str] = Field(default_factory=list)
     missing_tickers: List[str] = Field(default_factory=list)
     last_available_date: str | None = None
     calendar_diagnostics: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -938,6 +941,16 @@ def health(settings: SettingsDep) -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+@app.get("/db/health")
+def db_health() -> dict[str, str]:
+    if not check_database_connection():
+        raise HTTPException(
+            status_code=503,
+            detail="No fue posible conectar con la base de datos.",
+        )
+    return {"status": "ok", "database": "sqlite"}
+
+
 @app.get("/", response_model=RootResponse)
 def root() -> RootResponse:
     return RootResponse(status="ok", service="api")
@@ -1040,15 +1053,57 @@ async def market_bundle(
 ) -> MarketBundleResponse:
     bundle = await load_market_bundle_cached_async(market, payload)
 
+    requested_tickers = list(dict.fromkeys(str(ticker).strip() for ticker in payload.tickers if str(ticker).strip()))
+    ohlcv_map = bundle["ohlcv"]
+    close = bundle["close"]
+    returns = bundle["returns"]
+
+    def ticker_non_null_rows(frame: pd.DataFrame, ticker: str) -> int:
+        if frame is None or frame.empty or ticker not in frame.columns:
+            return 0
+        return int(pd.to_numeric(frame[ticker], errors="coerce").dropna().shape[0])
+
+    ticker_diagnostics = {}
+    included_tickers = []
     missing_tickers = []
-    for ticker in payload.tickers:
-        df = bundle["ohlcv"].get(ticker)
-        if df is None or df.empty:
+
+    for ticker in requested_tickers:
+        df = ohlcv_map.get(ticker)
+        raw_rows = 0 if df is None or df.empty else int(len(df))
+        close_rows = ticker_non_null_rows(close, ticker)
+        return_rows = ticker_non_null_rows(returns, ticker)
+        aligned_rows = return_rows if return_rows > 0 else close_rows
+
+        if raw_rows == 0:
+            reason = "no ohlcv data"
+            suggestion = "Verify the ticker, date range, and provider availability"
+        elif return_rows == 0 and close_rows == 0:
+            reason = "insufficient aligned prices"
+            suggestion = "Use a longer horizon, for example 2 years, or analyze individually"
+        elif return_rows == 0:
+            reason = "insufficient aligned returns"
+            suggestion = "Use a longer horizon, for example 2 years, or analyze individually"
+        else:
+            reason = "ok"
+            suggestion = "Data available for the selected range"
+
+        ticker_diagnostics[ticker] = {
+            "raw_rows": raw_rows,
+            "aligned_rows": aligned_rows,
+            "close_rows": close_rows,
+            "return_rows": return_rows,
+            "reason": reason,
+            "suggestion": suggestion,
+        }
+
+        if raw_rows > 0 and (close_rows > 0 or return_rows > 0):
+            included_tickers.append(ticker)
+        else:
             missing_tickers.append(ticker)
 
     valid_frames = [
         df
-        for df in bundle["ohlcv"].values()
+        for df in ohlcv_map.values()
         if df is not None and not df.empty
     ]
     last_available_date = None
@@ -1057,7 +1112,7 @@ async def market_bundle(
         if pd.notna(last_available):
             last_available_date = pd.Timestamp(last_available).date().isoformat()
 
-    if len(missing_tickers) == len(payload.tickers):
+    if len(missing_tickers) == len(requested_tickers):
         raise HTTPException(
             status_code=404,
             detail=build_error_response(
@@ -1074,16 +1129,33 @@ async def market_bundle(
             ),
         )
 
+    calendar_diagnostics = dict(bundle.get("calendar_diagnostics", {}))
+    calendar_diagnostics.update(ticker_diagnostics)
+    calendar_diagnostics["by_ticker"] = ticker_diagnostics
+
+    metadata = {
+        "requested_tickers": requested_tickers,
+        "included_tickers": included_tickers,
+        "missing_tickers": missing_tickers,
+        "start": payload.start.isoformat(),
+        "end": payload.end.isoformat(),
+        "last_available_date": last_available_date,
+        "source": "yfinance",
+        "generated_at": f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+    }
+
     return MarketBundleResponse(
         ohlcv={
             ticker: dataframe_to_json_records(df)
-            for ticker, df in bundle["ohlcv"].items()
+            for ticker, df in ohlcv_map.items()
         },
-        close=dataframe_to_json_records(bundle["close"]),
-        returns=dataframe_to_json_records(bundle["returns"]),
+        close=dataframe_to_json_records(close),
+        returns=dataframe_to_json_records(returns),
+        included_tickers=included_tickers,
         missing_tickers=missing_tickers,
         last_available_date=last_available_date,
-        calendar_diagnostics=bundle.get("calendar_diagnostics", {}),
+        calendar_diagnostics=calendar_diagnostics,
+        metadata=metadata,
     )
 
 
