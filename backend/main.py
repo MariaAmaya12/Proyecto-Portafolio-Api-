@@ -38,6 +38,7 @@ from src.services.macro_service import MacroService
 from src.services.market_service import MarketService
 from src.signals import evaluate_signals
 from backend.cache import TTLCache
+from backend.database import check_database_connection
 
 
 logger = logging.getLogger(__name__)
@@ -938,6 +939,16 @@ def portfolio_summary(row: pd.Series) -> PortfolioSummary:
 @app.get("/health", response_model=HealthResponse)
 def health(settings: SettingsDep) -> HealthResponse:
     return HealthResponse(status="ok")
+
+
+@app.get("/db/health")
+def db_health() -> dict[str, str]:
+    if not check_database_connection():
+        raise HTTPException(
+            status_code=503,
+            detail="No fue posible conectar con la base de datos.",
+        )
+    return {"status": "ok", "database": "sqlite"}
 
 
 @app.get("/", response_model=RootResponse)
