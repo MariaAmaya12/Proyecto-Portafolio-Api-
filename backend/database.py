@@ -48,3 +48,8 @@ def check_database_connection() -> bool:
         return True
     except Exception:
         return False
+
+
+def create_database_tables() -> None:
+    import backend.models  # noqa: F401
+    Base.metadata.create_all(bind=engine)
