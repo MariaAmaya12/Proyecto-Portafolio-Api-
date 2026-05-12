@@ -7,11 +7,12 @@ from src.config import (
     ensure_project_dirs,
     get_ticker,
 )
-from src.download import data_error_message, download_single_ticker
+from src.download import data_error_message
 from src.garch_models import fit_garch_models
 from src.plots import plot_forecast, plot_standardized_residuals, plot_volatility
 from src.returns_analysis import compute_return_series
 from src.risk_metrics import validar_serie_para_garch
+from src.services.market_data_client import MarketDataClient
 from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
@@ -126,10 +127,36 @@ with st.sidebar:
 # Descargar datos
 # ==============================
 ticker = get_ticker(asset_name)
-df = download_single_ticker(ticker=ticker, start=str(start_date), end=str(end_date))
+market_client = MarketDataClient()
+
+bundle = market_client.fetch_bundle(
+    tickers=[ticker],
+    start=str(start_date),
+    end=str(end_date),
+)
+
+ohlcv_map = bundle.get("ohlcv", {})
+df = ohlcv_map.get(ticker)
+
+if df is None:
+    df = pd.DataFrame()
 
 if df.empty:
-    st.error(data_error_message("No se pudieron descargar datos."))
+    missing_tickers = market_client.missing_tickers(bundle)
+
+    if ticker in missing_tickers:
+        st.warning(
+            f"No hay datos suficientes para {ticker} en el rango seleccionado. "
+            "Para ajustar modelos GARCH se recomienda usar al menos 1 año completo, "
+            "idealmente 2 años o más."
+        )
+    else:
+        st.error(
+            data_error_message(
+                "No se pudieron obtener datos desde el backend para el activo seleccionado."
+            )
+        )
+
     st.stop()
 
 price_col = "Adj Close" if "Adj Close" in df.columns else "Close"
