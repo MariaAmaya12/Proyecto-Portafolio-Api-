@@ -3,7 +3,7 @@ import pandas as pd
 from pydantic import ValidationError
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, get_ticker, ensure_project_dirs
-from src.download import data_error_message, download_single_ticker
+from src.download import data_error_message
 from src.indicators import compute_all_indicators
 from src.plots import (
     plot_price_and_mas,
@@ -12,6 +12,7 @@ from src.plots import (
     plot_macd,
     plot_stochastic,
 )
+from src.services.market_data_client import MarketDataClient
 from src.ui_navigation import render_sidebar_navigation
 from src.ui_style import apply_global_typography, render_page_title
 from src.signal import compute_signal
@@ -545,16 +546,46 @@ if start_date >= end_date:
 # Datos
 # ==============================
 try:
-    df_prices = download_single_ticker(ticker=ticker, start=str(start_date), end=str(end_date))
+    market_client = MarketDataClient()
+
+    bundle = market_client.fetch_bundle(
+        tickers=[ticker],
+        start=str(start_date),
+        end=str(end_date),
+    )
+
+    ohlcv_map = bundle.get("ohlcv", {})
+    df_prices = ohlcv_map.get(ticker)
+
+    if df_prices is None:
+        df_prices = pd.DataFrame()
+
     st.session_state["df_prices"] = df_prices
 except Exception as exc:
-    st.error(f"Error al descargar datos: {exc}")
+    st.error(
+        data_error_message(
+            "No se pudieron obtener datos desde el backend para el activo seleccionado."
+        )
+    )
     st.stop()
 
 df = st.session_state["df_prices"]
 
 if df.empty:
-    st.error(data_error_message("No se pudieron descargar datos del activo seleccionado."))
+    missing_tickers = market_client.missing_tickers(bundle)
+
+    if ticker in missing_tickers:
+        st.warning(
+            f"No hay datos disponibles para {ticker} en el rango seleccionado. "
+            "Prueba con un horizonte más amplio, por ejemplo 2 años."
+        )
+    else:
+        st.error(
+            data_error_message(
+                "No se pudieron obtener datos desde el backend para el activo seleccionado."
+            )
+        )
+
     st.stop()
 
 ind = compute_all_indicators(
