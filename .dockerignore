@@ -23,6 +23,7 @@ data/processed
 *.db
 models/*.joblib
 models/*.pkl
+!models/signal_classifier.joblib
 .DS_Store
 .idea
 .vscode
