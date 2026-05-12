@@ -1,27 +1,52 @@
-# Entorno virtual
+# Entornos virtuales
 .venv/
 venv/
 env/
 
-# Variables sensibles
+# Variables de entorno y secretos
 .env
+.env.local
+.streamlit/secrets.toml
 
-# Caché y Python
+# Cachés Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Streamlit / sistema
-.streamlit/secrets.toml
+# Datos generados o caché
+data/yfinance_cache/
+data/raw/
+data/processed/
+
+# Bases locales
+*.sqlite
+*.sqlite3
+*.db
+
+# Modelos generados
+models/*.joblib
+models/*.pkl
+
+# Cobertura y reportes
+.coverage
+htmlcov/
+
+# Sistema / IDE
 .DS_Store
-Thumbs.db
-
-# Datos generados
-data/raw/*.csv
-data/processed/*.csv
-data/processed/*.parquet
+.idea/
+.vscode/
 
 # Archivos de notebook temporales
 .ipynb_checkpoints/
-data/yfinance_cache/
+
+# Excepciones versionables
+!.env.example
+!requirements.txt
+!README.md
+!docs/
+!tests/
+!models/.gitkeep
