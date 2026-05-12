@@ -88,6 +88,14 @@ http://127.0.0.1:8000/docs
 http://127.0.0.1:8000/health
 ```
 
+Validación ejecutada en Fase 1:
+
+- `git status --short`: sin cambios pendientes.
+- `pytest`: 3 pruebas ejecutadas correctamente.
+- `python -m pytest`: falló por diferencia de entorno/intérprete, no por fallo del código.
+- `python -m compileall backend src tests`: sin errores de sintaxis.
+- Observación: el ejecutable `pytest` disponible en terminal usa un entorno donde pytest existe, pero `/usr/local/bin/python` no tiene instalado el módulo pytest. Se recomienda alinear el entorno antes de CI/Docker.
+
 ## Riesgos detectados
 
 - Arquitectura híbrida frontend-backend.
