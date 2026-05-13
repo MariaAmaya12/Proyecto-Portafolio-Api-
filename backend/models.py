@@ -28,3 +28,24 @@ class PredictionLog(Base):
     probability = Column(Float, nullable=True)
     model_version = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class RiskScoreLog(Base):
+    __tablename__ = "risk_score_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ret_1d = Column(Float, nullable=False)
+    ret_5d = Column(Float, nullable=False)
+    ret_20d = Column(Float, nullable=False)
+    vol_5d = Column(Float, nullable=False)
+    vol_20d = Column(Float, nullable=False)
+    rsi = Column(Float, nullable=False)
+    macd_hist = Column(Float, nullable=False)
+    bb_position = Column(Float, nullable=False)
+    close_over_sma20 = Column(Float, nullable=False)
+    drawdown_20d = Column(Float, nullable=False)
+    risk_score = Column(Float, nullable=False)
+    risk_level = Column(String, nullable=False)
+    horizon_days = Column(Integer, nullable=False)
+    model_version = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
