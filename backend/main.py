@@ -40,8 +40,9 @@ from src.signals import evaluate_signals
 from sqlalchemy.orm import Session
 from backend.cache import TTLCache
 from backend.database import check_database_connection, create_database_tables, get_db
-from backend.models import PredictionLog
+from backend.models import PredictionLog, RiskScoreLog
 from backend.ml.predictor import get_predictor
+from backend.ml.risk_predictor import get_risk_predictor
 
 
 logger = logging.getLogger(__name__)
@@ -486,6 +487,27 @@ class MLPredictRequest(BaseModel):
 class MLPredictResponse(BaseModel):
     prediction: str
     probability: float
+    model_version: str
+    log_id: int | None = None
+
+
+class MLRiskScoreRequest(BaseModel):
+    ret_1d: float
+    ret_5d: float
+    ret_20d: float
+    vol_5d: float
+    vol_20d: float
+    rsi: float
+    macd_hist: float
+    bb_position: float
+    close_over_sma20: float
+    drawdown_20d: float
+
+
+class MLRiskScoreResponse(BaseModel):
+    risk_score: float
+    risk_level: str
+    horizon_days: int
     model_version: str
     log_id: int | None = None
 
@@ -1490,6 +1512,81 @@ def ml_predict(
     return MLPredictResponse(
         prediction=result["prediction"],
         probability=result["probability"],
+        model_version=result["model_version"],
+        log_id=log.id,
+    )
+
+
+@app.post("/ml/risk-score", response_model=MLRiskScoreResponse)
+def ml_risk_score(
+    payload: MLRiskScoreRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> MLRiskScoreResponse:
+    create_database_tables()
+
+    try:
+        predictor = get_risk_predictor()
+        result = predictor.predict(payload.model_dump())
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=build_error_response(
+                "Modelo de riesgo no disponible.",
+                error_detail("model", str(exc)),
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=build_error_response(
+                "Datos de entrada inválidos.",
+                error_detail("features", str(exc)),
+            ),
+        )
+    except Exception as exc:
+        logger.exception("Error during risk score prediction", exc_info=exc)
+        raise HTTPException(
+            status_code=503,
+            detail=build_error_response(
+                "Servicio temporalmente no disponible.",
+                error_detail("prediction", "No fue posible completar la predicción de riesgo."),
+            ),
+        )
+
+    try:
+        log = RiskScoreLog(
+            ret_1d=payload.ret_1d,
+            ret_5d=payload.ret_5d,
+            ret_20d=payload.ret_20d,
+            vol_5d=payload.vol_5d,
+            vol_20d=payload.vol_20d,
+            rsi=payload.rsi,
+            macd_hist=payload.macd_hist,
+            bb_position=payload.bb_position,
+            close_over_sma20=payload.close_over_sma20,
+            drawdown_20d=payload.drawdown_20d,
+            risk_score=result["risk_score"],
+            risk_level=result["risk_level"],
+            horizon_days=result["horizon_days"],
+            model_version=result["model_version"],
+        )
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+    except Exception as exc:
+        logger.exception("Error persisting risk score log", exc_info=exc)
+        raise HTTPException(
+            status_code=503,
+            detail=build_error_response(
+                "Error al registrar la predicción de riesgo.",
+                error_detail("database", "No fue posible guardar el registro de riesgo."),
+            ),
+        )
+
+    return MLRiskScoreResponse(
+        risk_score=result["risk_score"],
+        risk_level=result["risk_level"],
+        horizon_days=result["horizon_days"],
         model_version=result["model_version"],
         log_id=log.id,
     )
