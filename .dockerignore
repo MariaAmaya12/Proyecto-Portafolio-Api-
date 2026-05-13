@@ -24,6 +24,7 @@ data/processed
 models/*.joblib
 models/*.pkl
 !models/signal_classifier.joblib
+!models/risk_classifier.joblib
 .DS_Store
 .idea
 .vscode
