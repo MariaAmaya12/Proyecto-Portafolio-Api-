@@ -6,10 +6,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, GLOBAL_BENCHMARK, ensure_project_dirs
-from src.api.backend_client import BackendAPIError, friendly_error_message
+from src.api.backend_client import BackendAPIError, backend_post, friendly_error_message
 from src.download import data_error_message
+from src.indicators import compute_all_indicators
 from src.risk_metrics import validar_serie_para_garch
 from src.garch_models import fit_garch_models
+from src.signals import evaluate_signals
 from src.benchmark import benchmark_summary
 from src.services.decision_engine import DecisionEngine
 from src.services.market_data_client import MarketDataClient
@@ -484,6 +486,104 @@ def extract_garch_persistence(garch_results: dict) -> float:
     return np.nan
 
 
+def _finite_float(value, fallback: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    return number if np.isfinite(number) else fallback
+
+
+def _last_numeric(df: pd.DataFrame, column: str, fallback: float) -> float:
+    if df is None or df.empty or column not in df.columns:
+        return fallback
+    values = pd.to_numeric(df[column], errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
+    if values.empty:
+        return fallback
+    return _finite_float(values.iloc[-1], fallback)
+
+
+def build_ml_risk_payload(
+    returns_series: pd.Series,
+    ohlcv_by_ticker: dict[str, pd.DataFrame],
+    primary_ticker: str | None,
+) -> dict:
+    clean_returns = (
+        pd.to_numeric(returns_series, errors="coerce")
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
+
+    def cumulative_return(window: int) -> float:
+        tail = clean_returns.tail(window)
+        if tail.empty:
+            return 0.0
+        return _finite_float((1.0 + tail).prod() - 1.0, 0.0)
+
+    def volatility(window: int) -> float:
+        tail = clean_returns.tail(window)
+        if len(tail) < 2:
+            return 0.0
+        return _finite_float(tail.std(ddof=1), 0.0)
+
+    def drawdown_20d() -> float:
+        tail = clean_returns.tail(20)
+        if tail.empty:
+            return 0.0
+        cumulative = (1.0 + tail).cumprod()
+        drawdown = cumulative / cumulative.cummax().replace(0, np.nan) - 1.0
+        return _finite_float(drawdown.min(), 0.0)
+
+    # Fallbacks neutrales: el endpoint requiere floats finitos aun si faltan indicadores tecnicos.
+    rsi = 50.0
+    macd_hist = 0.0
+    bb_position = 0.5
+    close_over_sma20 = 1.0
+
+    if primary_ticker and primary_ticker in ohlcv_by_ticker:
+        try:
+            indicators = compute_all_indicators(ohlcv_by_ticker[primary_ticker])
+            close = _last_numeric(indicators, "Close", np.nan)
+            bb_upper = _last_numeric(indicators, "BB_upper", np.nan)
+            bb_lower = _last_numeric(indicators, "BB_lower", np.nan)
+            sma20 = _last_numeric(indicators, "SMA_20", np.nan)
+
+            rsi = _last_numeric(indicators, "RSI", rsi)
+            macd_hist = _last_numeric(indicators, "MACD_hist", macd_hist)
+            if np.isfinite(close) and np.isfinite(bb_upper) and np.isfinite(bb_lower) and bb_upper != bb_lower:
+                bb_position = _finite_float((close - bb_lower) / (bb_upper - bb_lower), bb_position)
+            if np.isfinite(close) and np.isfinite(sma20) and sma20 != 0:
+                close_over_sma20 = _finite_float(close / sma20, close_over_sma20)
+        except Exception:
+            pass
+
+    return {
+        "ret_1d": _finite_float(clean_returns.iloc[-1] if not clean_returns.empty else 0.0, 0.0),
+        "ret_5d": cumulative_return(5),
+        "ret_20d": cumulative_return(20),
+        "vol_5d": volatility(5),
+        "vol_20d": volatility(20),
+        "rsi": rsi,
+        "macd_hist": macd_hist,
+        "bb_position": bb_position,
+        "close_over_sma20": close_over_sma20,
+        "drawdown_20d": drawdown_20d(),
+    }
+
+
+def fetch_ml_risk_score(payload: dict) -> dict | None:
+    try:
+        result = backend_post("/ml/risk-score", payload)
+        st.session_state.pop("decision_ml_risk_error", None)
+        return result
+    except BackendAPIError as exc:
+        st.session_state["decision_ml_risk_error"] = exc
+        return None
+    except Exception as exc:
+        st.session_state["decision_ml_risk_error"] = exc
+        return None
+
+
 # ==============================
 # Datos base
 # ==============================
@@ -573,6 +673,9 @@ signal_summary = decision_engine.build_signal_summary(bundle.get("ohlcv", {}))
 risk_view = decision_engine.classify_risk(var_hist, persistencia, max_dd)
 bench_view = decision_engine.classify_benchmark(summary_df, extras_df)
 decision = decision_engine.final_decision(risk_view["score"], signal_summary["score"], bench_view["score"])
+primary_ticker = valid_asset_tickers[0] if valid_asset_tickers else None
+ml_risk_payload = build_ml_risk_payload(portfolio_returns, bundle.get("ohlcv", {}), primary_ticker)
+ml_risk_score = fetch_ml_risk_score(ml_risk_payload)
 
 
 # ==============================
@@ -591,10 +694,10 @@ hero_decision(decision["titulo"], hero_text, level=decision["ui"])
 st.markdown("### Pilares de la decisión")
 render_section(
     "Qué está empujando la decisión",
-    "La postura final se construye combinando riesgo agregado, lectura técnica y comparación frente al benchmark.",
+    "La postura final se construye combinando riesgo agregado, lectura técnica, comparación frente al benchmark y una señal auxiliar ML.",
 )
 
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4 = st.columns(4)
 
 with c1:
     kpi_card(
@@ -623,13 +726,48 @@ with c3:
         caption="Comparación frente al benchmark global.",
     )
 
+with c4:
+    if ml_risk_score:
+        ml_risk_level = str(ml_risk_score.get("risk_level", "")).lower()
+        ml_delta_type = "neg" if ml_risk_level == "alto" else "neu" if ml_risk_level == "moderado" else "pos"
+        ml_score_value = _finite_float(ml_risk_score.get("risk_score"), np.nan)
+        ml_horizon = ml_risk_score.get("horizon_days", "N/D")
+        ml_model = ml_risk_score.get("model_version", "N/D")
+        kpi_card(
+            "Riesgo ML",
+            ml_risk_level.capitalize() if ml_risk_level else "N/D",
+            delta="Pilar 4",
+            delta_type=ml_delta_type,
+            caption=(
+                "Score auxiliar ML a 5 días. "
+                f"Score ML: {ml_score_value:.3f} | Horizonte: {ml_horizon} días | Modelo: {ml_model}"
+                if pd.notna(ml_score_value)
+                else f"Score auxiliar ML a 5 días. Horizonte: {ml_horizon} días | Modelo: {ml_model}"
+            ),
+        )
+    else:
+        kpi_card(
+            "Riesgo ML",
+            "N/D",
+            delta="Pilar 4",
+            delta_type="neu",
+            caption="No disponible temporalmente.",
+        )
+
+if mostrar_detalle and not ml_risk_score and "decision_ml_risk_error" in st.session_state:
+    ml_error = st.session_state["decision_ml_risk_error"]
+    st.info(f"Riesgo ML no disponible: {friendly_error_message(ml_error)}")
+    if getattr(ml_error, "technical_detail", None):
+        st.caption(ml_error.technical_detail)
+
 render_explanation_expander(
     "Cómo interpretar los pilares",
     [
         "Riesgo: resume VaR histórico, persistencia GARCH y drawdown.",
         "Técnica: resume señales favorables, neutrales y desfavorables.",
         "Benchmark: resume desempeño relativo y Alpha de Jensen.",
-        "La decisión final combina esos tres componentes.",
+        "Riesgo ML: score auxiliar a 5 días estimado con variables recientes de retorno, volatilidad e indicadores técnicos.",
+        "La decisión final combina los tres componentes principales y usa el score ML como apoyo visual.",
     ],
 )
 
@@ -718,6 +856,7 @@ render_explanation_expander(
         "Riesgo agregado: se aproxima mediante VaR histórico, persistencia GARCH y drawdown.",
         "Lectura técnica: se resume a partir del balance entre señales favorables y desfavorables de los activos.",
         "Benchmark: se evalúa en términos de retorno relativo y Alpha de Jensen.",
+        "El score ML se usa como señal auxiliar y no como recomendación financiera independiente.",
         f"Conclusión formal: {decision['mensaje_formal']}",
         f"Riesgo de implementación de la postura: {decision['mensaje_riesgo']}",
     ],
