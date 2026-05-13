@@ -37,8 +37,11 @@ from src.risk_metrics import risk_comparison_table, validate_weights
 from src.services.macro_service import MacroService
 from src.services.market_service import MarketService
 from src.signals import evaluate_signals
+from sqlalchemy.orm import Session
 from backend.cache import TTLCache
-from backend.database import check_database_connection
+from backend.database import check_database_connection, create_database_tables, get_db
+from backend.models import PredictionLog
+from backend.ml.predictor import get_predictor
 
 
 logger = logging.getLogger(__name__)
@@ -471,6 +474,20 @@ class CapmResponse(BaseModel):
     end: date
     rf_annual: float
     metrics: CapmMetrics
+
+
+class MLPredictRequest(BaseModel):
+    close: float
+    sma: float
+    ema: float
+    rsi: float
+
+
+class MLPredictResponse(BaseModel):
+    prediction: str
+    probability: float
+    model_version: str
+    log_id: int | None = None
 
 
 def get_market_service() -> MarketService:
@@ -1403,4 +1420,76 @@ async def capm(
         end=end,
         rf_annual=rf_annual,
         metrics=CapmMetrics(**to_json_safe(metrics)),
+    )
+
+
+@app.post("/ml/predict", response_model=MLPredictResponse)
+def ml_predict(
+    payload: MLPredictRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> MLPredictResponse:
+    create_database_tables()
+
+    try:
+        predictor = get_predictor()
+        result = predictor.predict(
+            close=payload.close,
+            sma=payload.sma,
+            ema=payload.ema,
+            rsi=payload.rsi,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=build_error_response(
+                "Modelo ML no disponible.",
+                error_detail("model", str(exc)),
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=build_error_response(
+                "Datos de entrada inválidos.",
+                error_detail("features", str(exc)),
+            ),
+        )
+    except Exception as exc:
+        logger.exception("Error during ML prediction", exc_info=exc)
+        raise HTTPException(
+            status_code=503,
+            detail=build_error_response(
+                "Servicio temporalmente no disponible.",
+                error_detail("prediction", "No fue posible completar la predicción."),
+            ),
+        )
+
+    try:
+        log = PredictionLog(
+            close=payload.close,
+            sma=payload.sma,
+            ema=payload.ema,
+            rsi=payload.rsi,
+            prediction=result["prediction"],
+            probability=result["probability"],
+            model_version=result["model_version"],
+        )
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+    except Exception as exc:
+        logger.exception("Error persisting prediction log", exc_info=exc)
+        raise HTTPException(
+            status_code=503,
+            detail=build_error_response(
+                "Error al registrar la predicción.",
+                error_detail("database", "No fue posible guardar el registro de predicción."),
+            ),
+        )
+
+    return MLPredictResponse(
+        prediction=result["prediction"],
+        probability=result["probability"],
+        model_version=result["model_version"],
+        log_id=log.id,
     )

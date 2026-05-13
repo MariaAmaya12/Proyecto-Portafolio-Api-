@@ -50,3 +50,4 @@ htmlcov/
 !docs/
 !tests/
 !models/.gitkeep
+!models/signal_classifier.joblib
