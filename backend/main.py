@@ -40,6 +40,7 @@ from src.signals import evaluate_signals
 from sqlalchemy.orm import Session
 from backend.api.routes_fixed_income import router as fixed_income_router
 from backend.api.routes_options import router as options_router
+from backend.api.routes_stress import router as stress_router
 from backend.api.routes_volatility import router as volatility_router
 from backend.cache import TTLCache
 from backend.database import check_database_connection, create_database_tables, get_db
@@ -93,6 +94,7 @@ _settings = build_settings()
 app = FastAPI(title=_settings.api_title)
 app.include_router(fixed_income_router)
 app.include_router(options_router)
+app.include_router(stress_router)
 app.include_router(volatility_router)
 _market_service = build_market_service()
 _macro_service = build_macro_service()
