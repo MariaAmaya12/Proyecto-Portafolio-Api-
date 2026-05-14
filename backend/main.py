@@ -38,6 +38,7 @@ from src.services.macro_service import MacroService
 from src.services.market_service import MarketService
 from src.signals import evaluate_signals
 from sqlalchemy.orm import Session
+from backend.api.routes_fixed_income import router as fixed_income_router
 from backend.api.routes_volatility import router as volatility_router
 from backend.cache import TTLCache
 from backend.database import check_database_connection, create_database_tables, get_db
@@ -89,6 +90,7 @@ def build_macro_service() -> MacroService:
 
 _settings = build_settings()
 app = FastAPI(title=_settings.api_title)
+app.include_router(fixed_income_router)
 app.include_router(volatility_router)
 _market_service = build_market_service()
 _macro_service = build_macro_service()
