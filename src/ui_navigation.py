@@ -13,6 +13,7 @@ NAVIGATION_PAGES = [
     ("pages/07_senales.py", "Mód.7 Señales"),
     ("pages/08_macro_benchmark.py", "Mód.8 Macro y Benchmark"),
     ("pages/09_panel_decision.py", "Mód.9 Panel de decisión"),
+    ("pages/10_modelos_financieros.py", "Mód.10 Modelos financieros"),
 ]
 
 

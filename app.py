@@ -721,7 +721,7 @@ render_explanation_expander(
         "Observaciones: corresponde a los días efectivos disponibles para calcular retornos y riesgo(con precios forward-filled en días sin trading).",
         "Rendimiento anualizado: resume el desempeño histórico del portafolio durante el periodo seleccionado. Es una medida descriptiva basada en los datos observados y no debe interpretarse como una garantía de rendimiento futuro.",
         "Volatilidad anualizada: mide la dispersión anualizada de los retornos; valores más altos indican mayor variabilidad del portafolio.",
-        "Estos KPIs son una lectura inicial y deben complementarse con los módulos de rendimientos, GARCH, VaR/CVaR, Markowitz y benchmark.",
+        "Estos KPIs son una lectura inicial y deben complementarse con los módulos de rendimientos, GARCH, VaR/CVaR, Markowitz, benchmark y modelos financieros avanzados.",
     ],
 )
 
@@ -850,7 +850,7 @@ render_explanation_expander(
         "Esta portada resume el universo de activos (Seven & i Holdings (3382.T), Couche-Tard (ATD.TO), FEMSA (FEMSAUBD.MX), BP (BP.L) y Carrefour (CA.PA)), el horizonte y un primer perfil riesgo–retorno.",
         "Los KPIs muestran una lectura agregada del portafolio equiponderado: rendimiento anualizado y volatilidad anualizada.",
         "El gráfico base 100 permite ver rápidamente qué activo lidera y cuál es más inestable en el periodo elegido.",
-        "Si quieres profundizar, los módulos M1–M9 separan el análisis en técnica, rendimientos, volatilidad, riesgo, optimización y decisión.",
+        "Si quieres profundizar, los módulos M1–M10 separan el análisis en técnica, rendimientos, volatilidad, riesgo, optimización, decisión y modelos financieros avanzados.",
     ],
 )
 
@@ -872,5 +872,6 @@ with st.expander("Ver módulos del dashboard", expanded=False):
         - **M7. Señales:** alertas automáticas de trading.
         - **M8. Macro y Benchmark:** contexto macro y comparación contra índice global.
         - **M9. Panel de decisión:** integración final para postura de acción.
+        - **M10. Modelos financieros:** modelos avanzados consumidos desde backend, iniciando con volatilidad EWMA.
         """
     )
