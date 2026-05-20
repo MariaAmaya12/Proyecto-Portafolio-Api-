@@ -1,12 +1,17 @@
 import streamlit as st
 import pandas as pd
 
-from src.auth import logout_button, require_login
+from src.app_state import (
+    get_default_portfolio_config,
+    get_portfolio_config,
+    is_portfolio_config_ready,
+    reset_portfolio_config,
+    save_portfolio_config,
+)
+from src.auth import AUTH_SESSION_KEY, AUTH_USER_SESSION_KEY, require_login
 from src.config import (
     APP_TITLE,
-    ASSET_TICKERS,
     DEFAULT_END_DATE,
-    DEFAULT_START_DATE,
     GLOBAL_BENCHMARK,
     ensure_project_dirs,
 )
@@ -29,10 +34,36 @@ from src.ui_components import (
     render_section,
     render_table,
 )
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_style import apply_global_typography
 
 RESERVED_PRICE_COLUMNS = {"index", "date"}
+AVAILABLE_ASSETS = {
+    "Seven & i Holdings": "3382.T",
+    "Alimentation Couche-Tard": "ATD.TO",
+    "FEMSA": "FEMSAUBD.MX",
+    "BP": "BP.L",
+    "Carrefour": "CA.PA",
+}
+ASSET_DESCRIPTIONS = {
+    "Seven & i Holdings": "Retail y tiendas de conveniencia con exposición a Japón.",
+    "Alimentation Couche-Tard": "Operador global de conveniencia y combustibles.",
+    "FEMSA": "Consumo, comercio y bebidas con presencia latinoamericana.",
+    "BP": "Energía integrada con exposición a petróleo, gas y transición energética.",
+    "Carrefour": "Retail alimentario europeo con operación multiformato.",
+}
+HORIZON_OPTIONS = ["6 meses", "1 año", "2 años", "5 años"]
+MODULE_OPTIONS = [
+    "M1 Análisis técnico",
+    "M2 Rendimientos",
+    "M3 GARCH",
+    "M4 CAPM y Beta",
+    "M5 VaR/CVaR",
+    "M6 Markowitz",
+    "M7 Señales",
+    "M8 Macro y Benchmark",
+    "M9 Panel de decisión",
+    "M10 Modelos financieros",
+]
 
 
 def normalize_market_frame(frame: pd.DataFrame, label: str, stop_on_invalid: bool = False) -> tuple[pd.DataFrame, str | None]:
@@ -92,7 +123,7 @@ st.set_page_config(
     page_title=APP_TITLE,
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 apply_global_typography()
 require_login()
@@ -214,6 +245,250 @@ def inject_ui_css():
     )
 
 
+def _inject_home_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        section[data-testid="stSidebar"] {
+            display: none;
+        }
+        div[data-testid="stSidebarCollapsedControl"] {
+            display: none;
+        }
+        .main .block-container {
+            max-width: 1180px;
+            padding-top: 1.25rem;
+        }
+        .home-topbar {
+            align-items: center;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.07);
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1.2rem;
+            padding: 0.85rem 1rem;
+        }
+        .home-topbar-title {
+            color: #0f172a;
+            font-size: 0.95rem;
+            font-weight: 850;
+            line-height: 1.2;
+        }
+        .home-topbar-meta {
+            color: #64748b;
+            font-size: 0.8rem;
+            font-weight: 650;
+            margin-top: 0.18rem;
+        }
+        .portfolio-builder-heading {
+            margin-bottom: 0.35rem;
+            text-align: center;
+        }
+        .portfolio-builder-eyebrow {
+            color: #ef6f61;
+            font-size: 0.76rem;
+            font-weight: 850;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .portfolio-builder-title {
+            color: #0f172a;
+            font-size: 1.55rem;
+            font-weight: 900;
+            letter-spacing: 0;
+            line-height: 1.15;
+            margin: 0.1rem 0 0.25rem;
+        }
+        .portfolio-builder-copy {
+            color: #64748b;
+            font-size: 0.9rem;
+            line-height: 1.45;
+            margin: 0 auto;
+            max-width: 720px;
+        }
+        .portfolio-mode-card {
+            margin-bottom: 0.35rem;
+        }
+        .portfolio-mode-card .stButton > button {
+            align-items: flex-start;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+            color: #0f172a;
+            font-size: 0.86rem;
+            font-weight: 700;
+            justify-content: flex-start;
+            line-height: 1.38;
+            min-height: 5.8rem;
+            padding: 0.9rem 1rem;
+            text-align: left;
+            white-space: pre-line;
+            width: 100%;
+        }
+        .portfolio-mode-card.selected .stButton > button {
+            background: linear-gradient(180deg, #fff7f5 0%, #fff1ee 100%);
+            border-color: #ef6f61;
+            box-shadow: 0 14px 32px rgba(239, 111, 97, 0.18);
+            color: #9f3128;
+            font-weight: 850;
+        }
+        .portfolio-mode-card .stButton > button:hover {
+            border-color: #ef6f61;
+            color: #9f3128;
+            transform: translateY(-1px);
+        }
+        .asset-card-title {
+            color: #0f172a;
+            font-size: 0.94rem;
+            font-weight: 850;
+            line-height: 1.25;
+            min-height: 2.35rem;
+        }
+        .asset-card-ticker {
+            color: #ef6f61;
+            font-size: 0.78rem;
+            font-weight: 850;
+            letter-spacing: 0.04em;
+            margin: 0.25rem 0;
+        }
+        .asset-card-copy {
+            color: #64748b;
+            font-size: 0.78rem;
+            line-height: 1.35;
+            min-height: 3.1rem;
+        }
+        .asset-card-status {
+            border-radius: 999px;
+            display: inline-block;
+            font-size: 0.72rem;
+            font-weight: 850;
+            margin-top: 0.2rem;
+            padding: 0.22rem 0.55rem;
+        }
+        .asset-card-status.selected {
+            background: rgba(239, 111, 97, 0.14);
+            color: #be3f34;
+        }
+        .asset-card-status.idle {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+        .portfolio-config-summary {
+            background: linear-gradient(180deg, #ffffff 0%, #fff7f5 100%);
+            border: 1px solid rgba(239, 111, 97, 0.22);
+            border-radius: 18px;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+            margin: 0.9rem 0 1.2rem;
+            padding: 18px;
+        }
+        .portfolio-config-title {
+            color: #0f172a;
+            font-size: 1.05rem;
+            font-weight: 900;
+            margin-bottom: 0.35rem;
+        }
+        .portfolio-config-line {
+            color: #475569;
+            font-size: 0.88rem;
+            line-height: 1.45;
+            margin: 0.18rem 0;
+        }
+        .module-pill {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 999px;
+            color: #475569;
+            display: inline-block;
+            font-size: 0.76rem;
+            font-weight: 750;
+            margin: 0.18rem 0.2rem 0 0;
+            padding: 0.22rem 0.55rem;
+        }
+        .home-header {
+            margin: 0.6rem auto 1rem 0;
+            max-width: 720px;
+            text-align: left;
+        }
+        .home-header h1 {
+            color: #0f172a;
+            font-size: 2rem;
+            font-weight: 900;
+            letter-spacing: 0;
+            line-height: 1.12;
+            margin: 0 0 0.35rem;
+        }
+        .home-header p {
+            color: #64748b;
+            font-size: 0.98rem;
+            line-height: 1.5;
+            margin: 0 auto 0 0;
+            max-width: 720px;
+        }
+        .step-label {
+            color: #ef6f61;
+            font-size: 0.76rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            margin: 1.1rem 0 0.45rem;
+            text-transform: uppercase;
+        }
+        .choice-card-title {
+            color: #0f172a;
+            font-size: 1rem;
+            font-weight: 900;
+            line-height: 1.25;
+        }
+        .choice-card-copy {
+            color: #64748b;
+            font-size: 0.84rem;
+            line-height: 1.42;
+            margin-top: 0.3rem;
+            min-height: 2.35rem;
+        }
+        .module-card-title {
+            color: #0f172a;
+            font-size: 0.82rem;
+            font-weight: 850;
+            line-height: 1.25;
+            min-height: 1.9rem;
+        }
+        .module-card-code {
+            color: #ef6f61;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.15rem;
+            text-transform: uppercase;
+        }
+        .bottom-action-bar {
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+            margin: 1.5rem 0 0.8rem;
+            padding: 0.85rem 1rem;
+        }
+        .bottom-action-title {
+            color: #475569;
+            font-size: 0.78rem;
+            font-weight: 850;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.6rem;
+            text-transform: uppercase;
+        }
+        div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlockBorderWrapper"] {
+            border-radius: 16px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def sanitize_text(text):
     if text is None:
         return ""
@@ -232,9 +507,401 @@ def summary_chip(label: str, value: str):
     )
 
 
+def get_dates_from_horizon(selected_horizon: str) -> tuple[object, object]:
+    fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
+    offset_by_horizon = {
+        "6 meses": pd.DateOffset(months=6),
+        "1 año": pd.DateOffset(years=1),
+        "2 años": pd.DateOffset(years=2),
+        "5 años": pd.DateOffset(years=5),
+    }
+    start_date = (fecha_fin_ref - offset_by_horizon.get(selected_horizon, pd.DateOffset(years=1))).date()
+    return start_date, fecha_fin_ref.date()
+
+
+def asset_label(asset_name: str) -> str:
+    ticker = AVAILABLE_ASSETS.get(asset_name, asset_name)
+    return f"{asset_name} — {ticker}"
+
+
+def render_saved_portfolio_summary(config: dict) -> None:
+    selected_assets = config.get("selected_asset_names", [])
+    selected_tickers = config.get("selected_tickers", [])
+    selected_weights = config.get("selected_weights", {})
+    selected_modules = config.get("selected_modules", [])
+    module_count = len(selected_modules)
+
+    st.markdown(
+        f"""
+        <div class="portfolio-config-summary">
+            <div class="portfolio-config-title">{sanitize_text(config.get("portfolio_name"))}</div>
+            <div class="portfolio-config-line">
+                <strong>{len(selected_tickers)} activos</strong> · Horizonte {sanitize_text(config.get("selected_horizon"))} · {module_count} módulos seleccionados
+            </div>
+            <div class="portfolio-config-line">Configuración guardada para esta sesión.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    weight_rows = [
+        {
+            "Activo": selected_assets[index] if index < len(selected_assets) else ticker,
+            "Ticker": ticker,
+            "Peso": f"{float(selected_weights.get(ticker, 0.0)):.2%}",
+        }
+        for index, ticker in enumerate(selected_tickers)
+    ]
+    if weight_rows:
+        render_table(pd.DataFrame(weight_rows), hide_index=True)
+
+    if module_count > 4:
+        st.caption(f"{module_count} módulos seleccionados.")
+        with st.expander("Ver módulos seleccionados", expanded=False):
+            st.markdown("\n".join(f"- {sanitize_text(module)}" for module in selected_modules))
+    elif selected_modules:
+        module_html = "".join(
+            f'<span class="module-pill">{sanitize_text(module)}</span>'
+            for module in selected_modules
+        )
+        st.markdown(module_html, unsafe_allow_html=True)
+
+
+def _render_home_header() -> None:
+    st.markdown(
+        """
+        <div class="home-header">
+            <h1>RiskLab USTA</h1>
+            <p>Configura tu portafolio y elige los análisis que quieres ejecutar.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_portfolio_builder_header() -> None:
+    return None
+
+
+def _set_portfolio_mode(mode: str) -> None:
+    st.session_state["portfolio_mode_choice"] = mode
+
+
+def _render_portfolio_mode_selector(current_mode: str) -> str:
+    mode_options = [
+        (
+            "Portafolio base del proyecto",
+            "Portafolio base",
+            "5 activos del proyecto",
+        ),
+        (
+            "Crear portafolio personalizado",
+            "Nuevo portafolio",
+            "Configúralo a tu medida",
+        ),
+    ]
+
+    if "portfolio_mode_choice" not in st.session_state:
+        st.session_state["portfolio_mode_choice"] = current_mode
+
+    st.markdown('<div class="step-label">Paso 1 · Tipo de portafolio</div>', unsafe_allow_html=True)
+    columns = st.columns(2)
+    for column, (mode, title, copy) in zip(columns, mode_options):
+        selected = st.session_state["portfolio_mode_choice"] == mode
+        with column:
+            card_class = "portfolio-mode-card selected" if selected else "portfolio-mode-card"
+            st.markdown(f'<div class="{card_class}">', unsafe_allow_html=True)
+            state_label = "Seleccionado" if selected else "Disponible"
+            st.button(
+                f"{title}\n{copy}\n{state_label}",
+                key=f"portfolio_mode_button_{mode}",
+                type="primary" if selected else "secondary",
+                use_container_width=True,
+                on_click=_set_portfolio_mode,
+                args=(mode,),
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    return st.session_state["portfolio_mode_choice"]
+
+
+def _sync_asset_checkbox_defaults(selected_asset_names: list[str]) -> None:
+    for asset_name, ticker in AVAILABLE_ASSETS.items():
+        key = f"asset_selected_{ticker}"
+        if key not in st.session_state:
+            st.session_state[key] = asset_name in selected_asset_names
+
+
+def _render_asset_card_selector(selected_asset_names: list[str]) -> list[str]:
+    _sync_asset_checkbox_defaults(selected_asset_names)
+    st.markdown("#### Activos disponibles")
+    selected_names: list[str] = []
+    columns = st.columns(5)
+
+    for index, (asset_name, ticker) in enumerate(AVAILABLE_ASSETS.items()):
+        key = f"asset_selected_{ticker}"
+        is_selected = bool(st.session_state.get(key, False))
+        status_class = "selected" if is_selected else "idle"
+        status_label = "Seleccionado" if is_selected else "Disponible"
+
+        with columns[index % len(columns)]:
+            with st.container(border=True):
+                st.markdown(
+                    f"""
+                    <div class="asset-card-title">{sanitize_text(asset_name)}</div>
+                    <div class="asset-card-ticker">{sanitize_text(ticker)}</div>
+                    <div class="asset-card-copy">{sanitize_text(ASSET_DESCRIPTIONS.get(asset_name, "Activo del universo base de RiskLab."))}</div>
+                    <div class="asset-card-status {status_class}">{status_label}</div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.checkbox("Incluir", key=key)
+
+        if bool(st.session_state.get(key, False)):
+            selected_names.append(asset_name)
+
+    return selected_names
+
+
+def _render_weight_editor(selected_names: list[str], current_config: dict) -> tuple[dict[str, float], float]:
+    st.markdown("#### Pesos personalizados")
+    st.caption("Ingresa pesos en escala decimal. Ejemplo: 0.25 equivale a 25%.")
+    custom_weights: dict[str, float] = {}
+
+    for row_start in range(0, len(selected_names), 3):
+        row_columns = st.columns(3)
+        for column, asset_name in zip(row_columns, selected_names[row_start : row_start + 3]):
+            ticker = AVAILABLE_ASSETS[asset_name]
+            default_weight = float(current_config.get("selected_weights", {}).get(ticker, 0.0))
+            with column:
+                with st.container(border=True):
+                    st.markdown(f"**{asset_name}**")
+                    st.caption(ticker)
+                    custom_weights[ticker] = st.number_input(
+                        "Peso",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=min(max(default_weight, 0.0), 1.0),
+                        step=0.01,
+                        format="%.4f",
+                        key=f"custom_weight_{ticker}",
+                    )
+
+    weights_sum = sum(custom_weights.values())
+    if abs(weights_sum - 1.0) <= 0.01:
+        st.success(f"Suma de pesos: {weights_sum:.4f}. Lista para guardar.")
+    else:
+        st.warning(f"Suma de pesos: {weights_sum:.4f}. Debe ser aproximadamente 1.0000.")
+
+    return custom_weights, weights_sum
+
+
+def _set_module_default(module: str, selected_modules: list[str]) -> None:
+    key = f"module_selected_{module.split()[0]}"
+    if key not in st.session_state:
+        st.session_state[key] = module in selected_modules
+
+
+def _render_module_selector(current_modules: list[str]) -> list[str]:
+    st.markdown('<div class="step-label">Módulos de análisis</div>', unsafe_allow_html=True)
+    default_modules = current_modules or MODULE_OPTIONS
+    selected_modules: list[str] = []
+
+    for module in MODULE_OPTIONS:
+        _set_module_default(module, default_modules)
+
+    for row_start in range(0, len(MODULE_OPTIONS), 5):
+        columns = st.columns(5)
+        for column, module in zip(columns, MODULE_OPTIONS[row_start : row_start + 5]):
+            module_code, module_name = module.split(" ", maxsplit=1)
+            key = f"module_selected_{module_code}"
+            is_selected = bool(st.session_state.get(key, False))
+            with column:
+                with st.container(border=True):
+                    st.markdown(
+                        f"""
+                        <div class="module-card-code">{sanitize_text(module_code)}</div>
+                        <div class="module-card-title">{sanitize_text(module_name)}</div>
+                        <div class="asset-card-status {'selected' if is_selected else 'idle'}">{'Activo' if is_selected else 'Inactivo'}</div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    st.checkbox("Incluir", key=key)
+            if bool(st.session_state.get(key, False)):
+                selected_modules.append(module)
+
+    return selected_modules
+
+
+def _render_bottom_actions() -> None:
+    st.markdown(
+        """
+        <div class="bottom-action-bar">
+            <div class="bottom-action-title">Acciones de sesión</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    action_cols = st.columns([1, 1, 1, 5])
+    with action_cols[0]:
+        if st.button("Actualizar datos", key="home_refresh_data", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+    with action_cols[1]:
+        if st.button("Restablecer", use_container_width=True):
+            _reset_home_portfolio_config()
+            st.rerun()
+    with action_cols[2]:
+        if st.button("Cerrar sesión", key="home_logout", use_container_width=True):
+            st.session_state.pop(AUTH_SESSION_KEY, None)
+            st.session_state.pop(AUTH_USER_SESSION_KEY, None)
+            st.rerun()
+
+
+def _reset_home_portfolio_config() -> None:
+    reset_portfolio_config()
+    for ticker in AVAILABLE_ASSETS.values():
+        st.session_state.pop(f"asset_selected_{ticker}", None)
+        st.session_state.pop(f"custom_weight_{ticker}", None)
+    for module in MODULE_OPTIONS:
+        st.session_state.pop(f"module_selected_{module.split()[0]}", None)
+    st.session_state.pop("portfolio_name_input", None)
+    st.session_state.pop("portfolio_weight_mode", None)
+    st.session_state.pop("portfolio_mode_choice", None)
+
+
+def _render_portfolio_builder() -> None:
+    _render_portfolio_builder_header()
+
+    default_config = get_default_portfolio_config()
+    current_config = get_portfolio_config()
+    current_mode = (
+        "Crear portafolio personalizado"
+        if current_config.get("portfolio_name") != default_config["portfolio_name"]
+        else "Portafolio base del proyecto"
+    )
+
+    with st.container(border=True):
+        portfolio_mode = _render_portfolio_mode_selector(current_mode)
+        st.markdown('<div class="step-label">Paso 2 · Configuración</div>', unsafe_allow_html=True)
+
+        name_col, horizon_col = st.columns([1.7, 1])
+        with name_col:
+            portfolio_name = default_config["portfolio_name"]
+            if portfolio_mode == "Crear portafolio personalizado":
+                portfolio_name = st.text_input(
+                    "Nombre del portafolio",
+                    value=(
+                        current_config.get("portfolio_name", "")
+                        if current_mode == "Crear portafolio personalizado"
+                        else ""
+                    ),
+                    placeholder="Ej. Portafolio defensivo LATAM-Europa",
+                    key="portfolio_name_input",
+                ).strip()
+        with horizon_col:
+            selected_horizon = st.selectbox(
+                "Horizonte",
+                HORIZON_OPTIONS,
+                index=HORIZON_OPTIONS.index(current_config.get("selected_horizon", "1 año"))
+                if current_config.get("selected_horizon") in HORIZON_OPTIONS
+                else 1,
+                key="portfolio_horizon_select",
+            )
+
+        if portfolio_mode == "Portafolio base del proyecto":
+            selected_names = default_config["selected_asset_names"]
+            selected_tickers = default_config["selected_tickers"]
+            selected_weights = default_config["selected_weights"]
+            st.info("El portafolio base usa los 5 activos del proyecto con pesos iguales.")
+        else:
+            selected_names = _render_asset_card_selector(current_config.get("selected_asset_names", []))
+            weight_mode = st.radio(
+                "Asignación de pesos",
+                ["Pesos iguales", "Pesos personalizados"],
+                horizontal=True,
+                key="portfolio_weight_mode",
+            )
+            selected_tickers = [AVAILABLE_ASSETS[name] for name in selected_names]
+            if weight_mode == "Pesos iguales" and selected_tickers:
+                equal_weight = 1 / len(selected_tickers)
+                selected_weights = {ticker: equal_weight for ticker in selected_tickers}
+                st.success(f"Pesos iguales calculados automáticamente: {equal_weight:.2%} por activo.")
+            elif weight_mode == "Pesos personalizados" and selected_tickers:
+                selected_weights, weights_sum = _render_weight_editor(selected_names, current_config)
+            else:
+                selected_weights = {}
+                weights_sum = 0.0
+
+        selected_modules = _render_module_selector(current_config.get("selected_modules") or MODULE_OPTIONS)
+
+        st.markdown('<div class="step-label">Paso 3 · Guardar configuración</div>', unsafe_allow_html=True)
+        if st.button("Guardar configuración", type="primary", use_container_width=True):
+            if not selected_modules:
+                st.error("Selecciona al menos un módulo de análisis.")
+                return
+
+            if portfolio_mode == "Portafolio base del proyecto":
+                save_portfolio_config(
+                    {
+                        **default_config,
+                        "selected_horizon": selected_horizon,
+                        "selected_modules": selected_modules,
+                    }
+                )
+                st.success("Configuración del portafolio base guardada.")
+                return
+
+            if not portfolio_name:
+                st.error("Ingresa un nombre para el portafolio.")
+                return
+            if len(selected_names) < 2:
+                st.error("Selecciona mínimo 2 activos para crear un portafolio personalizado.")
+                return
+
+            if st.session_state.get("portfolio_weight_mode") == "Pesos personalizados":
+                weights_sum = sum(selected_weights.values())
+                if any(weight < 0 for weight in selected_weights.values()):
+                    st.error("Los pesos personalizados deben ser no negativos.")
+                    return
+                if abs(weights_sum - 1.0) > 0.01:
+                    st.warning(f"Los pesos deben sumar aproximadamente 1. Suma actual: {weights_sum:.4f}.")
+                    return
+
+            save_portfolio_config(
+                {
+                    "portfolio_name": portfolio_name,
+                    "selected_tickers": selected_tickers,
+                    "selected_asset_names": selected_names,
+                    "selected_weights": selected_weights,
+                    "selected_horizon": selected_horizon,
+                    "selected_modules": selected_modules,
+                }
+            )
+            st.success("Configuración del portafolio personalizado guardada.")
+
+    if is_portfolio_config_ready():
+        render_saved_portfolio_summary(get_portfolio_config())
+
+
+def render_portfolio_configurator() -> None:
+    _render_portfolio_builder()
+
+
+def weighted_portfolio_returns(returns: pd.DataFrame, tickers: list[str], weights_by_ticker: dict) -> pd.Series:
+    weights = pd.Series(
+        {ticker: float(weights_by_ticker.get(ticker, 0.0)) for ticker in tickers},
+        dtype=float,
+    )
+    if weights.sum() <= 0:
+        return equal_weight_portfolio(returns)
+
+    weights = weights / weights.sum()
+    return returns.loc[:, tickers].mul(weights, axis=1).sum(axis=1)
+
+
 inject_ui_css()
-render_sidebar_navigation()
-logout_button()
+_inject_home_styles()
 
 
 # ---------------------------------------------------------
@@ -414,117 +1081,26 @@ def load_market_data_with_business_day_fallback(tickers, start_date, end_date, h
 # ---------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------
-all_tickers = list(ASSET_TICKERS.values())
-ASSET_DISPLAY_LABELS = {
-    "CA.PA": "Carrefour (CA.PA)",
-    "3382.T": "Seven & i Holdings (3382.T)",
-    "ATD.TO": "Alimentation Couche-Tard (ATD.TO)",
-    "FEMSAUBD.MX": "FEMSA (FEMSAUBD.MX)",
-    "BP.L": "BP (BP.L)",
-}
-default_home_tickers = [
-    ticker
-    for ticker in ["3382.T", "ATD.TO", "FEMSAUBD.MX", "BP.L", "CA.PA"]
-    if ticker in all_tickers
-]
-if "home_selected_tickers" not in st.session_state:
-    st.session_state["home_selected_tickers"] = default_home_tickers
-
-
-def asset_display_label(ticker: str) -> str:
-    return ASSET_DISPLAY_LABELS.get(ticker, ticker)
-
-
-def toggle_home_ticker(ticker: str) -> None:
-    selected = set(st.session_state.get("home_selected_tickers", default_home_tickers))
-    if ticker in selected:
-        selected.remove(ticker)
-    else:
-        selected.add(ticker)
-
-    st.session_state["home_selected_tickers"] = [
-        item for item in all_tickers if item in selected
-    ]
-
-
 def default_visible_trace_tickers(tickers: list[str]) -> list[str]:
     preferred = ["BP.L", "CA.PA"]
     if all(ticker in tickers for ticker in preferred):
         return preferred
     return tickers[:2]
 
-with st.sidebar:
-    horizonte = st.selectbox(
-        "Horizonte de análisis",
-        [
-            "1 mes",
-            "Trimestre",
-            "Semestre",
-            "1 año",
-            "2 años",
-            "3 años",
-            "5 años",
-            "Personalizado",
-        ],
-        index=3,
-    )
+portfolio_config = get_portfolio_config()
+default_portfolio_config = get_default_portfolio_config()
+_render_home_header()
+render_portfolio_configurator()
 
-    fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
+portfolio_config = get_portfolio_config()
+if not is_portfolio_config_ready():
+    _render_bottom_actions()
+    st.stop()
 
-    if horizonte == "1 mes":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Trimestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Semestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "1 año":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "2 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "3 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "5 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
-        end_date = fecha_fin_ref.date()
-    else:
-        start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE)
-        end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE)
-
-    st.divider()
-    if st.button("Actualizar datos", key="home_refresh_data", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-
-    st.divider()
-    st.subheader("Selección de activos")
-
-    if st.button("Restablecer selección", use_container_width=True):
-        st.session_state["home_selected_tickers"] = default_home_tickers
-        st.rerun()
-
-    for ticker in all_tickers:
-        is_selected = ticker in st.session_state["home_selected_tickers"]
-        if st.button(
-            asset_display_label(ticker),
-            key=f"home_asset_chip_{ticker}",
-            type="primary" if is_selected else "secondary",
-            use_container_width=True,
-        ):
-            toggle_home_ticker(ticker)
-            st.rerun()
-
-    selected_tickers = st.session_state["home_selected_tickers"]
-    st.caption(f"{len(selected_tickers)} de {len(all_tickers)} activos seleccionados.")
-
-
-
-
+selected_tickers = portfolio_config.get("selected_tickers") or default_portfolio_config["selected_tickers"]
+selected_weights = portfolio_config.get("selected_weights") or default_portfolio_config["selected_weights"]
+horizonte = portfolio_config.get("selected_horizon") or default_portfolio_config["selected_horizon"]
+start_date, end_date = get_dates_from_horizon(horizonte)
 # ---------------------------------------------------------
 # Validaciones
 # ---------------------------------------------------------
@@ -536,13 +1112,6 @@ if not selected_tickers:
     st.warning("Selecciona al menos un activo para continuar.")
     st.stop()
 
-
-# ---------------------------------------------------------
-# Encabezado principal
-# ---------------------------------------------------------
-render_page_title(
-    APP_TITLE,
-)
 
 # Periodo y contexto se muestran de forma compacta en el resumen ejecutivo.
 
@@ -640,7 +1209,7 @@ if len(valid_tickers) == 1:
 if effective_end_date != end_date:
     st.info(f"Se ajustó la fecha final efectiva a {effective_end_date} para encontrar datos disponibles.")
 
-portfolio_returns = equal_weight_portfolio(returns)
+portfolio_returns = weighted_portfolio_returns(returns, valid_tickers, selected_weights)
 if portfolio_returns.empty:
     st.error("No fue posible calcular retornos efectivos del portafolio con los activos válidos.")
     st.stop()
@@ -663,7 +1232,7 @@ vol_delta_type = "neg" if ann_vol > 0.20 else "neu"
 st.markdown("### Resumen ")
 render_section(
     
-    "Este bloque resume los activos seleccionados, la ventana temporal analizada y el comportamiento agregado del portafolio equiponderado.",
+    "Este bloque resume los activos seleccionados, la ventana temporal analizada y el comportamiento agregado del portafolio configurado.",
 )
 
 info_col1, info_col2, info_col3 = st.columns([1.6, 1, 0.9])
@@ -705,7 +1274,7 @@ with metric_col3:
         f"{ann_return:.2%}",
         delta=ret_delta,
         delta_type=ret_delta_type,
-        caption="Retorno estimado del portafolio equiponderado",
+        caption="Retorno estimado del portafolio configurado",
     )
 
 with metric_col4:
@@ -769,7 +1338,7 @@ else:
     st.plotly_chart(fig_norm, width="stretch")
 st.caption(
     "Nota visual: la continuidad de las líneas se suaviza solo para la visualización, "
-    "debido a calendarios bursátiles distintos entre mercados. Esto no afecta cálculos financieros ni métricas del dashboard."
+    "debido a calendarios bursátiles distintos entre mercados. Esto no afecta cálculos financieros ni métricas de la aplicación."
 )
 
 render_explanation_expander(
@@ -788,7 +1357,7 @@ render_explanation_expander(
 # ---------------------------------------------------------
 # Resumen del portafolio
 # ---------------------------------------------------------
-st.markdown("### Resumen rápido del portafolio equiponderado")
+st.markdown("### Resumen rápido del portafolio configurado")
 render_section(
     "Métricas descriptivas del portafolio",
     "Este resumen concentra medidas básicas que ayudan a caracterizar retorno medio y dispersión del portafolio construido con pesos iguales.",
@@ -845,13 +1414,13 @@ with st.expander("Últimos precios", expanded=False):
 st.markdown("### Interpretación general")
 
 st.info(
-    "La portada resume activos, periodo, rendimiento, volatilidad y evolución relativa para una primera lectura del portafolio equiponderado."
+    "La portada resume activos, periodo, rendimiento, volatilidad y evolución relativa para una primera lectura del portafolio configurado."
 )
 render_explanation_expander(
     "Cómo interpretar la portada",
     [
         "Esta portada resume el universo de activos (Seven & i Holdings (3382.T), Couche-Tard (ATD.TO), FEMSA (FEMSAUBD.MX), BP (BP.L) y Carrefour (CA.PA)), el horizonte y un primer perfil riesgo–retorno.",
-        "Los KPIs muestran una lectura agregada del portafolio equiponderado: rendimiento anualizado y volatilidad anualizada.",
+        "Los KPIs muestran una lectura agregada del portafolio configurado: rendimiento anualizado y volatilidad anualizada.",
         "El gráfico base 100 permite ver rápidamente qué activo lidera y cuál es más inestable en el periodo elegido.",
         "Si quieres profundizar, los módulos M1–M10 separan el análisis en técnica, rendimientos, volatilidad, riesgo, optimización, decisión y modelos financieros avanzados.",
     ],
@@ -859,10 +1428,10 @@ render_explanation_expander(
 
 
 # ---------------------------------------------------------
-# Estructura del dashboard
+# Estructura de la aplicación
 # ---------------------------------------------------------
-st.markdown("### Estructura del dashboard")
-with st.expander("Ver módulos del dashboard", expanded=False):
+st.markdown("### Estructura de la aplicación")
+with st.expander("Ver módulos de la aplicación", expanded=False):
     st.markdown(
         """
         - **Contextualización:** lectura cualitativa y rol de los activos en el portafolio.
@@ -878,3 +1447,5 @@ with st.expander("Ver módulos del dashboard", expanded=False):
         - **M10. Modelos financieros:** modelos avanzados consumidos desde backend, iniciando con volatilidad EWMA.
         """
     )
+
+_render_bottom_actions()
