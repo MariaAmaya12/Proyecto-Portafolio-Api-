@@ -64,6 +64,20 @@ MODULE_OPTIONS = [
     "M9 Panel de decisión",
     "M10 Modelos financieros",
 ]
+MODULE_PAGE_LINKS = {
+    "M1 Análisis técnico": "pages/01_tecnico.py",
+    "M2 Rendimientos": "pages/02_rendimientos.py",
+    "M3 GARCH": "pages/03_garch.py",
+    "M4 CAPM y Beta": "pages/04_capm.py",
+    "M5 VaR/CVaR": "pages/05_var_cvar.py",
+    "M6 Markowitz": "pages/06_markowitz.py",
+    "M7 Señales": "pages/07_senales.py",
+    "M8 Macro y Benchmark": "pages/08_macro_benchmark.py",
+    "M9 Panel de decisión": "pages/09_panel_decision.py",
+    "M10 Modelos financieros": "pages/10_modelos_financieros.py",
+}
+SHOW_PORTFOLIO_CONFIG_SESSION_KEY = "show_portfolio_configurator"
+PORTFOLIO_SAVE_MESSAGE_SESSION_KEY = "portfolio_save_message"
 
 
 def normalize_market_frame(frame: pd.DataFrame, label: str, stop_on_invalid: bool = False) -> tuple[pd.DataFrame, str | None]:
@@ -480,6 +494,71 @@ def _inject_home_styles() -> None:
             margin-bottom: 0.6rem;
             text-transform: uppercase;
         }
+        .active-app-shell {
+            background: #ffffff;
+            border: 1px solid rgba(239, 111, 97, 0.22);
+            border-radius: 20px;
+            box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08);
+            margin: 0.8rem 0 1rem;
+            padding: 1rem;
+        }
+        .active-app-title {
+            color: #0f172a;
+            font-size: 1.05rem;
+            font-weight: 900;
+            line-height: 1.2;
+        }
+        .active-app-meta {
+            color: #64748b;
+            font-size: 0.84rem;
+            font-weight: 650;
+            line-height: 1.35;
+            margin-top: 0.2rem;
+        }
+        .module-nav-shell {
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+            margin: 0.55rem 0 1rem;
+            padding: 0.85rem;
+        }
+        .module-nav-title {
+            color: #475569;
+            font-size: 0.76rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.6rem;
+            text-transform: uppercase;
+        }
+        .module-nav-shell a {
+            border: 1px solid #e2e8f0;
+            border-radius: 999px;
+            color: #334155;
+            font-size: 0.82rem;
+            font-weight: 800;
+            padding: 0.35rem 0.65rem;
+        }
+        .module-nav-shell a:hover {
+            border-color: #ef6f61;
+            color: #be3f34;
+        }
+        .portfolio-options-heading {
+            color: #0f172a;
+            font-size: 0.98rem;
+            font-weight: 850;
+            margin-bottom: 0.15rem;
+        }
+        .portfolio-options-subtitle {
+            color: #64748b;
+            font-size: 0.78rem;
+            line-height: 1.35;
+            margin-bottom: 0.8rem;
+        }
+        .portfolio-options-divider {
+            border-top: 1px solid #e2e8f0;
+            margin: 0.85rem 0;
+        }
         div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlockBorderWrapper"] {
             border-radius: 16px;
         }
@@ -760,6 +839,8 @@ def _render_bottom_actions() -> None:
 
 def _reset_home_portfolio_config() -> None:
     reset_portfolio_config()
+    st.session_state[SHOW_PORTFOLIO_CONFIG_SESSION_KEY] = True
+    st.session_state.pop(PORTFOLIO_SAVE_MESSAGE_SESSION_KEY, None)
     for ticker in AVAILABLE_ASSETS.values():
         st.session_state.pop(f"asset_selected_{ticker}", None)
         st.session_state.pop(f"custom_weight_{ticker}", None)
@@ -768,6 +849,107 @@ def _reset_home_portfolio_config() -> None:
     st.session_state.pop("portfolio_name_input", None)
     st.session_state.pop("portfolio_weight_mode", None)
     st.session_state.pop("portfolio_mode_choice", None)
+
+
+def _hide_portfolio_config(message: str) -> None:
+    st.session_state[SHOW_PORTFOLIO_CONFIG_SESSION_KEY] = False
+    st.session_state[PORTFOLIO_SAVE_MESSAGE_SESSION_KEY] = message
+    st.rerun()
+
+
+def _show_transient_message(message: str) -> None:
+    toast = getattr(st, "toast", None)
+    if toast is not None:
+        toast(message)
+    else:
+        st.caption(message)
+
+
+def _show_portfolio_config() -> None:
+    st.session_state[SHOW_PORTFOLIO_CONFIG_SESSION_KEY] = True
+
+
+def _should_show_portfolio_config() -> bool:
+    if not is_portfolio_config_ready():
+        return True
+    return bool(st.session_state.get(SHOW_PORTFOLIO_CONFIG_SESSION_KEY, False))
+
+
+def _render_active_portfolio_panel(config: dict) -> None:
+    selected_tickers = config.get("selected_tickers", [])
+    selected_modules = config.get("selected_modules", [])
+    st.markdown(
+        f"""
+        <div class="active-app-shell">
+            <div class="active-app-title">{sanitize_text(config.get("portfolio_name", "Portafolio activo"))}</div>
+            <div class="active-app-meta">
+                {len(selected_tickers)} activos · Horizonte {sanitize_text(config.get("selected_horizon"))} · {len(selected_modules)} módulos · Benchmark {sanitize_text(GLOBAL_BENCHMARK)}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_portfolio_options_panel() -> None:
+    with st.container(border=True):
+        st.markdown(
+            """
+            <div class="portfolio-options-heading">Opciones del portafolio</div>
+            <div class="portfolio-options-subtitle">Ajustes rápidos para esta sesión.</div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.button(
+            "Editar configuración",
+            type="primary",
+            use_container_width=True,
+            on_click=_show_portfolio_config,
+        )
+        if st.button("Actualizar datos", key="home_refresh_data_active", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+
+        st.markdown('<div class="portfolio-options-divider"></div>', unsafe_allow_html=True)
+
+        if st.button("Restablecer", key="home_reset_active", use_container_width=True):
+            _reset_home_portfolio_config()
+            st.rerun()
+        if st.button("Cerrar sesión", key="home_logout_active", use_container_width=True):
+            st.session_state.pop(AUTH_SESSION_KEY, None)
+            st.session_state.pop(AUTH_USER_SESSION_KEY, None)
+            st.rerun()
+
+
+def _module_short_label(module: str) -> str:
+    code, name = module.split(" ", maxsplit=1)
+    return f"{code} {name}"
+
+
+def _render_selected_module_navigation(config: dict) -> None:
+    selected_modules = [
+        module
+        for module in config.get("selected_modules", [])
+        if module in MODULE_PAGE_LINKS
+    ]
+    if not selected_modules:
+        return
+
+    st.markdown(
+        """
+        <div class="module-nav-shell">
+            <div class="module-nav-title">Módulos seleccionados</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    columns = st.columns(min(len(selected_modules), 5))
+    for index, module in enumerate(selected_modules):
+        with columns[index % len(columns)]:
+            st.page_link(
+                MODULE_PAGE_LINKS[module],
+                label=_module_short_label(module),
+            )
 
 
 def _render_portfolio_builder() -> None:
@@ -849,8 +1031,7 @@ def _render_portfolio_builder() -> None:
                         "selected_modules": selected_modules,
                     }
                 )
-                st.success("Configuración del portafolio base guardada.")
-                return
+                _hide_portfolio_config("Configuración del portafolio base guardada.")
 
             if not portfolio_name:
                 st.error("Ingresa un nombre para el portafolio.")
@@ -878,7 +1059,7 @@ def _render_portfolio_builder() -> None:
                     "selected_modules": selected_modules,
                 }
             )
-            st.success("Configuración del portafolio personalizado guardada.")
+            _hide_portfolio_config("Configuración del portafolio personalizado guardada.")
 
     if is_portfolio_config_ready():
         render_saved_portfolio_summary(get_portfolio_config())
@@ -1089,13 +1270,19 @@ def default_visible_trace_tickers(tickers: list[str]) -> list[str]:
 
 portfolio_config = get_portfolio_config()
 default_portfolio_config = get_default_portfolio_config()
-_render_home_header()
-render_portfolio_configurator()
 
 portfolio_config = get_portfolio_config()
-if not is_portfolio_config_ready():
+if _should_show_portfolio_config():
+    _render_home_header()
+    render_portfolio_configurator()
     _render_bottom_actions()
     st.stop()
+
+save_message = st.session_state.pop(PORTFOLIO_SAVE_MESSAGE_SESSION_KEY, None)
+if save_message:
+    _show_transient_message(save_message)
+
+_render_active_portfolio_panel(portfolio_config)
 
 selected_tickers = portfolio_config.get("selected_tickers") or default_portfolio_config["selected_tickers"]
 selected_weights = portfolio_config.get("selected_weights") or default_portfolio_config["selected_weights"]
@@ -1226,132 +1413,98 @@ vol_delta = "Mayor dispersión" if ann_vol > 0.20 else "Dispersión moderada"
 vol_delta_type = "neg" if ann_vol > 0.20 else "neu"
 
 
-# ---------------------------------------------------------
-# Resumen ejecutivo
-# ---------------------------------------------------------
-st.markdown("### Resumen ")
-render_section(
-    
-    "Este bloque resume los activos seleccionados, la ventana temporal analizada y el comportamiento agregado del portafolio configurado.",
-)
+main_col, options_col = st.columns([3.2, 1.05], gap="large")
 
-info_col1, info_col2, info_col3 = st.columns([1.6, 1, 0.9])
+with main_col:
+    _render_selected_module_navigation(portfolio_config)
 
-with info_col1:
-    summary_chip("Activo(s)", ", ".join(valid_tickers))
+    # ---------------------------------------------------------
+    # Resumen ejecutivo
+    # ---------------------------------------------------------
+    st.markdown("### Resumen corto")
 
-with info_col2:
-    summary_chip("Periodo", f"{start_date} a {effective_end_date}")
+    info_col1, info_col2, info_col3 = st.columns([1.6, 1, 0.9])
 
-with info_col3:
-    summary_chip("Benchmark", GLOBAL_BENCHMARK)
+    with info_col1:
+        summary_chip("Activo(s)", ", ".join(valid_tickers))
 
+    with info_col2:
+        summary_chip("Periodo", f"{start_date} a {effective_end_date}")
 
-# ---------------------------------------------------------
-# Métricas principales
-# ---------------------------------------------------------
-st.markdown("### KPIs del portafolio")
-
-metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-
-with metric_col1:
-    kpi_card(
-        "Número de activos",
-        str(asset_count),
-        caption="Activos incluidos en el análisis",
-    )
-
-with metric_col2:
-    kpi_card(
-        "Observaciones",
-        str(obs_count),
-        caption="Días efectivos usados para retorno y riesgo",
-    )
-
-with metric_col3:
-    kpi_card(
-        "Rendimiento anualizado",
-        f"{ann_return:.2%}",
-        delta=ret_delta,
-        delta_type=ret_delta_type,
-        caption="Retorno estimado del portafolio configurado",
-    )
-
-with metric_col4:
-    kpi_card(
-        "Volatilidad anualizada",
-        f"{ann_vol:.2%}",
-        delta=vol_delta,
-        delta_type=vol_delta_type,
-        caption="Riesgo agregado estimado del portafolio",
-    )
-
-render_explanation_expander(
-    "Cómo interpretar los KPIs del portafolio",
-    [
-        "Número de activos: indica cuántos activos están incluidos en el análisis actual.",
-        "Observaciones: corresponde a los días efectivos disponibles para calcular retornos y riesgo(con precios forward-filled en días sin trading).",
-        "Rendimiento anualizado: resume el desempeño histórico del portafolio durante el periodo seleccionado. Es una medida descriptiva basada en los datos observados y no debe interpretarse como una garantía de rendimiento futuro.",
-        "Volatilidad anualizada: mide la dispersión anualizada de los retornos; valores más altos indican mayor variabilidad del portafolio.",
-        "Estos KPIs son una lectura inicial y deben complementarse con los módulos de rendimientos, GARCH, VaR/CVaR, Markowitz, benchmark y modelos financieros avanzados.",
-    ],
-)
+    with info_col3:
+        summary_chip("Benchmark", GLOBAL_BENCHMARK)
 
 
-# ---------------------------------------------------------
-# Gráfico principal
-# ---------------------------------------------------------
-st.markdown("### Precios normalizados (base 100)")
-render_section(
-    "Evolución comparativa de los activos",
-    "El gráfico permite comparar visualmente la trayectoria relativa de precios desde una base común.",
-)
+    # ---------------------------------------------------------
+    # Gráfico principal
+    # ---------------------------------------------------------
+    st.markdown("### Precios normalizados (base 100)")
 
-# Solo para visualizacion: suaviza huecos por calendarios bursatiles distintos.
-close_prices_chart = close_prices.ffill()
-close_prices_chart = close_prices_chart.copy()
+    # Solo para visualizacion: suaviza huecos por calendarios bursatiles distintos.
+    close_prices_chart = close_prices.ffill()
+    close_prices_chart = close_prices_chart.copy()
 
-date_col = next((col for col in ("Date", "date", "index") if col in close_prices_chart.columns), None)
-if date_col is not None:
-    parsed_dates = pd.to_datetime(close_prices_chart[date_col], errors="coerce")
-    if parsed_dates.notna().all():
-        close_prices_chart = close_prices_chart.drop(columns=[date_col])
-        close_prices_chart.index = parsed_dates
+    date_col = next((col for col in ("Date", "date", "index") if col in close_prices_chart.columns), None)
+    if date_col is not None:
+        parsed_dates = pd.to_datetime(close_prices_chart[date_col], errors="coerce")
+        if parsed_dates.notna().all():
+            close_prices_chart = close_prices_chart.drop(columns=[date_col])
+            close_prices_chart.index = parsed_dates
+        else:
+            close_prices_chart = close_prices_chart.drop(columns=[date_col])
+
+    if isinstance(close_prices_chart.index, pd.DatetimeIndex):
+        close_prices_chart = close_prices_chart[~close_prices_chart.index.isna()]
     else:
-        close_prices_chart = close_prices_chart.drop(columns=[date_col])
+        close_prices_chart = close_prices_chart.iloc[0:0]
 
-if isinstance(close_prices_chart.index, pd.DatetimeIndex):
-    close_prices_chart = close_prices_chart[~close_prices_chart.index.isna()]
-else:
-    close_prices_chart = close_prices_chart.iloc[0:0]
+    close_prices_chart = close_prices_chart.apply(pd.to_numeric, errors="coerce")
+    close_prices_chart = close_prices_chart.dropna(axis=1, how="all")
+    if close_prices_chart.empty or close_prices_chart.dropna(how="all").empty:
+        st.warning("No hay datos numéricos para graficar base 100")
+    else:
+        fig_norm = plot_normalized_prices(close_prices_chart)
+        initially_visible_tickers = default_visible_trace_tickers(list(close_prices_chart.columns))
+        for trace in fig_norm.data:
+            if trace.name not in initially_visible_tickers:
+                trace.visible = "legendonly"
+        st.plotly_chart(fig_norm, width="stretch")
+    st.caption("Base 100 para comparar desempeño relativo entre los activos seleccionados.")
 
-close_prices_chart = close_prices_chart.apply(pd.to_numeric, errors="coerce")
-close_prices_chart = close_prices_chart.dropna(axis=1, how="all")
-if close_prices_chart.empty or close_prices_chart.dropna(how="all").empty:
-    st.warning("No hay datos numéricos para graficar base 100")
-else:
-    fig_norm = plot_normalized_prices(close_prices_chart)
-    initially_visible_tickers = default_visible_trace_tickers(list(close_prices_chart.columns))
-    for trace in fig_norm.data:
-        if trace.name not in initially_visible_tickers:
-            trace.visible = "legendonly"
-    st.plotly_chart(fig_norm, width="stretch")
-st.caption(
-    "Nota visual: la continuidad de las líneas se suaviza solo para la visualización, "
-    "debido a calendarios bursátiles distintos entre mercados. Esto no afecta cálculos financieros ni métricas de la aplicación."
-)
 
-render_explanation_expander(
-    "Cómo interpretar el gráfico base 100",
-    [
-        "Todas las líneas arrancan en 100 (misma base) para comparar desempeño relativo, no precios reales.",
-        "Si un activo como BP (BP.L) termina en 120, significa que subió aprox. +20% desde el inicio del periodo seleccionado.",
-        "Si un activo como Seven & i Holdings (3382.T) termina en 90, significa que cayó aprox. −10% desde el inicio del periodo.",
-        "La curva que esté más arriba al final del periodo fue la de mejor rendimiento relativo en esa ventana.",
-        "Una serie con subidas y bajadas más fuertes (por ejemplo, Carrefour (CA.PA) si presenta picos pronunciados) suele indicar mayor volatilidad.",
-        "Nota: cuando comparas mercados distintos (Tokio, Toronto, México, Londres, París), puede haber ajustes visuales por calendario; esto no cambia las métricas.",
-    ],
-)
+    # ---------------------------------------------------------
+    # Últimos precios
+    # ---------------------------------------------------------
+    st.markdown("### Últimos precios del portafolio")
+    asset_names_by_ticker = dict(
+        zip(
+            portfolio_config.get("selected_tickers", []),
+            portfolio_config.get("selected_asset_names", []),
+        )
+    )
+    latest_prices = close_prices.tail(1)
+    if latest_prices.empty:
+        st.warning("No hay precios recientes disponibles para el portafolio.")
+    else:
+        latest_date = latest_prices.index[-1]
+        latest_prices_table = pd.DataFrame(
+            [
+                {
+                    "Activo": asset_names_by_ticker.get(ticker, ticker),
+                    "Ticker": ticker,
+                    "Fecha": latest_date.date() if hasattr(latest_date, "date") else latest_date,
+                    "Último precio": latest_prices[ticker].iloc[-1],
+                }
+                for ticker in valid_tickers
+                if ticker in latest_prices.columns
+            ]
+        )
+        render_table(latest_prices_table.style.format({"Último precio": "{:.2f}"}))
+
+with options_col:
+    _render_portfolio_options_panel()
+
+st.stop()
 
 
 # ---------------------------------------------------------
@@ -1447,5 +1600,3 @@ with st.expander("Ver módulos de la aplicación", expanded=False):
         - **M10. Modelos financieros:** modelos avanzados consumidos desde backend, iniciando con volatilidad EWMA.
         """
     )
-
-_render_bottom_actions()
