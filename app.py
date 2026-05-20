@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 
+from src.auth import logout_button, require_login
 from src.config import (
     APP_TITLE,
     ASSET_TICKERS,
@@ -94,6 +95,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 apply_global_typography()
+require_login()
 
 
 # ---------------------------------------------------------
@@ -232,6 +234,7 @@ def summary_chip(label: str, value: str):
 
 inject_ui_css()
 render_sidebar_navigation()
+logout_button()
 
 
 # ---------------------------------------------------------
