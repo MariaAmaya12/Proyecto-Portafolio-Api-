@@ -891,7 +891,7 @@ def _render_active_portfolio_panel(config: dict) -> None:
     )
 
 
-def _render_portfolio_options_panel() -> None:
+def _render_portfolio_options_panel(config: dict) -> None:
     with st.container(border=True):
         st.markdown(
             """
@@ -910,8 +910,6 @@ def _render_portfolio_options_panel() -> None:
             st.cache_data.clear()
             st.rerun()
 
-        st.markdown('<div class="portfolio-options-divider"></div>', unsafe_allow_html=True)
-
         if st.button("Restablecer", key="home_reset_active", use_container_width=True):
             _reset_home_portfolio_config()
             st.rerun()
@@ -919,6 +917,8 @@ def _render_portfolio_options_panel() -> None:
             st.session_state.pop(AUTH_SESSION_KEY, None)
             st.session_state.pop(AUTH_USER_SESSION_KEY, None)
             st.rerun()
+
+        _render_selected_module_navigation(config)
 
 
 def _module_short_label(module: str) -> str:
@@ -937,19 +937,19 @@ def _render_selected_module_navigation(config: dict) -> None:
 
     st.markdown(
         """
-        <div class="module-nav-shell">
+        <div class="portfolio-options-divider"></div>
+        <div class="module-nav-list">
             <div class="module-nav-title">Módulos seleccionados</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    columns = st.columns(min(len(selected_modules), 5))
-    for index, module in enumerate(selected_modules):
-        with columns[index % len(columns)]:
-            st.page_link(
-                MODULE_PAGE_LINKS[module],
-                label=_module_short_label(module),
-            )
+    for module in selected_modules:
+        st.page_link(
+            MODULE_PAGE_LINKS[module],
+            label=_module_short_label(module),
+            use_container_width=True,
+        )
 
 
 def _render_portfolio_builder() -> None:
@@ -1416,8 +1416,6 @@ vol_delta_type = "neg" if ann_vol > 0.20 else "neu"
 main_col, options_col = st.columns([3.2, 1.05], gap="large")
 
 with main_col:
-    _render_selected_module_navigation(portfolio_config)
-
     # ---------------------------------------------------------
     # Resumen ejecutivo
     # ---------------------------------------------------------
@@ -1502,7 +1500,7 @@ with main_col:
         render_table(latest_prices_table.style.format({"Último precio": "{:.2f}"}))
 
 with options_col:
-    _render_portfolio_options_panel()
+    _render_portfolio_options_panel(portfolio_config)
 
 st.stop()
 
