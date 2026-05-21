@@ -23,5 +23,7 @@ services:
       BACKEND_API_BASE_URL: http://backend:8000
       APP_ENV: development
       LOG_LEVEL: INFO
+    volumes:
+      - ./data:/app/data
     depends_on:
       - backend
