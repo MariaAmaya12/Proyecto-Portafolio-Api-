@@ -440,6 +440,46 @@ def _inject_home_styles() -> None:
             box-shadow: 0 14px 32px rgba(239, 111, 97, 0.12);
             transform: translateY(-1px);
         }
+        div[class*="st-key-saved_portfolio_click_"] {
+            position: relative;
+        }
+        div[class*="st-key-saved_portfolio_click_"] .stButton {
+            bottom: 0;
+            left: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+            z-index: 2;
+        }
+        div[class*="st-key-saved_portfolio_click_"] .stButton > button {
+            height: 100%;
+            min-height: 100%;
+            opacity: 0;
+            width: 100%;
+        }
+        div[class*="st-key-saved_portfolio_click_"]:has(.stButton > button:hover) .saved-portfolio-card {
+            border-color: #ef6f61;
+            box-shadow: 0 14px 32px rgba(239, 111, 97, 0.12);
+            transform: translateY(-1px);
+        }
+        div[class*="st-key-saved_portfolio_click_"] div[class*="st-key-select_saved_portfolio_"] {
+            bottom: 0;
+            left: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+            z-index: 2;
+        }
+        div[class*="st-key-saved_portfolio_click_"] div[class*="st-key-select_saved_portfolio_"] .stButton {
+            height: 100%;
+            position: static;
+        }
+        div[class*="st-key-saved_portfolio_click_"] div[class*="st-key-select_saved_portfolio_"] .stButton > button {
+            height: 100%;
+            min-height: 100%;
+            opacity: 0;
+            width: 100%;
+        }
         .saved-portfolio-name {
             color: #0f172a;
             font-size: 1rem;
@@ -955,7 +995,16 @@ def _start_new_portfolio() -> None:
 
 
 def _select_saved_portfolio(portfolio_id: str) -> None:
+    if st.session_state.get("selected_saved_portfolio_id") != portfolio_id:
+        _clear_saved_portfolio_delete_state()
     st.session_state["selected_saved_portfolio_id"] = portfolio_id
+
+
+def _clear_saved_portfolio_delete_state() -> None:
+    st.session_state.pop("saved_portfolio_delete_options_id", None)
+    for key in list(st.session_state.keys()):
+        if str(key).startswith("confirm_delete_portfolio_"):
+            st.session_state.pop(key, None)
 
 
 def render_saved_portfolio_card(portfolio: dict, is_selected: bool, index: int) -> None:
@@ -966,9 +1015,10 @@ def render_saved_portfolio_card(portfolio: dict, is_selected: bool, index: int) 
     state_class = "selected" if is_selected else "idle"
     state_label = "Seleccionado" if is_selected else "Disponible"
 
-    st.markdown(
-        f"""
-        <a class="saved-portfolio-link" href="?saved_portfolio_id={sanitize_text(portfolio_id)}">
+    with st.container(key=f"saved_portfolio_click_{index}"):
+        st.markdown(
+            f"""
+            <div class="saved-portfolio-link">
             <div class="{card_class}">
                 <div class="saved-portfolio-name">{sanitize_text(portfolio.get("portfolio_name", "Portafolio sin nombre"))}</div>
                 <div class="saved-portfolio-state {state_class}">{state_label}</div>
@@ -977,10 +1027,65 @@ def render_saved_portfolio_card(portfolio: dict, is_selected: bool, index: int) 
                 <div class="saved-portfolio-meta"><strong>Módulos:</strong> {len(portfolio.get("selected_modules") or [])}</div>
                 <div class="saved-portfolio-meta"><strong>Última actualización:</strong> {sanitize_text(_portfolio_saved_date(portfolio))}</div>
             </div>
-        </a>
-        """,
-        unsafe_allow_html=True,
-    )
+        </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            f"Seleccionar {portfolio.get('portfolio_name', 'portafolio')}",
+            key=f"select_saved_portfolio_{index}",
+            use_container_width=True,
+        ):
+            _select_saved_portfolio(portfolio_id)
+            st.rerun()
+
+
+def render_selected_saved_portfolio_actions(portfolio_id: str, index: int) -> None:
+    delete_options_active = st.session_state.get("saved_portfolio_delete_options_id") == portfolio_id
+    action_cols = st.columns([1.25, 1, 0.75, 2])
+    with action_cols[0]:
+        if st.button(
+            "Continuar con este portafolio",
+            type="primary",
+            key=f"continue_saved_portfolio_{index}",
+            use_container_width=True,
+        ):
+            config = load_user_portfolio(portfolio_id)
+            if config is None:
+                st.error("No fue posible cargar el portafolio seleccionado.")
+                return
+            load_portfolio_config(config)
+            st.session_state[SHOW_PORTFOLIO_CONFIG_SESSION_KEY] = False
+            st.session_state[ONBOARDING_STEP_SESSION_KEY] = "ready"
+            st.rerun()
+    with action_cols[1]:
+        if not delete_options_active:
+            if st.button("Eliminar", key=f"show_delete_saved_portfolio_{index}", use_container_width=True):
+                st.session_state["saved_portfolio_delete_options_id"] = portfolio_id
+                st.rerun()
+        else:
+            confirm_delete = st.checkbox(
+                "Confirmar eliminaciÃ³n de este portafolio",
+                key=f"confirm_delete_portfolio_{index}",
+            )
+            if st.button(
+                "Eliminar portafolio",
+                key=f"delete_saved_portfolio_{index}",
+                use_container_width=True,
+            ):
+                if not confirm_delete:
+                    st.warning("Confirma la eliminaciÃ³n antes de continuar.")
+                    return
+                delete_user_portfolio(portfolio_id)
+                st.session_state.pop("selected_saved_portfolio_id", None)
+                _clear_saved_portfolio_delete_state()
+                st.success("Portafolio eliminado.")
+                st.rerun()
+    with action_cols[2]:
+        if st.button("Cerrar", key=f"close_saved_portfolio_{index}", use_container_width=True):
+            st.session_state.pop("selected_saved_portfolio_id", None)
+            _clear_saved_portfolio_delete_state()
+            st.rerun()
 
 
 def _render_portfolio_choice_step() -> None:
@@ -1011,49 +1116,18 @@ def _render_portfolio_choice_step() -> None:
     )
 
     valid_ids = [portfolio["portfolio_id"] for portfolio in portfolios]
-    query_selected_id = st.query_params.get("saved_portfolio_id")
-    if isinstance(query_selected_id, list):
-        query_selected_id = query_selected_id[0] if query_selected_id else None
-    if query_selected_id in valid_ids:
-        st.session_state["selected_saved_portfolio_id"] = query_selected_id
-
     selected_portfolio_id = st.session_state.get("selected_saved_portfolio_id")
     if selected_portfolio_id not in valid_ids:
         selected_portfolio_id = None
         st.session_state.pop("selected_saved_portfolio_id", None)
+        _clear_saved_portfolio_delete_state()
 
     for index, portfolio in enumerate(portfolios):
         portfolio_id = portfolio["portfolio_id"]
         is_selected = portfolio_id == selected_portfolio_id
         render_saved_portfolio_card(portfolio, is_selected, index)
-
-    selected_portfolio = next(
-        (portfolio for portfolio in portfolios if portfolio["portfolio_id"] == selected_portfolio_id),
-        None,
-    )
-    if selected_portfolio is not None:
-        st.markdown("### Acciones del portafolio seleccionado")
-        action_cols = st.columns([1.25, 1, 2.75])
-        with action_cols[0]:
-            if st.button("Continuar con este portafolio", type="primary", use_container_width=True):
-                config = load_user_portfolio(selected_portfolio_id)
-                if config is None:
-                    st.error("No fue posible cargar el portafolio seleccionado.")
-                    return
-                load_portfolio_config(config)
-                st.session_state[SHOW_PORTFOLIO_CONFIG_SESSION_KEY] = False
-                st.session_state[ONBOARDING_STEP_SESSION_KEY] = "ready"
-                st.rerun()
-        with action_cols[1]:
-            confirm_delete = st.checkbox("Confirmar eliminación de este portafolio", key="confirm_delete_portfolio")
-            if st.button("Eliminar portafolio", use_container_width=True):
-                if not confirm_delete:
-                    st.warning("Confirma la eliminación antes de continuar.")
-                    return
-                delete_user_portfolio(selected_portfolio_id)
-                st.session_state.pop("selected_saved_portfolio_id", None)
-                st.success("Portafolio eliminado.")
-                st.rerun()
+        if is_selected:
+            render_selected_saved_portfolio_actions(portfolio_id, index)
 
     st.markdown("---")
     if st.button("Crear nuevo portafolio", use_container_width=False):
