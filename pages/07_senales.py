@@ -595,7 +595,7 @@ def classify_signal_risk(signal: dict) -> dict:
             "estado": "Neutral",
             "ui": "warning",
             "mensaje": (
-                "No hay una ventaja tecnica clara; el activo luce en zona de espera."
+                "No hay una ventaja técnica clara; el activo luce en zona de espera."
             ),
         }
 
@@ -609,10 +609,10 @@ def classify_signal_risk(signal: dict) -> dict:
 
 
 # ==============================
-# Par-metros del m-dulo
+# Parámetros del módulo
 # ==============================
 with module_params():
-    st.header("Par-metros")
+    st.header("Parámetros")
 
     with st.container(border=True):
         st.markdown("**Umbrales configurables**")

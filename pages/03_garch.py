@@ -81,10 +81,10 @@ horizonte, start_date, end_date = configured_period(default_end=DEFAULT_END_DATE
 asset_name, ticker = render_selected_asset_card(ASSETS, key="m3_asset_selector")
 
 # ==============================
-# Par-metros del m-dulo
+# Parámetros del módulo
 # ==============================
 with module_params():
-    st.caption("Este m-dulo usa el activo y horizonte definidos en la vista principal.")
+    st.caption("Este módulo usa el activo y horizonte definidos en la vista principal.")
 
 # ==============================
 # Descargar datos
@@ -319,7 +319,7 @@ render_explanation_expander(
 st.markdown("### 2. Comparacion entre modelos")
 render_section(
     "Tabla comparativa",
-    "Se comparan las especificaciones candidatas con criterios de ajuste y metricas de volatilidad.",
+    "Se comparan las especificaciones candidatas con criterios de ajuste y métricas de volatilidad.",
 )
 
 preferred_columns = [
@@ -485,7 +485,7 @@ render_explanation_expander(
     [
         "ARCH se enfoca en como los choques recientes afectan la volatilidad actual.",
         "GARCH combina choques recientes con persistencia de volatilidad pasada.",
-        "EGARCH permite capturar respuestas asimetricas ante choques positivos y negativos.",
+        "EGARCH permite capturar respuestas asimétricas ante choques positivos y negativos.",
     ],
 )
 

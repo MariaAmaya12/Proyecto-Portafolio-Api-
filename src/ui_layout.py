@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from contextlib import ExitStack
-
 import pandas as pd
 import streamlit as st
+from streamlit.delta_generator import context_dg_stack
 
 from src.app_state import (
     clear_active_portfolio_config,
@@ -19,8 +18,8 @@ from src.config import DEFAULT_END_DATE, GLOBAL_BENCHMARK
 
 SHOW_PORTFOLIO_CONFIG_SESSION_KEY = "show_portfolio_configurator"
 PORTFOLIO_SAVE_MESSAGE_SESSION_KEY = "portfolio_save_message"
+SELECTED_ASSET_PANEL_MESSAGE_KEY = "selected_asset_panel_message"
 _MODULE_PARAMS_CONTAINER = None
-_MAIN_COLUMN_STACK: ExitStack | None = None
 
 MODULE_REGISTRY = [
     {"id": "M1", "label": "M1 Análisis técnico", "path": "pages/01_tecnico.py"},
@@ -329,17 +328,37 @@ def _remove_selected_asset(ticker_to_remove: str) -> None:
     config = get_portfolio_config()
     tickers = [str(ticker) for ticker in config.get("selected_tickers", [])]
     names = [str(name) for name in config.get("selected_asset_names", [])]
-    pairs = [
-        (name if index < len(names) else ticker, ticker)
-        for index, ticker in enumerate(tickers)
-        if ticker != ticker_to_remove
-    ]
+
+    if len(tickers) <= 1:
+        st.session_state[SELECTED_ASSET_PANEL_MESSAGE_KEY] = (
+            "El portafolio debe conservar al menos un activo. Agrega otro activo antes de eliminar este."
+        )
+        st.rerun()
+
+    pairs = []
+    for index, ticker in enumerate(tickers):
+        if ticker == ticker_to_remove:
+            continue
+        asset_name = names[index] if index < len(names) else ticker
+        pairs.append((asset_name, ticker))
 
     remaining_names = [name for name, _ in pairs]
     remaining_tickers = [ticker for _, ticker in pairs]
     if remaining_tickers:
-        equal_weight = 1 / len(remaining_tickers)
-        selected_weights = {ticker: equal_weight for ticker in remaining_tickers}
+        current_weights = config.get("selected_weights") or {}
+        remaining_weights = {
+            ticker: float(current_weights.get(ticker, 0.0) or 0.0)
+            for ticker in remaining_tickers
+        }
+        weight_sum = sum(remaining_weights.values())
+        if weight_sum > 0:
+            selected_weights = {
+                ticker: weight / weight_sum
+                for ticker, weight in remaining_weights.items()
+            }
+        else:
+            equal_weight = 1 / len(remaining_tickers)
+            selected_weights = {ticker: equal_weight for ticker in remaining_tickers}
         save_portfolio_config(
             {
                 **config,
@@ -380,6 +399,10 @@ def render_selected_assets_panel() -> None:
         """,
         unsafe_allow_html=True,
     )
+    panel_message = st.session_state.pop(SELECTED_ASSET_PANEL_MESSAGE_KEY, None)
+    if panel_message:
+        st.warning(panel_message)
+
     if not tickers:
         st.warning("No hay activos seleccionados. Vuelve a configuración para continuar.")
         if st.button("Volver a configuración", key="selected_assets_back_to_config", use_container_width=True):
@@ -439,6 +462,13 @@ def module_params():
     return _MODULE_PARAMS_CONTAINER
 
 
+def _activate_main_column(main_col) -> None:
+    context_stack = context_dg_stack.get()
+    if context_stack and context_stack[-1] is main_col:
+        return
+    context_dg_stack.set((*context_stack, main_col))
+
+
 def render_app_shell(page_title: str, page_subtitle: str | None = None):
     inject_app_shell_css()
 
@@ -451,25 +481,20 @@ def render_app_shell(page_title: str, page_subtitle: str | None = None):
     _render_active_portfolio_header(config)
 
     main_col, options_col = st.columns([3.2, 1.05], gap="large")
+    _activate_main_column(main_col)
+
     with options_col:
         _render_options_panel(config)
 
-    with main_col:
-        st.markdown(
-            f"""
-            <div class="module-page-heading">
-                <h1>{sanitize_text(page_title)}</h1>
-                {f'<p>{sanitize_text(page_subtitle)}</p>' if page_subtitle else ''}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    global _MAIN_COLUMN_STACK
-    if _MAIN_COLUMN_STACK is not None:
-        _MAIN_COLUMN_STACK.close()
-    _MAIN_COLUMN_STACK = ExitStack()
-    _MAIN_COLUMN_STACK.enter_context(main_col)
+    st.markdown(
+        f"""
+        <div class="module-page-heading">
+            <h1>{sanitize_text(page_title)}</h1>
+            {f'<p>{sanitize_text(page_subtitle)}</p>' if page_subtitle else ''}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     return main_col, module_params()
 
 

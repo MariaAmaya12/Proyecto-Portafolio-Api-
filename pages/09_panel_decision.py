@@ -28,6 +28,10 @@ except Exception:
 ensure_project_dirs()
 apply_global_typography()
 
+METHOD_COL = "metodo"
+METRIC_COL = "metrica"
+VALUE_COL = "valor"
+
 
 # ==============================
 # UI helpers
@@ -36,6 +40,62 @@ def sanitize_text(text):
     if text is None:
         return ""
     return str(text).replace("<", "").replace(">", "")
+
+
+def normalize_risk_table_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    normalized = df.copy()
+    method_col = next(
+        (col for col in [METHOD_COL, "método", "Metodo", "Método", "method"] if col in normalized.columns),
+        None,
+    )
+    if method_col is not None and method_col != METHOD_COL:
+        normalized = normalized.rename(columns={method_col: METHOD_COL})
+
+    if METHOD_COL in normalized.columns:
+        normalized.loc[:, METHOD_COL] = normalized.loc[:, METHOD_COL].replace(
+            {
+                "Paramétrico": "Parametrico",
+                "Histórico": "Historico",
+            }
+        )
+
+    return normalized
+
+
+def normalize_metric_table_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    normalized = df.copy()
+    metric_col = next(
+        (col for col in [METRIC_COL, "métrica", "Metrica", "Métrica", "metric", "indicador", "Indicador"] if col in normalized.columns),
+        None,
+    )
+    value_col = next(
+        (col for col in [VALUE_COL, "Valor", "value", "Value"] if col in normalized.columns),
+        None,
+    )
+    if metric_col is not None and metric_col != METRIC_COL:
+        normalized = normalized.rename(columns={metric_col: METRIC_COL})
+    if value_col is not None and value_col != VALUE_COL:
+        normalized = normalized.rename(columns={value_col: VALUE_COL})
+    return normalized
+
+
+def metric_value(df: pd.DataFrame, metric_name: str, default=np.nan) -> float:
+    normalized = normalize_metric_table_columns(df)
+    if normalized.empty or not {METRIC_COL, VALUE_COL}.issubset(normalized.columns):
+        return default
+
+    matches = normalized.loc[normalized.loc[:, METRIC_COL] == metric_name, VALUE_COL]
+    if matches.empty:
+        return default
+
+    value = pd.to_numeric(matches.iloc[0], errors="coerce")
+    return float(value) if pd.notna(value) else default
 
 
 def inject_ui_css():
@@ -162,11 +222,11 @@ render_portfolio_summary_card(ASSETS)
 
 
 # ==============================
-# Par-metros del m-dulo
+# Parámetros del módulo
 # ==============================
 with module_params():
-    st.header("Par-metros")
-    st.subheader("Opciones de an-lisis")
+    st.header("Parámetros")
+    st.subheader("Opciones de análisis")
     mostrar_detalle = st.checkbox("Mostrar detalle t-cnico", value=False)
     alpha = st.selectbox("Nivel de confianza VaR", [0.95, 0.99], index=0, key="decision_alpha")
     n_sim = st.slider(
@@ -313,9 +373,7 @@ def _classify_benchmark(summary_df: pd.DataFrame, extras_df: pd.DataFrame) -> di
         port_ret = float(summary_df.loc[summary_df["serie"] == "Portafolio", "ret_anualizado"].iloc[0])
         bench_ret = float(summary_df.loc[summary_df["serie"] == "Benchmark", "ret_anualizado"].iloc[0])
 
-        alpha = np.nan
-        if not extras_df.empty and "Alpha de Jensen" in extras_df["metrica"].values:
-            alpha = float(extras_df.loc[extras_df["metrica"] == "Alpha de Jensen", "valor"].iloc[0])
+        alpha = metric_value(extras_df, "Alpha de Jensen")
 
         if port_ret > bench_ret and (pd.isna(alpha) or alpha >= 0):
             return {
@@ -337,7 +395,7 @@ def _classify_benchmark(summary_df: pd.DataFrame, extras_df: pd.DataFrame) -> di
             "nivel": "No concluyente",
             "score": 0,
             "ui": "warning",
-            "mensaje": "La comparacion relativa no muestra una ventaja consistente; algunas metricas son mixtas y no confirman dominancia clara.",
+            "mensaje": "La comparación relativa no muestra una ventaja consistente; algunas métricas son mixtas y no confirman dominancia clara.",
         }
     except Exception:
         return {
@@ -356,7 +414,7 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
             "titulo": "Compra tactica",
             "ui": "positive",
             "mensaje_general": "La lectura integrada favorece una postura compradora o de incremento tactico de exposicion.",
-            "mensaje_riesgo": "El principal riesgo es que un cambio brusco de mercado revierta la senal tecnica y deteriore el perfil de volatilidad.",
+            "mensaje_riesgo": "El principal riesgo es que un cambio brusco de mercado revierta la señal técnica y deteriore el perfil de volatilidad.",
             "mensaje_formal": "La combinación de riesgo contenido, sesgo técnico favorable y comparación relativa no adversa respalda una postura de compra táctica dentro de la ventana analizada.",
             "score_total": total,
         }
@@ -377,7 +435,7 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
             "ui": "warning",
             "mensaje_general": "La lectura integrada sugiere reducir parcialmente exposicion o evitar nuevas compras hasta que mejoren las condiciones.",
             "mensaje_riesgo": "El riesgo central es mantener una posicion relativamente alta en un contexto donde la evidencia agregada se ha debilitado.",
-            "mensaje_formal": "La combinacion de senales no favorece una ampliacion de posicion. La decision mas consistente es reducir exposicion marginalmente y esperar mejor confirmacion estadistica y tecnica.",
+            "mensaje_formal": "La combinación de señales no favorece una ampliación de posición. La decisión más consistente es reducir exposición marginalmente y esperar mejor confirmación estadística y técnica.",
             "score_total": total,
         }
 
@@ -394,12 +452,12 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
 def extract_garch_persistence(garch_results: dict) -> float:
     diagnostics_df = garch_results.get("diagnostics", pd.DataFrame())
     if isinstance(diagnostics_df, pd.DataFrame) and not diagnostics_df.empty:
-        if {"metrica", "valor"}.issubset(diagnostics_df.columns):
+        if {METRIC_COL, VALUE_COL}.issubset(diagnostics_df.columns):
             persist_row = diagnostics_df.loc[
-                diagnostics_df["metrica"] == "persistencia_alpha_mas_beta"
+                diagnostics_df.loc[:, METRIC_COL] == "persistencia_alpha_mas_beta"
             ]
             if not persist_row.empty:
-                persist_value = pd.to_numeric(persist_row["valor"], errors="coerce").dropna()
+                persist_value = pd.to_numeric(persist_row.loc[:, VALUE_COL], errors="coerce").dropna()
                 if not persist_value.empty:
                     return float(persist_value.iloc[0])
 
@@ -594,13 +652,21 @@ risk_table = risk_analyzer.compute_var_tables(
     confidence_levels=[alpha],
     n_sim=n_sim,
 ).get(alpha, pd.DataFrame())
+risk_table = normalize_risk_table_columns(risk_table)
 
 var_hist = np.nan
 cvar_hist = np.nan
-if not risk_table.empty and "Historico" in risk_table["metodo"].values:
-    row_hist = risk_table.loc[risk_table["metodo"] == "Historico"].iloc[0]
+required_risk_columns = {METHOD_COL, "VaR_diario", "CVaR_diario"}
+if risk_table.empty:
+    st.warning("No fue posible calcular la tabla de riesgo extremo para el panel de decisión.")
+elif not required_risk_columns.issubset(risk_table.columns):
+    st.warning("La tabla de riesgo extremo no incluye todas las columnas necesarias para el panel de decisión.")
+elif "Historico" in risk_table.loc[:, METHOD_COL].values:
+    row_hist = risk_table.loc[risk_table.loc[:, METHOD_COL] == "Historico"].iloc[0]
     var_hist = float(row_hist["VaR_diario"])
     cvar_hist = float(row_hist["CVaR_diario"])
+else:
+    st.info("No hay VaR histórico disponible para este periodo; el panel continuará con las demás señales.")
 
 # GARCH
 garch_validation = validar_serie_para_garch(portfolio_returns, min_obs=120, max_null_ratio=0.05)
@@ -626,6 +692,7 @@ if benchmark_ticker in returns_all.columns:
             benchmark_returns=benchmark_returns,
             rf_annual=rf_annual,
         )
+        extras_df = normalize_metric_table_columns(extras_df)
 
 if not summary_df.empty:
     try:
@@ -650,7 +717,7 @@ ml_risk_score = fetch_ml_risk_score(ml_risk_payload)
 # ==============================
 st.markdown("### Resumen del módulo")
 st.caption(
-    "Panel integrador opcional para resumir riesgo, tecnica y benchmark en una postura de accion del portafolio."
+    "Panel integrador opcional para resumir riesgo, técnica y benchmark en una postura de acción del portafolio."
 )
 
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
@@ -661,7 +728,7 @@ hero_decision(decision["titulo"], hero_text, level=decision["ui"])
 st.markdown("### Pilares de la decision")
 render_section(
     "Que esta empujando la decision",
-    "La postura final se construye combinando riesgo agregado, lectura tecnica, comparacion frente al benchmark y una senal auxiliar ML.",
+    "La postura final se construye combinando riesgo agregado, lectura técnica, comparación frente al benchmark y una señal auxiliar ML.",
 )
 
 c1, c2, c3, c4 = st.columns(4)
@@ -732,13 +799,13 @@ render_explanation_expander(
     [
         "Riesgo: resume VaR historico, persistencia GARCH y drawdown.",
         "Técnica: resume señales favorables, neutrales y desfavorables.",
-        "Benchmark: resume desempeno relativo y Alpha de Jensen.",
+        "Benchmark: resume desempeño relativo y Alpha de Jensen.",
         "Riesgo ML: score auxiliar a 5 días estimado con variables recientes de retorno, volatilidad e indicadores técnicos.",
         "La decision final combina los tres componentes principales y usa el score ML como apoyo visual.",
     ],
 )
 
-st.markdown("### Metricas minimas de soporte")
+st.markdown("### Métricas mínimas de soporte")
 render_section(
     "Indicadores clave",
         "Estas métricas respaldan la decisión sin repetir todo el detalle de módulos anteriores.",
@@ -766,12 +833,7 @@ with k2:
         caption="Memoria de la volatilidad.",
     )
 
-alpha_jensen = np.nan
-if not extras_df.empty and "Alpha de Jensen" in extras_df["metrica"].values:
-    try:
-        alpha_jensen = float(extras_df.loc[extras_df["metrica"] == "Alpha de Jensen", "valor"].iloc[0])
-    except Exception:
-        alpha_jensen = np.nan
+alpha_jensen = metric_value(extras_df, "Alpha de Jensen")
 
 with k3:
     kpi_card(
@@ -779,7 +841,7 @@ with k3:
         f"{alpha_jensen:.4f}" if pd.notna(alpha_jensen) else "N/D",
         delta="Comparacion relativa",
         delta_type="pos" if pd.notna(alpha_jensen) and alpha_jensen > 0 else "neg" if pd.notna(alpha_jensen) and alpha_jensen < 0 else "neu",
-        caption="Desempeno ajustado por riesgo.",
+        caption="Desempeño ajustado por riesgo.",
     )
 
 balance_signals = signal_summary["favorables"] - signal_summary["desfavorables"]
@@ -797,11 +859,11 @@ with k4:
     )
 
 render_explanation_expander(
-    "Como interpretar las metricas de soporte",
+    "Cómo interpretar las métricas de soporte",
     [
         "VaR historico: aproxima la perdida umbral del portafolio en la ventana analizada.",
         "Persistencia GARCH: refleja cuanta memoria conserva la volatilidad.",
-        "Alpha de Jensen: mide desempeno relativo ajustado por riesgo frente al benchmark.",
+        "Alpha de Jensen: mide desempeño relativo ajustado por riesgo frente al benchmark.",
         "Balance de señales: resume la diferencia entre señales favorables y desfavorables.",
     ]
     + (
@@ -819,7 +881,7 @@ st.success(
 render_explanation_expander(
     "Como interpretar la decision integrada",
     [
-        "La postura final surge de combinar riesgo agregado, lectura tecnica y desempeno relativo frente al benchmark.",
+        "La postura final surge de combinar riesgo agregado, lectura técnica y desempeño relativo frente al benchmark.",
         "Riesgo agregado: se aproxima mediante VaR historico, persistencia GARCH y drawdown.",
         "Lectura técnica: se resume a partir del balance entre señales favorables y desfavorables de los activos.",
         "Benchmark: se evalua en terminos de retorno relativo y Alpha de Jensen.",

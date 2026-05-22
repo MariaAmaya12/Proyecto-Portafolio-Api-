@@ -165,6 +165,41 @@ def fmt_pct_value(value):
     return f"{numeric_value:.2%}" if pd.notna(numeric_value) else "N/D"
 
 
+def normalize_risk_table_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    normalized = df.copy()
+    method_col = next(
+        (col for col in ["metodo", "método", "Metodo", "Método", "method"] if col in normalized.columns),
+        None,
+    )
+    if method_col is not None and method_col != "metodo":
+        normalized = normalized.rename(columns={method_col: "metodo"})
+
+    if "metodo" in normalized.columns:
+        normalized["metodo"] = normalized["metodo"].replace(
+            {
+                "Paramétrico": "Parametrico",
+                "Histórico": "Historico",
+            }
+        )
+
+    return normalized
+
+
+def table_for_var_plot(df: pd.DataFrame) -> pd.DataFrame:
+    plot_df = df.copy()
+    if "metodo" in plot_df.columns:
+        plot_df["método"] = plot_df["metodo"].replace(
+            {
+                "Parametrico": "Paramétrico",
+                "Historico": "Histórico",
+            }
+        )
+    return plot_df
+
+
 def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
     title = sanitize_text(title)
     value = sanitize_text(value)
@@ -288,10 +323,10 @@ horizonte, start_date, end_date = configured_period(default_end=DEFAULT_END_DATE
 render_portfolio_summary_card(ASSETS)
 
 # ==============================
-# Par-metros del m-dulo
+# Parámetros del módulo
 # ==============================
 with module_params():
-    st.header("Par-metros de riesgo")
+    st.header("Parámetros de riesgo")
 
     alpha = st.radio("Nivel para mostrar KPIs", CONFIDENCE_LEVELS, index=0, horizontal=True)
 
@@ -359,7 +394,7 @@ risk_analyzer = RiskAnalyzer()
 returns = risk_analyzer.clean_returns(bundle["returns"])
 
 if not risk_analyzer.validate_sample(returns, min_rows=30):
-    st.error(data_error_message("No hay suficientes datos para calcular metricas de riesgo."))
+    st.error(data_error_message("No hay suficientes datos para calcular métricas de riesgo."))
     st.stop()
 
 if manual_weights_enabled:
@@ -380,11 +415,13 @@ tables_by_alpha = risk_analyzer.compute_var_tables(
     n_sim=n_sim,
 )
 
-table = pd.concat(
-    [alpha_table for alpha_table in tables_by_alpha.values() if not alpha_table.empty],
-    ignore_index=True,
-)
-selected_table = tables_by_alpha.get(alpha, pd.DataFrame())
+non_empty_tables = [
+    normalize_risk_table_columns(alpha_table)
+    for alpha_table in tables_by_alpha.values()
+    if alpha_table is not None and not alpha_table.empty
+]
+table = pd.concat(non_empty_tables, ignore_index=True) if non_empty_tables else pd.DataFrame()
+selected_table = normalize_risk_table_columns(tables_by_alpha.get(alpha, pd.DataFrame()))
 
 if table.empty:
     st.error("No fue posible calcular VaR y CVaR con los datos disponibles.")
@@ -392,6 +429,11 @@ if table.empty:
 
 if selected_table.empty:
     st.error("No fue posible calcular VaR y CVaR para el nivel de confianza seleccionado.")
+    st.stop()
+
+required_risk_columns = {"metodo", "VaR_diario", "CVaR_diario"}
+if not required_risk_columns.issubset(selected_table.columns) or not required_risk_columns.issubset(table.columns):
+    st.warning("La tabla de riesgo no incluye todas las columnas necesarias para mostrar VaR/CVaR.")
     st.stop()
 
 # ==============================
@@ -437,7 +479,7 @@ cvar_mc = float(var_mc_row["CVaR_diario"].iloc[0]) if not var_mc_row.empty else 
 st.markdown("### KPIs de riesgo")
 section_intro(
     "Resumen ejecutivo del riesgo extremo",
-    "Estas metricas resumen la perdida umbral esperada y la severidad promedio de los escenarios mas extremos del portafolio.",
+    "Estas métricas resumen la pérdida umbral esperada y la severidad promedio de los escenarios más extremos del portafolio.",
 )
 
 kpi_row_1 = st.columns(3)
@@ -518,12 +560,14 @@ section_intro(
 st.caption(
     "El histograma muestra la distribucion de rendimientos. Las lineas punteadas representan VaR y CVaR por metodo."
 )
-plot_table = selected_table[selected_table["metodo"] != "Monte Carlo KDE"].copy()
+plot_table = table_for_var_plot(selected_table[selected_table["metodo"] != "Monte Carlo KDE"].copy())
 fig_var = plot_var_distribution(portfolio_returns, plot_table)
 fig_var.update_traces(marker_line_width=0.6, marker_line_color="rgba(15, 23, 42, 0.35)", selector=dict(type="histogram"))
 line_styles = {
     "Parametrico": "#2563eb",
+    "Paramétrico": "#2563eb",
     "Historico": "#16a34a",
+    "Histórico": "#16a34a",
     "Monte Carlo": "#f59e0b",
 }
 for trace in fig_var.data:

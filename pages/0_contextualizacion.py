@@ -411,7 +411,7 @@ ASSET_CONTEXT = {
         "rol_portafolio": (
             "Activo latinoamericano diversificado que agrega exposicion regional, consumo y riesgo cambiario."
         ),
-        "resumen_sencillo": "Grupo mexicano con negocios ligados a consumo (ej. retail de proximidad) y presencia regional. Su desempeno puede verse afectado por el entorno macro y el tipo de cambio.",
+        "resumen_sencillo": "Grupo mexicano con negocios ligados a consumo (ej. retail de proximidad) y presencia regional. Su desempeño puede verse afectado por el entorno macro y el tipo de cambio.",
         "rol_sencillo": "Rol: Regional (LatAm + FX)",
         "drivers_sencillos": [
             "Consumo en Mexico/LatAm",
@@ -840,7 +840,7 @@ def _return_interpretation(ret: float | None, years: int) -> str:
         if years == 1:
             return (
                 "El activo esta hoy por encima del nivel que tenía hace 1 año, "
-                "lo que indica un desempeno positivo reciente."
+                "lo que indica un desempeño positivo reciente."
             )
         return (
             "El activo está hoy por encima del nivel observado hace 3 años, "
@@ -1016,7 +1016,7 @@ def render_performance_context(asset_name: str, meta: dict, ctx: dict) -> None:
         st.plotly_chart(fig, width="stretch")
     render_market_context_help(latest_price, price_1y, price_3y, ret_1y, ret_3y)
     st.markdown(
-        '<div class="market-caption">Base 100: la serie parte en 100 para comparar desempeno relativo.</div>',
+        '<div class="market-caption">Base 100: la serie parte en 100 para comparar desempeño relativo.</div>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -1082,7 +1082,7 @@ with st.container(border=True):
             st.caption("Resumen del portafolio configurado")
 
 with module_params():
-    st.caption("Este m-dulo usa los activos definidos en la configuraci-n inicial.")
+    st.caption("Este módulo usa los activos definidos en la configuración inicial.")
 
 # -----------------------------------------------------------------------------
 # Vista resumida

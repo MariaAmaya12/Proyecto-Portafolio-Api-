@@ -385,7 +385,7 @@ ASSETS = configured_assets(ASSETS)
 horizonte, start_date, end_date = configured_period(default_end=DEFAULT_END_DATE)
 
 # ==============================
-# Selecci-n de an-lisis y periodo
+# Selección de análisis y periodo
 # ==============================
 st.markdown("### Activo seleccionado")
 with st.container(border=True):
@@ -406,7 +406,7 @@ manual_weights = {}
 manual_weights_validation_error = None
 
 # ==============================
-# Par-metros del m-dulo
+# Parámetros del módulo
 # ==============================
 with module_params():
     st.header("Parámetros CAPM")
@@ -760,7 +760,7 @@ render_explanation_expander(
 )
 
 # ==============================
-# Tabla tecnica
+# Tabla técnica
 # ==============================
 summary_df = pd.DataFrame(
     {

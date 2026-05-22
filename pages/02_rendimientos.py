@@ -258,10 +258,10 @@ horizonte, start_date, end_date = configured_period(DEFAULT_START_DATE, DEFAULT_
 asset_name, ticker = render_selected_asset_card(ASSETS, key="m2_asset_selector")
 
 # ==============================
-# Par-metros del m-dulo
+# Parámetros del módulo
 # ==============================
 with module_params():
-    st.caption("Este m-dulo usa el activo y horizonte definidos en la vista principal.")
+    st.caption("Este módulo usa el activo y horizonte definidos en la vista principal.")
 
 return_type = "log_return"
 return_type_label = "Rendimiento logaritmico"
@@ -454,7 +454,7 @@ with col2:
         f"{vol_ret:.3%}",
         delta=vol_delta,
         delta_type=vol_delta_type,
-        caption="Desviacion estandar muestral de rendimientos",
+        caption="Desviación estándar muestral de rendimientos",
     )
 
 with col3:
@@ -541,7 +541,7 @@ with st.expander("Interpretacion del histograma y boxplot"):
         - **Dispersion:** la volatilidad diaria de **{vol_ret:.4%}** sugiere rendimientos **{dispersion_text}**.
         - **Asimetria:** el valor de **{"Sin datos" if skew_value is None else f"{skew_value:.2f}"}** apunta a **{skew_distribution_text}**.
         - **Extremos:** el boxplot indica que **{outlier_text}**, coherente con un minimo de **{min_ret:.4%}** y un maximo de **{max_ret:.4%}**.
-        - **Lectura de riesgo:** una distribucion con mas dispersion o con extremos visibles puede subestimar riesgo si se resume solo con media y desviacion estandar.
+        - **Lectura de riesgo:** una distribución con más dispersión o con extremos visibles puede subestimar riesgo si se resume solo con media y desviación estándar.
         """
     )
 
@@ -564,7 +564,7 @@ st.caption("El Q-Q plot permite contrastar visualmente la normalidad, especialme
 with st.expander("Interpretacion del grafico Q-Q"):
     st.markdown(
         f"""
-        - Si los puntos siguen la diagonal, la serie se aproxima a una normal; desviaciones marcadas en las colas sugieren no normalidad.
+        - Si los puntos siguen la diagonal, la serie se aproxima a una normal; diferencias marcadas en las colas sugieren no normalidad.
         - Este contraste visual debe leerse junto con **Jarque-Bera = {jb_decision.lower()}** y **Shapiro-Wilk = {format_p_value(shapiro_p_value)}**.
         - Cuando las colas se apartan de la diagonal, la evidencia visual refuerza la presencia de eventos extremos y limita una aproximacion normal simple para medir riesgo.
         """
@@ -637,7 +637,7 @@ skew_metric_display = "Sin datos" if skew_value is None else f"{skew_value:.2f}"
 heavy_tails_text = (
     f"La curtosis de {kurt_value:.2f} y Jarque-Bera con p-value {format_p_value(jb_p_value)} sugieren colas pesadas; hay senal cuando la curtosis supera 3 o cuando Jarque-Bera rechaza normalidad."
     if kurt_value is not None and jb_p_value is not None and (kurt_value > 3 or jb_p_value < 0.05)
-    else "La muestra no muestra una senal fuerte de colas pesadas con las metricas disponibles."
+    else "La muestra no muestra una señal fuerte de colas pesadas con las métricas disponibles."
 )
 volatility_clustering_text = (
     f"La volatilidad movil de 20 periodos muestra {high_vol_clusters} coincidencias consecutivas por encima del percentil 75, lo que aporta un indicio descriptivo de agrupamiento de volatilidad."
@@ -666,7 +666,7 @@ stylized_cards = [
         "summary": (
             "Curtosis elevada o rechazo de normalidad sugieren eventos extremos mas frecuentes."
             if heavy_tails_detected
-            else "La muestra no muestra una desviacion fuerte frente a una normal en esta lectura."
+            else "La muestra no muestra una desviación fuerte frente a una normal en esta lectura."
         ),
     },
     {

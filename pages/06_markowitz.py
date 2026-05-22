@@ -309,10 +309,10 @@ horizonte, start_date, end_date = configured_period(DEFAULT_START_DATE, DEFAULT_
 render_portfolio_summary_card(ASSETS)
 
 # ==============================
-# Par-metros del m-dulo
+# Parámetros del módulo
 # ==============================
 with module_params():
-    st.header("Par-metros de optimizaci-n")
+    st.header("Parámetros de optimización")
 
     n_portfolios = st.slider(
         "N-mero de portafolios",
@@ -464,14 +464,14 @@ frontier_df = optimizer.efficient_frontier(sim_df)
 min_var, max_sharpe = optimizer.optimal_portfolios(sim_df)
 
 if min_var is None or max_sharpe is None:
-    st.error("No fue posible identificar los portafolios optimos.")
+    st.error("No fue posible identificar los portafolios óptimos.")
     st.stop()
 
 min_var_df = ensure_dataframe(min_var)
 max_sharpe_df = ensure_dataframe(max_sharpe)
 
 if min_var_df.empty or max_sharpe_df.empty:
-    st.error("No fue posible identificar los portafolios optimos.")
+    st.error("No fue posible identificar los portafolios óptimos.")
     st.stop()
 
 min_var_weights_df = optimizer.weights_frame(min_var).rename(columns={"Participacion": "Participacion"})
@@ -550,7 +550,7 @@ with st.expander("Interpretación (KPIs del módulo)"):
     )
 
 # ==============================
-# Portafolios optimos
+# Portafolios óptimos
 # ==============================
 st.markdown("### Portafolios destacados")
 section_intro(
@@ -650,9 +650,9 @@ with st.expander("Interpretacion: frontera eficiente"):
     )
 
 # ==============================
-# Pesos de portafolios optimos
+# Pesos de portafolios óptimos
 # ==============================
-st.markdown("### Composicion de portafolios optimos")
+st.markdown("### Composición de portafolios óptimos")
 section_intro(
     "Pesos recomendados",
     "Estas tablas muestran como se distribuye la Participacion de cada activo en las soluciones optimas principales.",
@@ -788,7 +788,7 @@ st.success(
     """
 )
 
-with st.expander("Ver interpretacion tecnica"):
+with st.expander("Ver interpretación técnica"):
     st.write(
         """
         - Markowitz estima portafolios en el espacio media-varianza usando retornos esperados, volatilidades y covarianzas.

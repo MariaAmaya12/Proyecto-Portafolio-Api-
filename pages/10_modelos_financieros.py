@@ -288,7 +288,7 @@ def render_ewma_tab() -> None:
 
 
 def render_bond_metrics_block() -> None:
-    st.markdown("### Metricas de bono")
+    st.markdown("### Métricas de bono")
     with st.form("bond_metrics_form"):
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -300,7 +300,7 @@ def render_bond_metrics_block() -> None:
         with c3:
             frequency = st.selectbox("Frecuencia de pago", [1, 2, 4, 12], index=1)
 
-        submitted = st.form_submit_button("Calcular metricas de bono", type="primary")
+        submitted = st.form_submit_button("Calcular métricas de bono", type="primary")
 
     if not submitted:
         return
@@ -316,7 +316,7 @@ def render_bond_metrics_block() -> None:
     try:
         result = backend_post("/fixed-income/bond-metrics", payload)
     except BackendAPIError as exc:
-        render_backend_error(exc, "No fue posible calcular las metricas del bono.")
+        render_backend_error(exc, "No fue posible calcular las métricas del bono.")
         return
 
     c1, c2, c3, c4 = st.columns(4)
@@ -330,7 +330,7 @@ def render_bond_metrics_block() -> None:
         kpi_card("Convexidad", format_number(result.get("convexity")), caption="Ajuste de segundo orden para cambios mayores.")
 
     render_explanation_expander(
-        "Como interpretar las metricas de bono",
+        "Cómo interpretar las métricas de bono",
         [
             "Precio del bono: valor presente de los flujos futuros.",
             "Duracion modificada: sensibilidad aproximada del precio ante cambios en tasa.",
@@ -395,7 +395,7 @@ def render_nelson_siegel_block() -> None:
 
 
 def render_fixed_income_tab() -> None:
-    render_section("Renta fija", "Metricas de bonos y curvas Nelson-Siegel calculadas por el backend.")
+    render_section("Renta fija", "Métricas de bonos y curvas Nelson-Siegel calculadas por el backend.")
     render_bond_metrics_block()
     st.divider()
     render_nelson_siegel_block()

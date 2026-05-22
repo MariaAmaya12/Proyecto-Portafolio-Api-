@@ -1965,7 +1965,7 @@ with main_col:
             if trace.name not in initially_visible_tickers:
                 trace.visible = "legendonly"
         st.plotly_chart(fig_norm, width="stretch")
-    st.caption("Base 100 para comparar desempeno relativo entre los activos seleccionados.")
+    st.caption("Base 100 para comparar desempeño relativo entre los activos seleccionados.")
 
 
     # ---------------------------------------------------------
@@ -2089,7 +2089,7 @@ with st.expander("Ver módulos de la aplicación", expanded=False):
         - **M3. Modelos GARCH:** comparación de modelos de volatilidad.
         - **M4. CAPM y Beta:** beta, CAPM y benchmark local.
         - **M5. VaR/CVaR:** riesgo del portafolio con 3 metodos.
-        - **M6. Optimizacion Markowitz:** frontera eficiente y portafolios optimos.
+        - **M6. Optimización Markowitz:** frontera eficiente y portafolios óptimos.
         - **M7. Señales:** alertas automáticas de trading.
         - **M8. Macro y Benchmark:** contexto macro y comparación contra índice global.
         - **M9. Panel de decisión:** integración final para postura de acción.
