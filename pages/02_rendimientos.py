@@ -12,12 +12,11 @@ from src.returns_analysis import (
 )
 from src.services.market_data_client import MarketDataClient
 from src.plots import plot_histogram_with_normal, plot_qq, plot_box
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_selected_asset_card
+from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 apply_global_typography()
-render_sidebar_navigation()
 
 
 # ==============================
@@ -200,9 +199,9 @@ def render_statistical_interpretation(
         else "negativa, lo que indica un sesgo promedio desfavorable en el periodo"
     )
     skew_text = (
-        "sin dato suficiente para evaluar asimetría"
+        "sin dato suficiente para evaluar asimetria"
         if skew_value is None
-        else "negativa, asociada a cola izquierda y mayor atención a pérdidas extremas"
+        else "negativa, asociada a cola izquierda y mayor atencion a perdidas extremas"
         if skew_value < -0.5
         else "positiva, asociada a mayor peso de movimientos favorables extremos"
         if skew_value > 0.5
@@ -213,10 +212,10 @@ def render_statistical_interpretation(
         if kurt_value is None
         else "alta, consistente con colas pesadas y mayor presencia de eventos extremos"
         if kurt_value > 3
-        else "sin señal fuerte de colas pesadas bajo el umbral usado"
+        else "sin senal fuerte de colas pesadas bajo el umbral usado"
     )
     jb_text = (
-        "sin decisión formal por falta de datos"
+        "sin decision formal por falta de datos"
         if jb_p_value is None
         else f"rechaza normalidad (p-value {format_p_value(jb_p_value)})"
         if jb_p_value < 0.05
@@ -228,89 +227,48 @@ def render_statistical_interpretation(
         else f"p-value {format_p_value(shapiro_p_value)}"
     )
     risk_text = (
-        "conviene contrastar el VaR paramétrico normal con métodos históricos o enfoques menos dependientes de normalidad"
+        "conviene contrastar el VaR parametrico normal con metodos historicos o enfoques menos dependientes de normalidad"
         if (jb_p_value is not None and jb_p_value < 0.05) or (kurt_value is not None and kurt_value > 3)
-        else "el VaR paramétrico puede servir como referencia, pero debe validarse frente a métodos históricos"
+        else "el VaR parametrico puede servir como referencia, pero debe validarse frente a metodos historicos"
     )
     skew_display = "sin datos" if skew_value is None else f"{skew_value:.2f}"
     kurt_display = "sin datos" if kurt_value is None else f"{kurt_value:.2f}"
     st.info(
         f"""
-        **Lectura estadística integrada**
+        **Lectura estadistica integrada**
 
         - **Media:** {mean_ret:.4%}, {mean_text}.
-        - **Volatilidad:** {vol_ret:.4%}, mide la dispersión diaria observada.
-        - **Asimetría:** {skew_display}; lectura {skew_text}.
+        - **Volatilidad:** {vol_ret:.4%}, mide la dispersion diaria observada.
+        - **Asimetria:** {skew_display}; lectura {skew_text}.
         - **Curtosis:** {kurt_display}; lectura {kurt_text}.
         - **Normalidad:** Jarque-Bera {jb_text}; Shapiro-Wilk reporta {shapiro_text}.
-        - **Implicación para riesgo:** {risk_text}.
+        - **Implicacion para riesgo:** {risk_text}.
         """
     )
 
 
 inject_kpi_cards_css()
 
-render_page_title(
+render_app_shell(
     "Módulo 2 - Rendimientos y propiedades empíricas",
-    "Analiza la distribución de rendimientos del activo y sus principales propiedades estadísticas.",
+    "Analiza la distribucion de rendimientos del activo y sus principales propiedades estadisticas.",
 )
+ASSETS = configured_assets(ASSETS)
+horizonte, start_date, end_date = configured_period(DEFAULT_START_DATE, DEFAULT_END_DATE)
+asset_name, ticker = render_selected_asset_card(ASSETS, key="m2_asset_selector")
 
 # ==============================
-# Sidebar
+# Parámetros del módulo
 # ==============================
-with st.sidebar:
-    st.header("Parámetros")
-    asset_name = st.selectbox("Activo", list(ASSETS.keys()), index=0)
-
-    horizonte = st.selectbox(
-        "Horizonte de análisis",
-        [
-            "1 mes",
-            "Trimestre",
-            "Semestre",
-            "1 año",
-            "2 años",
-            "3 años",
-            "5 años",
-            "Personalizado",
-        ],
-        index=3,
-    )
-
-    fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
-
-    if horizonte == "1 mes":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Trimestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Semestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "1 año":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "2 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "3 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "5 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
-        end_date = fecha_fin_ref.date()
-    else:
-        start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE, key="ret_start")
-        end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="ret_end")
+with module_params():
+    st.caption("Este módulo usa el activo y horizonte definidos en la vista principal.")
 
 return_type = "log_return"
-return_type_label = "Rendimiento logarítmico"
+return_type_label = "Rendimiento logaritmico"
 
 # ==============================
 # Datos
 # ==============================
-ticker = get_ticker(asset_name)
 market_client = MarketDataClient()
 
 bundle = market_client.fetch_bundle(
@@ -352,7 +310,7 @@ if ret_df.empty or return_type not in ret_df.columns:
 series = ret_df[return_type].dropna()
 
 if series.empty:
-    st.error("La serie de rendimientos está vacía.")
+    st.error("La serie de rendimientos esta vacia.")
     st.stop()
 
 desc_df = descriptive_stats(series)
@@ -376,7 +334,7 @@ comparison_df = pd.DataFrame(
             "maximo": ret_df["simple_return"].max(),
         },
         {
-            "tipo_rendimiento": "Logarítmico",
+            "tipo_rendimiento": "Logaritmico",
             "media": ret_df["log_return"].mean(),
             "volatilidad": ret_df["log_return"].std(ddof=1),
             "minimo": ret_df["log_return"].min(),
@@ -426,8 +384,8 @@ st.markdown("### Resumen del módulo")
 st.write(
     f"""
     Este módulo caracteriza la distribución de rendimientos de **{asset_name} ({ticker})** usando
-    rendimientos logarítmicos, estadísticos descriptivos, histograma, boxplot, Q-Q plot
-    y pruebas de normalidad. El objetivo es identificar dispersión, asimetría, colas pesadas y
+    rendimientos logaritmicos, estadisticos descriptivos, histograma, boxplot, Q-Q plot
+    y pruebas de normalidad. El objetivo es identificar dispersion, asimetria, colas pesadas y
     posibles implicaciones para riesgo y VaR.
     """
 )
@@ -440,8 +398,8 @@ st.caption("El análisis principal se mantiene sobre rendimientos logarítmicos 
 # ==============================
 st.markdown("### KPIs de rendimientos")
 section_intro(
-    "Resumen de la distribución",
-    "Aquí se sintetizan la rentabilidad media, la volatilidad y los extremos observados en la serie de rendimientos seleccionada.",
+    "Resumen de la distribucion",
+    "Aqui se sintetizan la rentabilidad media, la volatilidad y los extremos observados en la serie de rendimientos seleccionada.",
 )
 
 mean_ret = series.mean()
@@ -458,7 +416,7 @@ outlier_count = int(((series < lower_fence) | (series > upper_fence)).sum())
 prom_delta = None
 prom_delta_type = "neu"
 if abs(mean_ret) < 0.0005:
-    prom_delta = "Sesgo débil"
+    prom_delta = "Sesgo debil"
     prom_delta_type = "neu"
 elif mean_ret > 0:
     prom_delta = "Sesgo positivo"
@@ -505,46 +463,46 @@ with col3:
         jb_decision,
         delta=jb_delta,
         delta_type=jb_delta_type,
-        caption="Decisión basada en Jarque-Bera al 5%",
+        caption="Decision basada en Jarque-Bera al 5%",
     )
 
 col4, col5 = st.columns(2)
 
 with col4:
     kpi_card(
-        "Mínimo",
+        "Minimo",
         f"{min_ret:.3%}",
         caption="Peor rendimiento observado en el periodo",
     )
 
 with col5:
     kpi_card(
-        "Máximo",
+        "Maximo",
         f"{max_ret:.3%}",
         caption="Mejor rendimiento observado en el periodo",
     )
 
-with st.expander("Interpretación de KPIs"):
+with st.expander("Interpretacion de KPIs"):
     st.markdown(
         f"""
-        - **Promedio:** resume la dirección media de los rendimientos diarios. En **{asset_name}** es **{mean_ret:.4%}**;
-          si está cerca de cero, no hay un sesgo fuerte de rentabilidad diaria promedio.
-        - **Volatilidad:** mide cuán dispersos son los rendimientos alrededor de su media. El valor actual es
-          **{vol_ret:.4%}**, clasificado como **{vol_delta.lower()}**, y funciona como primera señal de incertidumbre.
-        - **Normalidad (JB):** indica si la distribución se parece a una normal simple. Una normalidad rechazada
-          sugiere que una aproximación normal puede no capturar bien colas, asimetrías o riesgo extremo.
-        - **Mínimo:** muestra el peor retorno observado del periodo (**{min_ret:.4%}**), útil para dimensionar pérdidas extremas históricas.
-        - **Máximo:** muestra el mejor retorno observado del periodo (**{max_ret:.4%}**), útil para comparar la amplitud de movimientos positivos.
+        - **Promedio:** resume la direccion media de los rendimientos diarios. En **{asset_name}** es **{mean_ret:.4%}**;
+          si esta cerca de cero, no hay un sesgo fuerte de rentabilidad diaria promedio.
+        - **Volatilidad:** mide cuan dispersos son los rendimientos alrededor de su media. El valor actual es
+          **{vol_ret:.4%}**, clasificado como **{vol_delta.lower()}**, y funciona como primera senal de incertidumbre.
+        - **Normalidad (JB):** indica si la distribucion se parece a una normal simple. Una normalidad rechazada
+          sugiere que una aproximacion normal puede no capturar bien colas, asimetrias o riesgo extremo.
+        - **Minimo:** muestra el peor retorno observado del periodo (**{min_ret:.4%}**), util para dimensionar perdidas extremas historicas.
+        - **Maximo:** muestra el mejor retorno observado del periodo (**{max_ret:.4%}**), util para comparar la amplitud de movimientos positivos.
         """
     )
 
 # ==============================
-# Gráficos principales
+# Graficos principales
 # ==============================
-st.markdown("### Distribución de rendimientos")
+st.markdown("### Distribucion de rendimientos")
 section_intro(
-    "Forma de la distribución",
-    "Los gráficos permiten visualizar la dispersión, la asimetría y la presencia de valores extremos en los rendimientos.",
+    "Forma de la distribucion",
+    "Los graficos permiten visualizar la dispersion, la asimetria y la presencia de valores extremos en los rendimientos.",
 )
 
 col3, col4 = st.columns(2)
@@ -554,46 +512,46 @@ with col4:
     st.plotly_chart(plot_box(series), width="stretch")
 
 skew_distribution_text = (
-    "sesgo hacia pérdidas extremas"
+    "sesgo hacia perdidas extremas"
     if skew_value is not None and skew_value < -0.5
     else "sesgo hacia movimientos positivos extremos"
     if skew_value is not None and skew_value > 0.5
-    else "asimetría moderada, sin sesgo direccional fuerte"
+    else "asimetria moderada, sin sesgo direccional fuerte"
 )
 dispersion_text = (
     "concentrados alrededor del centro"
     if vol_ret < 0.01
-    else "con dispersión moderada alrededor del centro"
+    else "con dispersion moderada alrededor del centro"
     if vol_ret < 0.02
     else "ampliamente dispersos, con variaciones diarias intensas"
 )
 outlier_text = (
     "no se observan outliers bajo el criterio IQR"
     if outlier_count == 0
-    else f"aparecen {outlier_count} observaciones atípicas bajo el criterio IQR"
+    else f"aparecen {outlier_count} observaciones atipicas bajo el criterio IQR"
 )
 
 st.caption(
-    f"Se observa una distribución {dispersion_text}, con {skew_distribution_text} y donde {outlier_text}."
+    f"Se observa una distribucion {dispersion_text}, con {skew_distribution_text} y donde {outlier_text}."
 )
 
-with st.expander("Interpretación del histograma y boxplot"):
+with st.expander("Interpretacion del histograma y boxplot"):
     st.markdown(
         f"""
-        - **Dispersión:** la volatilidad diaria de **{vol_ret:.4%}** sugiere rendimientos **{dispersion_text}**.
-        - **Asimetría:** el valor de **{"Sin datos" if skew_value is None else f"{skew_value:.2f}"}** apunta a **{skew_distribution_text}**.
-        - **Extremos:** el boxplot indica que **{outlier_text}**, coherente con un mínimo de **{min_ret:.4%}** y un máximo de **{max_ret:.4%}**.
+        - **Dispersion:** la volatilidad diaria de **{vol_ret:.4%}** sugiere rendimientos **{dispersion_text}**.
+        - **Asimetria:** el valor de **{"Sin datos" if skew_value is None else f"{skew_value:.2f}"}** apunta a **{skew_distribution_text}**.
+        - **Extremos:** el boxplot indica que **{outlier_text}**, coherente con un minimo de **{min_ret:.4%}** y un maximo de **{max_ret:.4%}**.
         - **Lectura de riesgo:** una distribución con más dispersión o con extremos visibles puede subestimar riesgo si se resume solo con media y desviación estándar.
         """
     )
 
 # ==============================
-# Gráfico Q-Q
+# Grafico Q-Q
 # ==============================
-st.markdown("### Gráfico Q-Q")
+st.markdown("### Grafico Q-Q")
 section_intro(
     "Contraste visual con normalidad",
-    "El gráfico Q-Q compara cuantiles estandarizados para verificar si la serie sigue la forma esperada bajo normalidad.",
+    "El grafico Q-Q compara cuantiles estandarizados para verificar si la serie sigue la forma esperada bajo normalidad.",
 )
 
 qq_fig = plot_qq(qq_df)
@@ -603,33 +561,33 @@ st.plotly_chart(qq_fig, width="stretch")
 
 st.caption("El Q-Q plot permite contrastar visualmente la normalidad, especialmente en las colas.")
 
-with st.expander("Interpretación del gráfico Q-Q"):
+with st.expander("Interpretacion del grafico Q-Q"):
     st.markdown(
         f"""
-        - Si los puntos siguen la diagonal, la serie se aproxima a una normal; desviaciones marcadas en las colas sugieren no normalidad.
+        - Si los puntos siguen la diagonal, la serie se aproxima a una normal; diferencias marcadas en las colas sugieren no normalidad.
         - Este contraste visual debe leerse junto con **Jarque-Bera = {jb_decision.lower()}** y **Shapiro-Wilk = {format_p_value(shapiro_p_value)}**.
-        - Cuando las colas se apartan de la diagonal, la evidencia visual refuerza la presencia de eventos extremos y limita una aproximación normal simple para medir riesgo.
+        - Cuando las colas se apartan de la diagonal, la evidencia visual refuerza la presencia de eventos extremos y limita una aproximacion normal simple para medir riesgo.
         """
     )
 
 # ==============================
 # Tablas principales
 # ==============================
-st.markdown("### Resumen estadístico")
+st.markdown("### Resumen estadistico")
 section_intro(
-    "Estadísticos y normalidad",
+    "Estadisticos y normalidad",
     "Estas tablas profundizan en las medidas descriptivas y en las pruebas usadas para evaluar normalidad.",
 )
 
 col1, col2 = st.columns(2)
 with col1:
-    st.markdown("#### Estadísticos descriptivos")
+    st.markdown("#### Estadisticos descriptivos")
     st.dataframe(desc_df, width="stretch")
 with col2:
     st.markdown("#### Pruebas de normalidad")
     st.dataframe(norm_display_df, width="stretch")
 
-with st.expander("Interpretación de estadísticos y pruebas"):
+with st.expander("Interpretacion de estadisticos y pruebas"):
     render_statistical_interpretation(
         mean_ret,
         vol_ret,
@@ -639,23 +597,23 @@ with st.expander("Interpretación de estadísticos y pruebas"):
         shapiro_p_value,
     )
 
-st.markdown("### Comparación de tipos de rendimiento")
+st.markdown("### Comparacion de tipos de rendimiento")
 section_intro(
-    "Rendimiento simple vs. logarítmico",
-    "La comparación es descriptiva y reutiliza directamente las columnas calculadas en la serie de rendimientos.",
+    "Rendimiento simple vs. logaritmico",
+    "La comparacion es descriptiva y reutiliza directamente las columnas calculadas en la serie de rendimientos.",
 )
 st.dataframe(comparison_display_df, width="stretch", hide_index=True)
 
-with st.expander("Interpretación de la comparación de rendimientos"):
+with st.expander("Interpretacion de la comparacion de rendimientos"):
     simple_mean = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Simple", "media"].iloc[0]
-    log_mean = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Logarítmico", "media"].iloc[0]
+    log_mean = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Logaritmico", "media"].iloc[0]
     simple_vol = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Simple", "volatilidad"].iloc[0]
-    log_vol = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Logarítmico", "volatilidad"].iloc[0]
+    log_vol = comparison_df.loc[comparison_df["tipo_rendimiento"] == "Logaritmico", "volatilidad"].iloc[0]
     st.markdown(
         f"""
-        - La comparación usa las columnas ya calculadas en `ret_df`: `simple_return` y `log_return`.
-        - En esta muestra, la media simple es **{simple_mean:.4%}** y la media logarítmica es **{log_mean:.4%}**.
-        - La volatilidad simple es **{simple_vol:.4%}** y la volatilidad logarítmica es **{log_vol:.4%}**.
+        - La comparacion usa las columnas ya calculadas en `ret_df`: `simple_return` y `log_return`.
+        - En esta muestra, la media simple es **{simple_mean:.4%}** y la media logaritmica es **{log_mean:.4%}**.
+        - La volatilidad simple es **{simple_vol:.4%}** y la volatilidad logaritmica es **{log_vol:.4%}**.
         - Para el resto del módulo se mantiene el enfoque principal sobre **{return_type_label.lower()}**, que es la base de las pruebas y gráficos principales.
         """
     )
@@ -665,8 +623,8 @@ with st.expander("Interpretación de la comparación de rendimientos"):
 # ==============================
 st.markdown("### Hechos estilizados")
 section_intro(
-    "Lectura empírica de la serie",
-    "Se resume si la muestra exhibe rasgos frecuentes en retornos financieros, usando las estadísticas y extremos observados.",
+    "Lectura empirica de la serie",
+    "Se resume si la muestra exhibe rasgos frecuentes en retornos financieros, usando las estadisticas y extremos observados.",
 )
 
 rolling_vol = series.rolling(20).std()
@@ -677,19 +635,19 @@ negative_extremes = int((series < lower_fence).sum())
 positive_extremes = int((series > upper_fence).sum())
 skew_metric_display = "Sin datos" if skew_value is None else f"{skew_value:.2f}"
 heavy_tails_text = (
-    f"La curtosis de {kurt_value:.2f} y Jarque-Bera con p-value {format_p_value(jb_p_value)} sugieren colas pesadas; hay señal cuando la curtosis supera 3 o cuando Jarque-Bera rechaza normalidad."
+    f"La curtosis de {kurt_value:.2f} y Jarque-Bera con p-value {format_p_value(jb_p_value)} sugieren colas pesadas; hay senal cuando la curtosis supera 3 o cuando Jarque-Bera rechaza normalidad."
     if kurt_value is not None and jb_p_value is not None and (kurt_value > 3 or jb_p_value < 0.05)
     else "La muestra no muestra una señal fuerte de colas pesadas con las métricas disponibles."
 )
 volatility_clustering_text = (
-    f"La volatilidad móvil de 20 periodos muestra {high_vol_clusters} coincidencias consecutivas por encima del percentil 75, lo que aporta un indicio descriptivo de agrupamiento de volatilidad."
+    f"La volatilidad movil de 20 periodos muestra {high_vol_clusters} coincidencias consecutivas por encima del percentil 75, lo que aporta un indicio descriptivo de agrupamiento de volatilidad."
     if high_vol_clusters > 0
-    else "La volatilidad móvil de 20 periodos no muestra suficientes coincidencias consecutivas por encima del percentil 75 como para sugerir un indicio claro de agrupamiento en esta muestra."
+    else "La volatilidad movil de 20 periodos no muestra suficientes coincidencias consecutivas por encima del percentil 75 como para sugerir un indicio claro de agrupamiento en esta muestra."
 )
 leverage_text = (
-    f"La asimetría de {skew_metric_display}, el mínimo de {min_ret:.4%} y {negative_extremes} outliers negativos frente a {positive_extremes} positivos son compatibles con riesgo bajista. Esta lectura es exploratoria y no permite afirmar efecto apalancamiento de forma concluyente."
+    f"La asimetria de {skew_metric_display}, el minimo de {min_ret:.4%} y {negative_extremes} outliers negativos frente a {positive_extremes} positivos son compatibles con riesgo bajista. Esta lectura es exploratoria y no permite afirmar efecto apalancamiento de forma concluyente."
     if skew_value is not None and skew_value < 0 and abs(min_ret) > abs(max_ret)
-    else f"La asimetría de {skew_metric_display}, el mínimo de {min_ret:.4%}, el máximo de {max_ret:.4%} y los extremos observados no bastan para afirmar efecto apalancamiento; la lectura se limita a una evaluación descriptiva de riesgo bajista."
+    else f"La asimetria de {skew_metric_display}, el minimo de {min_ret:.4%}, el maximo de {max_ret:.4%} y los extremos observados no bastan para afirmar efecto apalancamiento; la lectura se limita a una evaluacion descriptiva de riesgo bajista."
 )
 
 heavy_tails_detected = bool(
@@ -704,29 +662,29 @@ leverage_signal = bool(
 stylized_cards = [
     {
         "title": "Colas pesadas",
-        "status": "Señal detectada" if heavy_tails_detected else "Sin señal fuerte",
+        "status": "Senal detectada" if heavy_tails_detected else "Sin senal fuerte",
         "summary": (
-            "Curtosis elevada o rechazo de normalidad sugieren eventos extremos más frecuentes."
+            "Curtosis elevada o rechazo de normalidad sugieren eventos extremos mas frecuentes."
             if heavy_tails_detected
             else "La muestra no muestra una desviación fuerte frente a una normal en esta lectura."
         ),
     },
     {
         "title": "Indicio de agrupamiento de volatilidad",
-        "status": "Señal descriptiva" if high_vol_clusters > 0 else "Sin señal clara",
+        "status": "Senal descriptiva" if high_vol_clusters > 0 else "Sin senal clara",
         "summary": (
-            "La volatilidad móvil alta aparece en días consecutivos y apunta a persistencia temporal descriptiva."
+            "La volatilidad movil alta aparece en dias consecutivos y apunta a persistencia temporal descriptiva."
             if high_vol_clusters > 0
-            else "La volatilidad móvil no muestra persistencia alta suficientemente clara en la muestra."
+            else "La volatilidad movil no muestra persistencia alta suficientemente clara en la muestra."
         ),
     },
     {
         "title": "Riesgo bajista / posible efecto apalancamiento",
-        "status": "Señal exploratoria" if leverage_signal else "No concluyente",
+        "status": "Senal exploratoria" if leverage_signal else "No concluyente",
         "summary": (
             "Los extremos negativos dominan la lectura y son compatibles con riesgo bajista, sin constituir prueba formal."
             if leverage_signal
-            else "La asimetría y los extremos observados no alcanzan para una lectura concluyente."
+            else "La asimetria y los extremos observados no alcanzan para una lectura concluyente."
         ),
     },
 ]
@@ -768,12 +726,12 @@ for column, card in zip(card_columns, stylized_cards):
             unsafe_allow_html=True,
         )
 
-with st.expander("Interpretación de hechos estilizados"):
+with st.expander("Interpretacion de hechos estilizados"):
     st.markdown(
         f"""
         - **Colas pesadas:** {heavy_tails_text}
-        - **Indicio de agrupamiento de volatilidad:** {volatility_clustering_text} Esta lectura usa volatilidad móvil como evidencia descriptiva y no constituye una prueba formal ARCH/GARCH.
-        - **Riesgo bajista / posible efecto apalancamiento:** {leverage_text} Una prueba formal requeriría modelos como **EGARCH** o **GJR-GARCH**, o estimar explícitamente la relación entre choques negativos y volatilidad futura.
+        - **Indicio de agrupamiento de volatilidad:** {volatility_clustering_text} Esta lectura usa volatilidad movil como evidencia descriptiva y no constituye una prueba formal ARCH/GARCH.
+        - **Riesgo bajista / posible efecto apalancamiento:** {leverage_text} Una prueba formal requeriria modelos como **EGARCH** o **GJR-GARCH**, o estimar explicitamente la relacion entre choques negativos y volatilidad futura.
         """
     )
 
@@ -783,11 +741,11 @@ with st.expander("Interpretación de hechos estilizados"):
 st.markdown("### Últimos rendimientos")
 st.dataframe(ret_df.tail(15), width="stretch")
 
-with st.expander("Interpretación de la tabla de rendimientos recientes"):
+with st.expander("Interpretacion de la tabla de rendimientos recientes"):
     st.markdown(
         """
         - La tabla permite contrastar observaciones recientes de `simple_return` y `log_return` sin recalcularlas manualmente.
-        - Es útil para identificar si los episodios extremos del periodo también se concentran en las fechas más recientes.
+        - Es util para identificar si los episodios extremos del periodo tambien se concentran en las fechas mas recientes.
         """
     )
 
@@ -811,7 +769,7 @@ interpretacion_volatilidad = (
     else "alta"
 )
 resultado_normalidad = (
-    "no ofrecen suficientes datos para una decisión formal de normalidad"
+    "no ofrecen suficientes datos para una decision formal de normalidad"
     if jb_p_value is None
     else f"rechazan normalidad bajo Jarque-Bera al 5% (p-value {format_p_value(jb_p_value)})"
     if jb_p_value < 0.05
@@ -820,33 +778,34 @@ resultado_normalidad = (
 interpretacion_normalidad = (
     "se aparta de una normal simple y puede concentrar riesgos en colas o extremos"
     if jb_p_value is not None and jb_p_value < 0.05
-    else "no muestra evidencia estadística fuerte contra normalidad en esta prueba, aunque sigue siendo necesario revisar colas y extremos"
+    else "no muestra evidencia estadistica fuerte contra normalidad en esta prueba, aunque sigue siendo necesario revisar colas y extremos"
     if jb_p_value is not None
     else "no puede contrastarse formalmente con los datos disponibles"
 )
 asimetria_conclusion = (
-    "asimetría no disponible"
+    "asimetria no disponible"
     if skew_value is None
-    else f"asimetría negativa ({skew_value:.2f}), compatible con mayor peso relativo de pérdidas extremas"
+    else f"asimetria negativa ({skew_value:.2f}), compatible con mayor peso relativo de perdidas extremas"
     if skew_value < -0.5
-    else f"asimetría positiva ({skew_value:.2f}), compatible con mayor peso relativo de movimientos favorables extremos"
+    else f"asimetria positiva ({skew_value:.2f}), compatible con mayor peso relativo de movimientos favorables extremos"
     if skew_value > 0.5
-    else f"asimetría moderada ({skew_value:.2f}), sin sesgo direccional fuerte"
+    else f"asimetria moderada ({skew_value:.2f}), sin sesgo direccional fuerte"
 )
 curtosis_conclusion = (
     "curtosis no disponible"
     if kurt_value is None
-    else f"curtosis elevada ({kurt_value:.2f}), consistente con colas más pesadas"
+    else f"curtosis elevada ({kurt_value:.2f}), consistente con colas mas pesadas"
     if kurt_value > 3
-    else f"curtosis de {kurt_value:.2f}, sin señal fuerte de colas pesadas bajo el umbral usado"
+    else f"curtosis de {kurt_value:.2f}, sin senal fuerte de colas pesadas bajo el umbral usado"
 )
 extremos_conclusion = (
-    f"mínimo observado de {min_ret:.4%}, máximo de {max_ret:.4%} y {outlier_count} observaciones atípicas bajo criterio IQR"
+    f"minimo observado de {min_ret:.4%}, maximo de {max_ret:.4%} y {outlier_count} observaciones atipicas bajo criterio IQR"
 )
 st.info(
     f"""
-    En el periodo analizado, los rendimientos logarítmicos de **{asset_name} ({ticker})** presentan una media diaria **{interpretacion_media}** ({mean_ret:.4%}) y una volatilidad **{interpretacion_volatilidad}** ({vol_ret:.4%}). Las pruebas de normalidad **{resultado_normalidad}**, lo que indica que la distribución **{interpretacion_normalidad}**.
+    En el periodo analizado, los rendimientos logaritmicos de **{asset_name} ({ticker})** presentan una media diaria **{interpretacion_media}** ({mean_ret:.4%}) y una volatilidad **{interpretacion_volatilidad}** ({vol_ret:.4%}). Las pruebas de normalidad **{resultado_normalidad}**, lo que indica que la distribucion **{interpretacion_normalidad}**.
 
     La **{asimetria_conclusion}**, la **{curtosis_conclusion}** y los valores extremos observados ({extremos_conclusion}) sugieren que el riesgo no debe resumirse únicamente con media y desviación estándar. Por esta razón, para la medición de riesgo en módulos posteriores, especialmente **VaR/CVaR** y **GARCH**, es recomendable complementar el análisis con enfoques empíricos y modelos de volatilidad.
     """
 )
+

@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from pydantic import ValidationError
 
+from src.app_state import get_portfolio_config
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, get_ticker, ensure_project_dirs
 from src.download import data_error_message
 from src.indicators import compute_all_indicators
@@ -13,8 +14,8 @@ from src.plots import (
     plot_stochastic,
 )
 from src.services.market_data_client import MarketDataClient
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import configured_assets, module_params, render_app_shell
+from src.ui_style import apply_global_typography
 from src.signal import compute_signal
 from src.ticker_validation import (
     PORTFOLIO_VALIDATION_MESSAGE,
@@ -24,7 +25,6 @@ from src.ticker_validation import (
 
 ensure_project_dirs()
 apply_global_typography()
-render_sidebar_navigation()
 
 
 # ==============================
@@ -268,7 +268,7 @@ def signal_detail(signal: str) -> str:
     if signal == "Alcista":
         return "Precio y RSI favorables"
     if signal == "Bajista":
-        return "Precio y RSI débiles"
+        return "Precio y RSI debiles"
     return "Señal sin confirmación"
 
 
@@ -440,52 +440,68 @@ def prepare_stochastic_fig(fig):
 
 inject_kpi_cards_css()
 
-render_page_title(
+render_app_shell(
     "Módulo 1 - Análisis técnico",
     "Explora tendencia, momentum y señales técnicas del activo seleccionado.",
 )
+ASSETS = configured_assets(ASSETS)
 
 # ==============================
-# Sidebar
+# Seleccion de activo y periodo
 # ==============================
 default_start = pd.to_datetime(DEFAULT_START_DATE).date()
 default_end = pd.to_datetime(DEFAULT_END_DATE).date()
+portfolio_config = get_portfolio_config()
+horizonte = portfolio_config.get("selected_horizon") or "1 año"
+fecha_fin_ref = default_end
+for obsolete_key in ("tec_start", "tec_end"):
+    st.session_state.pop(obsolete_key, None)
 
-with st.sidebar:
-    st.header("Parámetros técnicos")
-    asset_name = st.selectbox("Activo", list(ASSETS.keys()), index=0)
+if horizonte == "1 mes":
+    start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(months=1)).date()
+    end_date = fecha_fin_ref
+elif horizonte == "Trimestre":
+    start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(months=3)).date()
+    end_date = fecha_fin_ref
+elif horizonte in ("Semestre", "6 meses"):
+    start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(months=6)).date()
+    end_date = fecha_fin_ref
+elif horizonte in ("1 año", "1 ano"):
+    start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(years=1)).date()
+    end_date = fecha_fin_ref
+elif horizonte in ("2 años", "2 anos"):
+    start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(years=2)).date()
+    end_date = fecha_fin_ref
+elif horizonte in ("3 años", "3 anos"):
+    start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(years=3)).date()
+    end_date = fecha_fin_ref
+elif horizonte in ("5 años", "5 anos"):
+    start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(years=5)).date()
+    end_date = fecha_fin_ref
+else:
+    start_date = default_start
+    end_date = default_end
 
-    horizonte = st.selectbox(
-        "Horizonte",
-        ["1 mes", "Trimestre", "Semestre", "1 año", "2 años", "3 años", "5 años", "Personalizado"],
-        index=3,
-    )
+st.markdown("### Activo seleccionado")
+st.caption("Version visual M1 actualizada: selector de activo en cuerpo principal")
+with st.container(border=True):
+    selector_col, ticker_col, period_col = st.columns([1.5, 0.75, 1.1])
+    with selector_col:
+        asset_name = st.selectbox("Activo", list(ASSETS.keys()), index=0, key="m1_asset_selector")
 
-    fecha_fin_ref = default_end
-    if horizonte == "1 mes":
-        start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref
-    elif horizonte == "Trimestre":
-        start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref
-    elif horizonte == "Semestre":
-        start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref
-    elif horizonte == "1 año":
-        start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(years=1)).date()
-        end_date = fecha_fin_ref
-    elif horizonte == "2 años":
-        start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(years=2)).date()
-        end_date = fecha_fin_ref
-    elif horizonte == "3 años":
-        start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref
-    elif horizonte == "5 años":
-        start_date = (pd.Timestamp(fecha_fin_ref) - pd.DateOffset(years=5)).date()
-        end_date = fecha_fin_ref
-    else:
-        start_date = default_start
-        end_date = default_end
+    ticker = get_ticker(asset_name)
+    asset_label = asset_name
+
+    with ticker_col:
+        st.markdown("**Ticker**")
+        st.caption(ticker)
+
+    with period_col:
+        st.markdown("**Periodo analizado**")
+        st.caption(f"{horizonte}: {start_date} a {end_date}")
+
+with module_params():
+    st.header("Ajustes técnicos")
 
     sma_window = 20
     ema_window = 20
@@ -494,10 +510,9 @@ with st.sidebar:
     stoch_window = 14
     usar_ticker_manual = False
     manual_ticker = ""
-    ticker = get_ticker(asset_name)
-    asset_label = asset_name
 
-    with st.expander("Ajustes avanzados", expanded=True):
+    with st.container(border=True):
+        st.markdown("**Ajustes avanzados**")
         usar_ticker_manual = st.checkbox("Ingresar ticker manual", value=False)
         if usar_ticker_manual:
             manual_ticker = st.text_input(
@@ -515,31 +530,17 @@ with st.sidebar:
             ticker = ticker_input.ticker
             asset_label = asset_name_for_ticker(ticker) or asset_label
 
-        if horizonte == "Personalizado":
-            start_date = st.date_input("Fecha inicial", value=default_start, key="tec_start")
-            end_date = st.date_input("Fecha final", value=default_end, key="tec_end")
-        else:
-            st.caption(f"Rango activo: {start_date} a {end_date}")
-
-        if "df_prices" in st.session_state:
-            csv_bytes = st.session_state["df_prices"].to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "Exportar CSV de precios",
-                data=csv_bytes,
-                file_name=f"{ticker}_prices.csv",
-                mime="text/csv",
-                key="download_csv_sidebar",
-            )
+        st.caption(f"Periodo configurado: {horizonte} ({start_date} a {end_date})")
 
         st.markdown("**Ventanas de indicadores**")
         sma_window = st.slider("Ventana SMA", min_value=5, max_value=60, value=sma_window)
         ema_window = st.slider("Ventana EMA", min_value=5, max_value=60, value=ema_window)
         rsi_window = st.slider("Ventana RSI", min_value=5, max_value=30, value=rsi_window)
         bb_window = st.slider("Ventana Bollinger", min_value=10, max_value=60, value=bb_window)
-        stoch_window = st.slider("Ventana Estocástico", min_value=5, max_value=30, value=stoch_window)
+        stoch_window = st.slider("Ventana Estocastico", min_value=5, max_value=30, value=stoch_window)
 
 if start_date >= end_date:
-    st.error("La fecha inicial debe ser anterior a la fecha final.")
+    st.error("El inicio del periodo debe ser anterior al cierre del periodo.")
     st.stop()
 
 # ==============================
@@ -561,6 +562,16 @@ try:
         df_prices = pd.DataFrame()
 
     st.session_state["df_prices"] = df_prices
+    with module_params():
+        if not df_prices.empty:
+            csv_bytes = df_prices.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Exportar CSV de precios",
+                data=csv_bytes,
+                file_name=f"{ticker}_prices.csv",
+                mime="text/csv",
+                key="download_csv_sidebar",
+            )
 except Exception as exc:
     st.error(
         data_error_message(
@@ -667,20 +678,6 @@ section_intro(
         "señales de cautela en el periodo analizado."
     ),
 )
-st.markdown(
-    f"""
-    <div class="asset-focus">
-        <div>
-            <div class="asset-focus-label">Activo seleccionado</div>
-            <div class="asset-focus-name">{sanitize_text(asset_label)} ({sanitize_text(ticker)})</div>
-        </div>
-        <div class="asset-focus-meta">
-            Periodo analizado<br>{start_date} a {end_date}
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
 
 # ==============================
 # KPIs ejecutivos
@@ -699,7 +696,7 @@ with col1:
 
 with col2:
     kpi_card(
-        "Variación previa",
+        "Variacion previa",
         fmt_pct(price_change),
         delta="vs sesión previa" if price_change is not None else None,
         delta_type=delta_type(price_change),
@@ -724,18 +721,18 @@ with col4:
         caption="Precio vs SMA/EMA + RSI",
     )
 
-with st.expander("Cómo interpretar", expanded=False):
+with st.expander("Como interpretar", expanded=False):
     st.markdown(
         """
 
 - El precio actual muestra el último cierre disponible del activo. Este valor se usa como referencia para compararlo con las medias móviles, las bandas de Bollinger y los indicadores de momentum.
 - La variación previa muestra el cambio frente al cierre anterior. En este caso, al ser negativa, indica presión bajista reciente, pero no se interpreta sola; se contrasta con los indicadores de tendencia y momentum.
-- El RSI permite leer la fuerza reciente del movimiento. En este caso no alcanza una zona extrema de sobreventa, pero se ubica en una zona baja-neutral, lo que sugiere pérdida de impulso comprador y debilidad reciente.
+- El RSI permite leer la fuerza reciente del movimiento. En este caso no alcanza una zona extrema de sobreventa, pero se ubica en una zona baja-neutral, lo que sugiere perdida de impulso comprador y debilidad reciente.
 
 **Criterio de la señal**  
-- Alcista ↗: precio > SMA y EMA **y** RSI ≥ 55  
-- Bajista ↘: precio < SMA y EMA **y** RSI ≤ 45  
-- Neutral ↔: resto de casos
+- Alcista : precio > SMA y EMA **y** RSI  55  
+- Bajista : precio < SMA y EMA **y** RSI  45  
+- Neutral : resto de casos
 """
     )
 
@@ -781,7 +778,7 @@ st.plotly_chart(
 )
 with st.expander("Lectura actual de Bandas de Bollinger", expanded=False):
     st.markdown(explain_bollinger(close_now, bb_low_now, bb_mid_now, bb_up_now))
-with st.expander("¿Cómo leer las Bandas de Bollinger?", expanded=False):
+with st.expander("Cómo leer las Bandas de Bollinger", expanded=False):
     st.markdown(
         """
 - **Close:** precio de cierre del activo.
@@ -809,15 +806,15 @@ st.plotly_chart(
 )
 with st.expander("Lectura actual del MACD", expanded=False):
     st.markdown(explain_macd(macd_now, macd_signal_now, macd_hist_now))
-with st.expander("¿Cómo leer el MACD?", expanded=False):
+with st.expander("Cómo leer el MACD", expanded=False):
     st.markdown(
         """
 - **MACD:** mide diferencia entre medias exponenciales y resume cambios de momentum.
-- **MACD_signal:** línea suavizada usada para confirmar cruces.
+- **MACD_signal:** linea suavizada usada para confirmar cruces.
 - **MACD_hist:** distancia entre MACD y señal; muestra aceleración o pérdida de impulso.
 - **Cruces:** MACD sobre la señal favorece lectura alcista; por debajo, lectura bajista.
 - **Histograma:** positivo confirma impulso favorable; negativo confirma debilidad.
-- **Línea cero:** cruzar por encima de cero refuerza momentum positivo; cruzar por debajo refuerza cautela.
+- **Linea cero:** cruzar por encima de cero refuerza momentum positivo; cruzar por debajo refuerza cautela.
 """
     )
 
@@ -826,16 +823,16 @@ st.plotly_chart(
     width="stretch",
     config=PLOT_CONFIG,
 )
-with st.expander("Lectura actual del oscilador estocástico", expanded=False):
+with st.expander("Lectura actual del oscilador estocastico", expanded=False):
     st.markdown(explain_stochastic(stoch_k_now, stoch_d_now))
-with st.expander("¿Cómo leer el oscilador estocástico?", expanded=False):
+with st.expander("Cómo leer el oscilador estocástico", expanded=False):
     st.markdown(
         """
-- **%K:** línea rápida; ubica el cierre frente al rango reciente.
+- **%K:** linea rapida; ubica el cierre frente al rango reciente.
 - **%D:** línea suavizada de %K; ayuda a confirmar la señal.
 - **Zonas:** sobre 80 indica zona alta; bajo 20 indica zona baja.
-- **Cruces:** %K sobre %D sugiere mejora de corto plazo; %K bajo %D sugiere pérdida de impulso.
-- **Timing:** es útil para leer impulso táctico, especialmente cuando confirma la tendencia observada en precio y medias.
+- **Cruces:** %K sobre %D sugiere mejora de corto plazo; %K bajo %D sugiere perdida de impulso.
+- **Timing:** es util para leer impulso tactico, especialmente cuando confirma la tendencia observada en precio y medias.
 """
     )
 
@@ -846,3 +843,4 @@ st.markdown("### Datos recientes")
 with st.expander("Ver tabla técnica reciente", expanded=False):
     table_cols = [col for col in required_cols if col in chart_df.columns]
     st.dataframe(chart_df[table_cols].tail(15), width="stretch")
+

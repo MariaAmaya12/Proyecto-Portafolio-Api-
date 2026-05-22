@@ -24,12 +24,11 @@ from src.ui_components import (
     render_section,
     render_table,
 )
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_portfolio_summary_card
+from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 apply_global_typography()
-render_sidebar_navigation()
 
 
 def inject_kpi_cards_css():
@@ -73,6 +72,51 @@ def fmt_num(value, digits=4):
     return f"{numeric_value:.{digits}f}" if pd.notna(numeric_value) else "N/D"
 
 
+def first_valid_macro_value(data: dict, *keys: str):
+    for key in keys:
+        value = pd.to_numeric(data.get(key), errors="coerce")
+        if pd.notna(value):
+            return float(value)
+    return None
+
+
+def normalize_metric_table_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    normalized = df.copy()
+    metric_col = next(
+        (col for col in ["metrica", "métrica", "Metrica", "Métrica", "metric", "indicador", "Indicador"] if col in normalized.columns),
+        None,
+    )
+    value_col = next(
+        (col for col in ["valor", "Valor", "value", "Value"] if col in normalized.columns),
+        None,
+    )
+    if metric_col is not None and metric_col != "metrica":
+        normalized = normalized.rename(columns={metric_col: "metrica"})
+    if value_col is not None and value_col != "valor":
+        normalized = normalized.rename(columns={value_col: "valor"})
+    return normalized
+
+
+def metric_value(df: pd.DataFrame, metric_name: str):
+    normalized = normalize_metric_table_columns(df)
+    if normalized.empty or not {"metrica", "valor"}.issubset(normalized.columns):
+        return None
+
+    matches = normalized.loc[normalized["metrica"] == metric_name, "valor"]
+    if matches.empty:
+        return None
+
+    value = pd.to_numeric(matches.iloc[0], errors="coerce")
+    return float(value) if pd.notna(value) else None
+
+
+def macro_display(value, formatter):
+    return formatter(value) if value is not None else "No disponible"
+
+
 def render_conclusion_box(message: str):
     st.markdown(
         f"""
@@ -95,57 +139,17 @@ def render_conclusion_box(message: str):
 
 inject_kpi_cards_css()
 
-render_page_title(
+render_app_shell(
     "Módulo 8 - Contexto macro y benchmark",
     "Contexto macro y comparación del portafolio óptimo frente al benchmark global.",
 )
+ASSETS = configured_assets(ASSETS)
+horizonte, start_date, end_date = configured_period(DEFAULT_START_DATE, DEFAULT_END_DATE)
+render_portfolio_summary_card(ASSETS)
 
 
-with st.sidebar:
+with module_params():
     st.header("Parámetros")
-
-    horizonte = st.selectbox(
-        "Horizonte de análisis",
-        [
-            "1 mes",
-            "Trimestre",
-            "Semestre",
-            "1 año",
-            "2 años",
-            "3 años",
-            "5 años",
-            "Personalizado",
-        ],
-        index=3,
-    )
-
-    fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
-
-    if horizonte == "1 mes":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Trimestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Semestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "1 año":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "2 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "3 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "5 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
-        end_date = fecha_fin_ref.date()
-    else:
-        start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE, key="bm_start")
-        end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="bm_end")
-
     mostrar_detalle = st.checkbox("Mostrar detalle adicional", value=False)
 
 
@@ -210,52 +214,66 @@ summary_df, extras_df, cum_port, cum_bench = benchmark_summary(
     benchmark_returns=benchmark_returns,
     rf_annual=rf_annual,
 )
+extras_df = normalize_metric_table_columns(extras_df)
 
 if summary_df.empty:
     st.error("No fue posible construir la comparación entre portafolio óptimo y benchmark.")
     st.stop()
 
-st.markdown("### Indicadores macroeconómicos")
+st.markdown("### Indicadores macroeconomicos")
 render_section(
     "Contexto macro",
-    "Rf, inflación y tasa de cambio obtenidas vía API para contextualizar el periodo.",
+    "Rf, inflacion y tasa de cambio obtenidas via API para contextualizar el periodo.",
 )
 
-rf_pct = macro["risk_free_rate_pct"] if macro["risk_free_rate_pct"] == macro["risk_free_rate_pct"] else None
-inflation_yoy = macro["inflation_yoy"] if macro["inflation_yoy"] == macro["inflation_yoy"] else None
-usdcop_market = macro["usdcop_market"] if macro["usdcop_market"] == macro["usdcop_market"] else None
+rf_pct = first_valid_macro_value(macro, "risk_free_rate_pct")
+inflation_yoy = first_valid_macro_value(macro, "inflation_yoy")
+usdcop_market = first_valid_macro_value(macro, "usdcop_market", "cop_per_usd")
 
 macro_cols = st.columns(3)
 with macro_cols[0]:
     kpi_card(
         "Tasa libre de riesgo",
-        f"{rf_pct:.2f}%" if rf_pct is not None else "N/D",
+        macro_display(rf_pct, lambda value: f"{value:.2f}%"),
         caption="Usada en Sharpe, CAPM y benchmark",
     )
 with macro_cols[1]:
     kpi_card(
-        "Inflación interanual",
-        fmt_pct(inflation_yoy),
+        "Inflacion interanual",
+        macro_display(inflation_yoy, fmt_pct),
         caption="Referencia macro del periodo",
     )
 with macro_cols[2]:
     kpi_card(
         "Tasa de cambio USD/COP",
-        f"{usdcop_market:.2f}" if usdcop_market is not None else "N/D",
-        caption="Dato de mercado más reciente disponible",
+        macro_display(usdcop_market, lambda value: f"{value:.2f}"),
+        caption="Dato de mercado mas reciente disponible",
+    )
+missing_macro_fields = []
+if rf_pct is None:
+    missing_macro_fields.append("tasa libre de riesgo")
+if inflation_yoy is None:
+    missing_macro_fields.append("inflación interanual")
+if usdcop_market is None:
+    missing_macro_fields.append("USD/COP")
+if missing_macro_fields:
+    st.info(
+        "No hay dato macro disponible para "
+        + ", ".join(missing_macro_fields)
+        + ". La lectura continúa con la información disponible."
     )
 render_explanation_expander(
-    "Cómo interpretar los indicadores macroeconómicos",
+    "Como interpretar los indicadores macroeconomicos",
     [
-        "Muestra la tasa libre de riesgo, la inflación interanual y la tasa USD/COP usadas para contextualizar el periodo analizado.",
-        f"En el resultado actual, la referencia libre de riesgo es {f'{rf_pct:.2f}%' if rf_pct is not None else 'N/D'}, la inflación observada es {fmt_pct(inflation_yoy)} y el USD/COP reportado es {f'{usdcop_market:.2f}' if usdcop_market is not None else 'N/D'}.",
-        "Financieramente, una Rf más alta eleva el retorno exigido, la inflación condiciona el retorno real y el tipo de cambio ayuda a leer presiones externas o sensibilidad cambiaria.",
+        "Muestra la tasa libre de riesgo, la inflacion interanual y la tasa USD/COP usadas para contextualizar el periodo analizado.",
+        f"En el resultado actual, la referencia libre de riesgo es {macro_display(rf_pct, lambda value: f'{value:.2f}%')}, la inflacion observada es {macro_display(inflation_yoy, fmt_pct)} y el USD/COP reportado es {macro_display(usdcop_market, lambda value: f'{value:.2f}')}.",
+        "Financieramente, una Rf mas alta eleva el retorno exigido, la inflacion condiciona el retorno real y el tipo de cambio ayuda a leer presiones externas o sensibilidad cambiaria.",
     ],
 )
 
 st.markdown("### Portafolio óptimo vs benchmark")
 render_section(
-    "Comparación principal",
+    "Comparacion principal",
     "Desempeño acumulado en base 100 del portafolio óptimo de máximo Sharpe contra el benchmark.",
 )
 benchmark_fig = plot_benchmark_base100(cum_port, cum_bench)
@@ -299,29 +317,33 @@ if ret_port is not None and ret_bench is not None:
         )
 
 render_chart_explanation(
-    "Cómo leer el gráfico base 100",
+    "Como leer el grafico base 100",
     "Compara portafolio óptimo y benchmark en una base común de 100 para seguir su trayectoria acumulada durante el periodo.",
     [
         f"En el resultado actual, {chart_ret_comparison_text}.",
         "Cuando la curva del portafolio se mantiene por encima, hay liderazgo relativo; cuando converge o cae por debajo, la ventaja se reduce o se revierte.",
-        "Financieramente, el gráfico muestra la trayectoria del retorno relativo, pero la lectura debe confirmarse con alpha, tracking error, information ratio y la tabla comparativa.",
+        "Financieramente, el grafico muestra la trayectoria del retorno relativo, pero la lectura debe confirmarse con alpha, tracking error, information ratio y la tabla comparativa.",
     ],
 )
 
-try:
-    alpha_jensen = float(extras_df.loc[extras_df["métrica"] == "Alpha de Jensen", "valor"].iloc[0])
-except Exception:
-    alpha_jensen = None
-
-try:
-    tracking_error = float(extras_df.loc[extras_df["métrica"] == "Tracking Error", "valor"].iloc[0])
-except Exception:
-    tracking_error = None
-
-try:
-    information_ratio = float(extras_df.loc[extras_df["métrica"] == "Information Ratio", "valor"].iloc[0])
-except Exception:
-    information_ratio = None
+alpha_jensen = metric_value(extras_df, "Alpha de Jensen")
+tracking_error = metric_value(extras_df, "Tracking Error")
+information_ratio = metric_value(extras_df, "Information Ratio")
+missing_benchmark_metrics = [
+    name
+    for name, value in [
+        ("Alpha de Jensen", alpha_jensen),
+        ("Tracking Error", tracking_error),
+        ("Information Ratio", information_ratio),
+    ]
+    if value is None
+]
+if missing_benchmark_metrics:
+    st.info(
+        "No hay dato suficiente para "
+        + ", ".join(missing_benchmark_metrics)
+        + ". Revisa que el portafolio y el benchmark tengan retornos alineados en el periodo."
+    )
 
 ret_delta = None
 ret_delta_type = "neu"
@@ -396,11 +418,11 @@ with metric_cols[3]:
         caption="Retorno activo por unidad de riesgo activo",
     )
 render_kpi_help(
-    "Cómo interpretar los KPIs de benchmark",
+    "Como interpretar los KPIs de benchmark",
     [
         "Muestra el retorno acumulado del portafolio y tres métricas de lectura relativa frente al benchmark.",
         f"En el resultado actual, el portafolio registra {fmt_pct(ret_port)}, el alpha de Jensen es {fmt_num(alpha_jensen)}, el tracking error es {fmt_num(tracking_error)} y el information ratio es {fmt_num(information_ratio)}.",
-        "Financieramente, alpha evalúa si hubo valor agregado ajustado por beta, tracking error mide cuánto se aparta la estrategia del benchmark e information ratio juzga si ese riesgo activo fue bien compensado.",
+        "Financieramente, alpha evalua si hubo valor agregado ajustado por beta, tracking error mide cuanto se aparta la estrategia del benchmark e information ratio juzga si ese riesgo activo fue bien compensado.",
     ],
 )
 
@@ -412,11 +434,11 @@ performance_table = summary_df.rename(
         "ret_anualizado": "Retorno anualizado",
         "vol_anualizada": "Volatilidad",
         "sharpe": "Sharpe",
-        "max_drawdown": "Máx. drawdown",
+        "max_drawdown": "Max. drawdown",
     }
 ).copy()
 
-for col in ["Retorno acumulado", "Retorno anualizado", "Volatilidad", "Máx. drawdown"]:
+for col in ["Retorno acumulado", "Retorno anualizado", "Volatilidad", "Max. drawdown"]:
     if col in performance_table.columns:
         performance_table[col] = performance_table[col].map(
             lambda value: f"{value:.2%}" if pd.notna(value) else "N/D"
@@ -464,12 +486,12 @@ if alpha_jensen is not None:
             f"Alpha de Jensen en {fmt_num(alpha_jensen)}: indica desempeño inferior ajustado por riesgo frente al benchmark."
         )
     else:
-        alpha_text = "Alpha de Jensen en 0.0000: no hay evidencia de creación de valor ajustada por riesgo."
+        alpha_text = "Alpha de Jensen en 0.0000: no hay evidencia de creacion de valor ajustada por riesgo."
 
-tracking_error_text = f"Tracking Error en {fmt_num(tracking_error)}: no hay dato suficiente para medir separación frente al benchmark."
+tracking_error_text = f"Tracking Error en {fmt_num(tracking_error)}: no hay dato suficiente para medir separacion frente al benchmark."
 if tracking_error is not None:
     tracking_error_text = (
-        f"Tracking Error en {fmt_num(tracking_error)}: refleja el grado de separación frente al benchmark y no es bueno o malo por sí solo."
+        f"Tracking Error en {fmt_num(tracking_error)}: refleja el grado de separacion frente al benchmark y no es bueno o malo por si solo."
     )
 
 information_ratio_text = (
@@ -485,7 +507,7 @@ if information_ratio is not None:
             f"Information Ratio en {fmt_num(information_ratio)}: hubo retorno activo negativo frente al riesgo activo asumido."
         )
     else:
-        information_ratio_text = "Information Ratio en 0.0000: la gestión activa no agregó retorno por unidad de riesgo activo."
+        information_ratio_text = "Information Ratio en 0.0000: la gestion activa no agrego retorno por unidad de riesgo activo."
 
 vol_text = "no hay lectura concluyente de volatilidad relativa."
 if port_vol is not None and bench_vol is not None:
@@ -509,7 +531,7 @@ if port_sharpe is not None and bench_sharpe is not None:
     else:
         sharpe_text = f"Sharpe mide retorno por unidad de volatilidad; ambas series muestran la misma eficiencia ({fmt_num(port_sharpe, 3)})."
 
-drawdown_text = "Máximo drawdown: no hay dato suficiente para comparar severidad de caídas."
+drawdown_text = "Maximo drawdown: no hay dato suficiente para comparar severidad de caidas."
 if port_drawdown is not None and bench_drawdown is not None:
     if port_drawdown > bench_drawdown:
         drawdown_text = (
@@ -517,19 +539,19 @@ if port_drawdown is not None and bench_drawdown is not None:
         )
     elif port_drawdown < bench_drawdown:
         drawdown_text = (
-            f"El drawdown del portafolio fue más profundo que el del benchmark ({fmt_pct(port_drawdown)} vs {fmt_pct(bench_drawdown)})."
+            f"El drawdown del portafolio fue mas profundo que el del benchmark ({fmt_pct(port_drawdown)} vs {fmt_pct(bench_drawdown)})."
         )
     else:
-        drawdown_text = f"Portafolio y benchmark registran el mismo drawdown máximo ({fmt_pct(port_drawdown)})."
+        drawdown_text = f"Portafolio y benchmark registran el mismo drawdown maximo ({fmt_pct(port_drawdown)})."
 
-risk_compensation_text = "No hay evidencia suficiente para juzgar si el retorno compensó el riesgo observado."
+risk_compensation_text = "No hay evidencia suficiente para juzgar si el retorno compenso el riesgo observado."
 if ret_port is not None and ret_bench is not None and port_sharpe is not None and bench_sharpe is not None:
     if ret_port > ret_bench and port_sharpe >= bench_sharpe:
-        risk_compensation_text = "La ventaja en retorno también se sostiene en Sharpe, por lo que el riesgo observado parece haber sido compensado."
+        risk_compensation_text = "La ventaja en retorno tambien se sostiene en Sharpe, por lo que el riesgo observado parece haber sido compensado."
     elif ret_port > ret_bench:
         risk_compensation_text = "El portafolio gana en retorno acumulado, pero la eficiencia ajustada por volatilidad no mejora con la misma claridad."
     elif ret_port <= ret_bench and port_sharpe > bench_sharpe:
-        risk_compensation_text = "Aunque el retorno acumulado no supera al benchmark, el Sharpe sugiere una administración del riesgo relativamente más eficiente."
+        risk_compensation_text = "Aunque el retorno acumulado no supera al benchmark, el Sharpe sugiere una administracion del riesgo relativamente mas eficiente."
     else:
         risk_compensation_text = "El riesgo observado no se traduce en una mejora clara de retorno ajustado por riesgo frente al benchmark."
 
@@ -544,13 +566,13 @@ render_table(performance_table, hide_index=True, width="stretch")
 render_explanation_expander(
     "Cómo interpretar la tabla de desempeño",
     [
-        "Muestra la comparación consolidada entre portafolio y benchmark en retorno, riesgo, eficiencia y drawdown.",
+        "Muestra la comparacion consolidada entre portafolio y benchmark en retorno, riesgo, eficiencia y drawdown.",
         f"En el resultado actual, {table_header_text.lower()}",
-        f"Financieramente, la lectura conjunta parte de {ret_comparison_text}, se matiza con {vol_text}, y se valida con eficiencia y pérdidas extremas: {sharpe_text} {drawdown_text} {risk_compensation_text}",
+        f"Financieramente, la lectura conjunta parte de {ret_comparison_text}, se matiza con {vol_text}, y se valida con eficiencia y perdidas extremas: {sharpe_text} {drawdown_text} {risk_compensation_text}",
     ],
 )
 
-st.markdown("### Conclusión")
+st.markdown("### Conclusion")
 port_beats_benchmark = ret_port is not None and ret_bench is not None and ret_port > ret_bench
 alpha_positive = alpha_jensen is not None and pd.notna(alpha_jensen) and alpha_jensen > 0
 
@@ -568,12 +590,12 @@ elif alpha_positive:
     )
 else:
     render_conclusion_box(
-        "El portafolio no supera al benchmark y el alpha no evidencia creación de valor ajustada por riesgo.",
+        "El portafolio no supera al benchmark y el alpha no evidencia creacion de valor ajustada por riesgo.",
     )
 render_explanation_expander(
-    "Cómo interpretar la conclusión",
+    "Como interpretar la conclusion",
     [
-        "Muestra una conclusión ejecutiva sobre si el portafolio gana o pierde frente al benchmark en retorno y calidad del resultado.",
+        "Muestra una conclusion ejecutiva sobre si el portafolio gana o pierde frente al benchmark en retorno y calidad del resultado.",
         f"En el resultado actual, el mensaje se apoya en retorno del portafolio {fmt_pct(ret_port)}, retorno del benchmark {fmt_pct(ret_bench)} y alpha de Jensen {fmt_num(alpha_jensen)}.",
         "Financieramente, el insight sintetiza la evidencia principal, pero su solidez depende de que alpha, tracking error, information ratio y la tabla respalden la misma lectura.",
     ],
@@ -586,7 +608,7 @@ if mostrar_detalle:
             "Peso": max_sharpe_weights,
         }
     )
-    weights_df["Participación"] = weights_df["Peso"].map(lambda x: f"{x:.2%}")
+    weights_df["Participacion"] = weights_df["Peso"].map(lambda x: f"{x:.2%}")
     weights_df = weights_df.sort_values("Peso", ascending=False).reset_index(drop=True)
     with st.expander("Detalle adicional", expanded=False):
         st.markdown(
@@ -594,7 +616,9 @@ if mostrar_detalle:
             "- Usa esta sección para revisar concentración por activo y ampliar el diagnóstico sin recargar la vista principal."
         )
         st.markdown("**Pesos del portafolio óptimo**")
-        render_table(weights_df[["Activo", "Participación"]], hide_index=True, width="stretch")
+        render_table(weights_df[["Activo", "Participacion"]], hide_index=True, width="stretch")
 
         st.markdown("**Métricas adicionales**")
-        render_table(extras_df, hide_index=True, width="stretch")
+        extras_display_df = extras_df.rename(columns={"metrica": "Métrica", "valor": "Valor"})
+        render_table(extras_display_df, hide_index=True, width="stretch")
+

@@ -7,8 +7,8 @@ import streamlit as st
 
 from src.api.backend_client import BackendAPIError, backend_post, friendly_error_message
 from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import module_params, render_app_shell
+from src.ui_style import apply_global_typography
 
 
 DEFAULT_RETURNS_TEXT = "0.01, -0.005, 0.003, -0.002, 0.004, -0.006, 0.002"
@@ -18,7 +18,6 @@ DEFAULT_MATRIX_RETURNS_TEXT = "0.01,-0.005,0.003,-0.002\n0.006,-0.002,0.001,-0.0
 
 
 apply_global_typography()
-render_sidebar_navigation()
 
 
 def inject_page_css() -> None:
@@ -72,10 +71,10 @@ def parse_float_list(raw_values: str, label: str = "valores", min_length: int = 
 
     if invalid_tokens:
         invalid_text = ", ".join(invalid_tokens[:5])
-        raise ValueError(f"Estos valores no son numéricos válidos: {invalid_text}.")
+        raise ValueError(f"Estos valores no son numericos validos: {invalid_text}.")
 
     if len(values) < min_length:
-        raise ValueError(f"Ingresa al menos {min_length} valores válidos para {label}.")
+        raise ValueError(f"Ingresa al menos {min_length} valores validos para {label}.")
 
     return values
 
@@ -87,7 +86,7 @@ def parse_returns(raw_returns: str) -> list[float]:
 
 def parse_float_matrix(raw_values: str, label: str = "retornos") -> list[list[float]]:
     if not raw_values or not raw_values.strip():
-        raise ValueError(f"Ingresa {label} en filas separadas por salto de línea o punto y coma.")
+        raise ValueError(f"Ingresa {label} en filas separadas por salto de linea o punto y coma.")
 
     rows = [row.strip() for row in raw_values.replace(";", "\n").splitlines() if row.strip()]
     matrix = [parse_float_list(row, label=f"{label} de la fila {index + 1}", min_length=1) for index, row in enumerate(rows)]
@@ -159,7 +158,7 @@ def build_key_value_table(result: dict) -> pd.DataFrame:
             display_value = str(value)
         else:
             display_value = format_number(value)
-        rows.append({"Métrica": str(key), "Valor": display_value})
+        rows.append({"Metrica": str(key), "Valor": display_value})
     return pd.DataFrame(rows)
 
 
@@ -172,7 +171,7 @@ def render_ewma_results(result: dict) -> None:
             "Volatilidad EWMA",
             format_pct(result.get("ewma_volatility")),
             delta="Anualizada" if result.get("annualize") else "Diaria",
-            caption="Estimación devuelta por el backend.",
+            caption="Estimacion devuelta por el backend.",
         )
     with c2:
         kpi_card(
@@ -192,23 +191,23 @@ def render_ewma_results(result: dict) -> None:
     result_df = pd.DataFrame(
         [
             {
-                "Métrica": "Volatilidad EWMA",
+                "Metrica": "Volatilidad EWMA",
                 "Valor": format_pct(result.get("ewma_volatility")),
             },
             {
-                "Métrica": "Varianza EWMA",
+                "Metrica": "Varianza EWMA",
                 "Valor": format_number(result.get("ewma_variance")),
             },
             {
-                "Métrica": "Lambda",
+                "Metrica": "Lambda",
                 "Valor": result.get("lambda_", "N/D"),
             },
             {
-                "Métrica": "Anualizada",
-                "Valor": "Sí" if result.get("annualize") else "No",
+                "Metrica": "Anualizada",
+                "Valor": "Si" if result.get("annualize") else "No",
             },
             {
-                "Métrica": "Observaciones",
+                "Metrica": "Observaciones",
                 "Valor": result.get("observations", "N/D"),
             },
         ]
@@ -216,10 +215,10 @@ def render_ewma_results(result: dict) -> None:
     render_table(result_df, hide_index=True, width="stretch")
 
     render_explanation_expander(
-        "Cómo interpretar EWMA",
+        "Como interpretar EWMA",
         [
-            "EWMA asigna mayor peso a los retornos más recientes y menor peso a observaciones más antiguas.",
-            "Un lambda más alto suaviza más la serie y hace que la volatilidad reaccione con mayor lentitud.",
+            "EWMA asigna mayor peso a los retornos mas recientes y menor peso a observaciones mas antiguas.",
+            "Un lambda mas alto suaviza mas la serie y hace que la volatilidad reaccione con mayor lentitud.",
             "Si la opción anualizada está activa, el backend escala la volatilidad usando los periodos por año seleccionados.",
         ],
     )
@@ -228,7 +227,7 @@ def render_ewma_results(result: dict) -> None:
 def render_ewma_tab() -> None:
     render_section(
         "Volatilidad EWMA",
-        "Calcula volatilidad con ponderación exponencial sin replicar fórmulas en Streamlit; la estimación viene del backend.",
+        "Calcula volatilidad con ponderacion exponencial sin replicar formulas en Streamlit; la estimacion viene del backend.",
     )
 
     with st.form("ewma_volatility_form"):
@@ -263,7 +262,7 @@ def render_ewma_tab() -> None:
         submitted = st.form_submit_button("Calcular volatilidad EWMA", type="primary")
 
     if not submitted:
-        st.info("Ingresa una serie de retornos y ejecuta el cálculo para consultar el endpoint `/volatility/ewma`.")
+        st.info("Ingresa una serie de retornos y ejecuta el calculo para consultar el endpoint `/volatility/ewma`.")
         return
 
     try:
@@ -294,10 +293,10 @@ def render_bond_metrics_block() -> None:
         c1, c2, c3 = st.columns(3)
         with c1:
             face_value = st.number_input("Valor nominal", min_value=0.01, value=1000.0, step=100.0, format="%.2f")
-            coupon_rate = st.number_input("Cupón anual", min_value=0.0, value=0.05, step=0.005, format="%.4f")
+            coupon_rate = st.number_input("Cupon anual", min_value=0.0, value=0.05, step=0.005, format="%.4f")
         with c2:
             market_rate = st.number_input("Tasa de mercado", min_value=0.0, value=0.045, step=0.005, format="%.4f")
-            maturity_years = st.number_input("Años al vencimiento", min_value=0.25, value=5.0, step=0.25, format="%.2f")
+            maturity_years = st.number_input("Anos al vencimiento", min_value=0.25, value=5.0, step=0.25, format="%.2f")
         with c3:
             frequency = st.selectbox("Frecuencia de pago", [1, 2, 4, 12], index=1)
 
@@ -324,9 +323,9 @@ def render_bond_metrics_block() -> None:
     with c1:
         kpi_card("Precio del bono", format_currency(result.get("price")), caption="Valor presente de flujos futuros.")
     with c2:
-        kpi_card("Duración Macaulay", format_number(result.get("macaulay_duration")), caption="Plazo promedio ponderado de cobro.")
+        kpi_card("Duracion Macaulay", format_number(result.get("macaulay_duration")), caption="Plazo promedio ponderado de cobro.")
     with c3:
-        kpi_card("Duración modificada", format_number(result.get("modified_duration")), caption="Sensibilidad aproximada ante cambios en tasa.")
+        kpi_card("Duracion modificada", format_number(result.get("modified_duration")), caption="Sensibilidad aproximada ante cambios en tasa.")
     with c4:
         kpi_card("Convexidad", format_number(result.get("convexity")), caption="Ajuste de segundo orden para cambios mayores.")
 
@@ -334,8 +333,8 @@ def render_bond_metrics_block() -> None:
         "Cómo interpretar las métricas de bono",
         [
             "Precio del bono: valor presente de los flujos futuros.",
-            "Duración modificada: sensibilidad aproximada del precio ante cambios en tasa.",
-            "Convexidad: ajuste de segundo orden para cambios más grandes en tasa.",
+            "Duracion modificada: sensibilidad aproximada del precio ante cambios en tasa.",
+            "Convexidad: ajuste de segundo orden para cambios mas grandes en tasa.",
         ],
     )
 
@@ -388,7 +387,7 @@ def render_nelson_siegel_block() -> None:
         }
     )
     if curve_df.empty:
-        st.warning("El backend no devolvió puntos para la curva.")
+        st.warning("El backend no devolvio puntos para la curva.")
         return
 
     render_table(curve_df, hide_index=True, width="stretch")
@@ -413,7 +412,7 @@ def option_payload_from_inputs(spot: float, strike: float, rate: float, volatili
 
 
 def render_options_tab() -> None:
-    render_section("Opciones", "Valoración Black-Scholes y griegas calculadas por endpoints del backend.")
+    render_section("Opciones", "Valoracion Black-Scholes y griegas calculadas por endpoints del backend.")
 
     with st.form("options_form"):
         c1, c2, c3 = st.columns(3)
@@ -447,16 +446,16 @@ def render_options_tab() -> None:
 
         c1, c2 = st.columns(2)
         with c1:
-            kpi_card("Precio call", format_currency(result.get("call_price")), caption="Valor teórico de comprar el activo al strike.")
+            kpi_card("Precio call", format_currency(result.get("call_price")), caption="Valor teorico de comprar el activo al strike.")
         with c2:
-            kpi_card("Precio put", format_currency(result.get("put_price")), caption="Valor teórico de vender el activo al strike.")
+            kpi_card("Precio put", format_currency(result.get("put_price")), caption="Valor teorico de vender el activo al strike.")
 
         render_explanation_expander(
-            "Cómo interpretar Black-Scholes",
+            "Como interpretar Black-Scholes",
             [
-                "El call representa el valor teórico de comprar el activo a un precio de ejercicio.",
-                "El put representa el valor teórico de vender el activo a un precio de ejercicio.",
-                "El resultado es teórico y depende de supuestos como volatilidad constante y ausencia de arbitraje.",
+                "El call representa el valor teorico de comprar el activo a un precio de ejercicio.",
+                "El put representa el valor teorico de vender el activo a un precio de ejercicio.",
+                "El resultado es teorico y depende de supuestos como volatilidad constante y ausencia de arbitraje.",
             ],
         )
 
@@ -470,20 +469,20 @@ def render_options_tab() -> None:
         greeks_df = build_key_value_table(result)
         render_table(greeks_df, hide_index=True, width="stretch")
         render_explanation_expander(
-            "Cómo interpretar las griegas",
+            "Como interpretar las griegas",
             [
                 "Delta mide sensibilidad al precio del subyacente.",
                 "Gamma mide sensibilidad del delta.",
                 "Vega mide sensibilidad a la volatilidad.",
                 "Theta mide sensibilidad al paso del tiempo.",
-                "Rho mide sensibilidad a la tasa de interés.",
+                "Rho mide sensibilidad a la tasa de interes.",
             ],
         )
 
 
 def render_portfolio_stress_block() -> None:
-    st.markdown("### Estrés de portafolio")
-    st.caption("Cada fila representa una observación y cada columna un activo. También puedes ingresar una sola fila.")
+    st.markdown("### Estres de portafolio")
+    st.caption("Cada fila representa una observacion y cada columna un activo. Tambien puedes ingresar una sola fila.")
 
     with st.form("portfolio_stress_form"):
         returns_text = st.text_area("Retornos por activo", value=DEFAULT_MATRIX_RETURNS_TEXT, height=110)
@@ -494,7 +493,7 @@ def render_portfolio_stress_block() -> None:
         with c2:
             confidence_level = st.selectbox("Nivel de confianza", [0.90, 0.95, 0.99], index=1)
 
-        submitted = st.form_submit_button("Calcular estrés de portafolio", type="primary")
+        submitted = st.form_submit_button("Calcular estres de portafolio", type="primary")
 
     if not submitted:
         return
@@ -526,11 +525,11 @@ def render_portfolio_stress_block() -> None:
     with c1:
         kpi_card("Retorno estresado medio", format_pct(result.get("mean_return")), caption="Media de retornos bajo shocks.")
     with c2:
-        kpi_card("Pérdida extrema", format_pct(result.get("cvar")), delta="CVaR", delta_type="neg", caption="Pérdida promedio de cola.")
+        kpi_card("Perdida extrema", format_pct(result.get("cvar")), delta="CVaR", delta_type="neg", caption="Perdida promedio de cola.")
     with c3:
-        kpi_card("VaR", format_pct(result.get("var")), delta=f"{confidence_level:.0%}", caption="Pérdida umbral del escenario.")
+        kpi_card("VaR", format_pct(result.get("var")), delta=f"{confidence_level:.0%}", caption="Perdida umbral del escenario.")
     with c4:
-        kpi_card("Máximo drawdown", format_pct(result.get("max_drawdown")), caption="Caída acumulada máxima estimada.")
+        kpi_card("Maximo drawdown", format_pct(result.get("max_drawdown")), caption="Caida acumulada maxima estimada.")
 
     render_table(build_key_value_table(result), hide_index=True, width="stretch")
 
@@ -554,7 +553,7 @@ def render_combined_stress_block() -> None:
         with c4:
             bond_price = st.number_input("Precio del bono", min_value=0.01, value=1000.0, step=50.0, format="%.2f")
         with c5:
-            modified_duration = st.number_input("Duración modificada", min_value=0.0, value=4.5, step=0.25, format="%.4f")
+            modified_duration = st.number_input("Duracion modificada", min_value=0.0, value=4.5, step=0.25, format="%.4f")
         with c6:
             convexity = st.number_input("Convexidad", min_value=0.0, value=25.0, step=1.0, format="%.4f")
 
@@ -596,26 +595,29 @@ def render_combined_stress_block() -> None:
 
 
 def render_stress_testing_tab() -> None:
-    render_section("Stress testing", "Escenarios de estrés para portafolios y escenarios combinados calculados por backend.")
+    render_section("Stress testing", "Escenarios de estres para portafolios y escenarios combinados calculados por backend.")
     render_portfolio_stress_block()
     st.divider()
     render_combined_stress_block()
     render_explanation_expander(
-        "Cómo interpretar stress testing",
+        "Como interpretar stress testing",
         [
             "El stress testing no predice el futuro.",
             "Sirve para evaluar sensibilidad del portafolio bajo escenarios adversos.",
-            "El escenario combinado permite observar efectos simultáneos de precio, tasa y volatilidad.",
+            "El escenario combinado permite observar efectos simultaneos de precio, tasa y volatilidad.",
         ],
     )
 
 
 inject_page_css()
 
-render_page_title(
+render_app_shell(
     "Modelos financieros avanzados",
-    "Aplica modelos complementarios de riesgo financiero desde el backend, manteniendo el frontend como capa de interacción y visualización.",
+    "Aplica modelos complementarios de riesgo financiero desde el backend, manteniendo el frontend como capa de interaccion y visualizacion.",
 )
+
+with module_params():
+    st.caption("Los insumos de cada modelo se editan dentro de su pestana correspondiente.")
 
 tabs = st.tabs(["Volatilidad EWMA", "Renta fija", "Opciones", "Stress testing"])
 
@@ -630,3 +632,4 @@ with tabs[2]:
 
 with tabs[3]:
     render_stress_testing_tab()
+

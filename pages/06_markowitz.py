@@ -12,12 +12,11 @@ from src.api.macro import macro_snapshot
 from src.portfolio_optimization import optimize_target_return
 from src.services.market_data_client import MarketDataClient
 from src.services.portfolio_optimizer import PortfolioOptimizer
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_portfolio_summary_card
+from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 apply_global_typography()
-render_sidebar_navigation()
 
 
 # ==============================
@@ -301,62 +300,22 @@ def prepare_frontier_figure(sim_df, frontier_df, min_var, max_sharpe, manual_por
 
 inject_kpi_cards_css()
 
-render_page_title(
+render_app_shell(
     "Módulo 6 - Optimización de portafolio (Markowitz)",
     "Explora portafolios eficientes, diversificación, relación riesgo-retorno y soluciones óptimas bajo Markowitz.",
 )
+ASSETS = configured_assets(ASSETS)
+horizonte, start_date, end_date = configured_period(DEFAULT_START_DATE, DEFAULT_END_DATE)
+render_portfolio_summary_card(ASSETS)
 
 # ==============================
-# Sidebar
+# Parámetros del módulo
 # ==============================
-with st.sidebar:
+with module_params():
     st.header("Parámetros de optimización")
 
-    horizonte = st.selectbox(
-        "Horizonte de análisis",
-        [
-            "1 mes",
-            "Trimestre",
-            "Semestre",
-            "1 año",
-            "2 años",
-            "3 años",
-            "5 años",
-            "Personalizado",
-        ],
-        index=3,
-    )
-
-    fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
-
-    if horizonte == "1 mes":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Trimestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Semestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "1 año":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "2 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "3 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "5 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
-        end_date = fecha_fin_ref.date()
-    else:
-        start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE, key="mk_start")
-        end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="mk_end")
-
-    st.divider()
     n_portfolios = st.slider(
-        "Número de portafolios",
+        "N-mero de portafolios",
         min_value=10000,
         max_value=50000,
         value=10000,
@@ -374,7 +333,7 @@ with st.sidebar:
     evaluar_manual = st.toggle("Evaluar portafolio manual", value=False)
 
 if n_portfolios < 10000:
-    st.warning("El número de portafolios no puede ser menor a 10.000. Se usará 10.000.")
+    st.warning("El numero de portafolios no puede ser menor a 10.000. Se usara 10.000.")
     n_portfolios = 10000
 
 try:
@@ -407,7 +366,7 @@ except BackendAPIError as exc:
 missing_tickers = market_client.missing_tickers(bundle)
 if missing_tickers:
     st.warning(
-        "Sin datos para estos tickers en el rango seleccionado; se excluyen de la optimización: "
+        "Sin datos para estos tickers en el rango seleccionado; se excluyen de la optimizacion: "
         + ", ".join(missing_tickers)
     )
 
@@ -434,7 +393,7 @@ manual_weights_df = None
 
 if evaluar_manual:
     with st.expander("Portafolio manual (opcional)", expanded=True):
-        st.caption("Ingresa pesos en formato decimal. Ejemplo: 0.25 equivale a 25%. La Participación se deriva automáticamente.")
+        st.caption("Ingresa pesos en formato decimal. Ejemplo: 0.25 equivale a 25%. La Participacion se deriva automaticamente.")
 
         default_weight = 1 / len(returns.columns)
         manual_weights = []
@@ -472,7 +431,7 @@ if evaluar_manual:
                 "Peso": np.round(manual_weights, 6),
             }
         )
-        manual_weights_df["Participación"] = manual_weights_df["Peso"].map(lambda x: f"{x:.2%}")
+        manual_weights_df["Participacion"] = manual_weights_df["Peso"].map(lambda x: f"{x:.2%}")
 
         m1, m2, m3 = st.columns(3)
         with m1:
@@ -493,7 +452,7 @@ if evaluar_manual:
 sim_df = optimizer.simulate(returns, rf_annual=rf_annual, n_portfolios=n_portfolios)
 
 if sim_df.empty:
-    st.error("La simulación de portafolios no generó resultados válidos.")
+    st.error("La simulacion de portafolios no genero resultados validos.")
     st.write({
         "shape_returns_filtrado": returns.shape,
         "rf_annual": rf_annual,
@@ -515,8 +474,8 @@ if min_var_df.empty or max_sharpe_df.empty:
     st.error("No fue posible identificar los portafolios óptimos.")
     st.stop()
 
-min_var_weights_df = optimizer.weights_frame(min_var).rename(columns={"Participacion": "Participación"})
-max_sharpe_weights_df = optimizer.weights_frame(max_sharpe).rename(columns={"Participacion": "Participación"})
+min_var_weights_df = optimizer.weights_frame(min_var).rename(columns={"Participacion": "Participacion"})
+max_sharpe_weights_df = optimizer.weights_frame(max_sharpe).rename(columns={"Participacion": "Participacion"})
 
 # ==============================
 # Resumen
@@ -525,8 +484,8 @@ st.markdown("### Resumen del módulo")
 st.write(
     """
     Este módulo construye múltiples combinaciones de portafolios para identificar alternativas eficientes
-    entre **retorno esperado** y **riesgo**. Se resaltan el portafolio de **mínima varianza**, el de
-    **máximo Sharpe** y una solución condicionada por un **retorno objetivo**.
+    entre **retorno esperado** y **riesgo**. Se resaltan el portafolio de **minima varianza**, el de
+    **maximo Sharpe** y una solucion condicionada por un **retorno objetivo**.
     """
 )
 
@@ -537,7 +496,7 @@ st.caption(f"Periodo analizado: {start_date} a {end_date}")
 # ==============================
 st.markdown("### KPIs del módulo")
 section_intro(
-    "Resumen ejecutivo de optimización",
+    "Resumen ejecutivo de optimizacion",
     "Aquí se resume el universo analizado, el tamaño de la simulación y las características centrales de las soluciones óptimas.",
 )
 
@@ -556,7 +515,7 @@ with c1:
     kpi_card(
         "Activos analizados",
         str(n_assets),
-        caption="Número de activos incluidos en el universo",
+        caption="Numero de activos incluidos en el universo",
     )
 
 with c2:
@@ -577,15 +536,15 @@ with c4:
     kpi_card(
         "Tasa libre de riesgo",
         f"{rf_annual:.2%}",
-        caption="Usada para el cálculo del ratio Sharpe",
+        caption="Usada para el calculo del ratio Sharpe",
     )
 
 with st.expander("Interpretación (KPIs del módulo)"):
     st.write(
         f"""
-        - **Activos analizados:** se optimiza sobre {n_assets} activos; este universo define cuántas piezas tiene disponible el modelo para diversificar.
+        - **Activos analizados:** se optimiza sobre {n_assets} activos; este universo define cuantas piezas tiene disponible el modelo para diversificar.
         - **Observaciones:** se usan {n_obs} retornos alineados para estimar retornos esperados, volatilidades y correlaciones.
-        - **Portafolios simulados:** se evalúan {n_portfolios:,} combinaciones aleatorias; el control impide bajar de 10.000 simulaciones.
+        - **Portafolios simulados:** se evaluan {n_portfolios:,} combinaciones aleatorias; el control impide bajar de 10.000 simulaciones.
         - **Tasa libre de riesgo:** la referencia anual es {rf_annual:.2%}; se usa para calcular el exceso de retorno en el ratio Sharpe.
         """
     )
@@ -603,14 +562,14 @@ c5, c6, c7, c8 = st.columns(4)
 
 with c5:
     kpi_card(
-        "Retorno mín. varianza",
+        "Retorno min. varianza",
         f"{float(min_var_return):.2%}" if min_var_return is not None else "N/D",
-        caption="Retorno esperado del portafolio más estable",
+        caption="Retorno esperado del portafolio mas estable",
     )
 
 with c6:
     kpi_card(
-        "Volatilidad mín. varianza",
+        "Volatilidad min. varianza",
         f"{float(min_var_vol):.2%}" if min_var_vol is not None else "N/D",
         delta="Menor riesgo disponible",
         delta_type="pos",
@@ -619,50 +578,50 @@ with c6:
 
 with c7:
     kpi_card(
-        "Retorno máx. Sharpe",
+        "Retorno max. Sharpe",
         f"{float(max_sharpe_return):.2%}" if max_sharpe_return is not None else "N/D",
-        caption="Retorno esperado del portafolio más eficiente",
+        caption="Retorno esperado del portafolio mas eficiente",
     )
 
 with c8:
     kpi_card(
-        "Sharpe máximo",
+        "Sharpe maximo",
         f"{float(max_sharpe_ratio):.3f}" if max_sharpe_ratio is not None else "N/D",
         delta="Mejor eficiencia riesgo-retorno",
         delta_type="pos",
         caption="Portafolio con mayor ratio Sharpe",
     )
 
-with st.expander("Interpretación (portafolios destacados)", expanded=False):
+with st.expander("Interpretacion (portafolios destacados)", expanded=False):
     st.write(
         f"""
-        - **Mínima varianza:** ofrece un retorno esperado de {float(min_var_return):.2%} con volatilidad de {float(min_var_vol):.2%}; es la opción más defensiva dentro de la simulación.
-        - **Máximo Sharpe:** ofrece un retorno esperado de {float(max_sharpe_return):.2%} con Sharpe de {float(max_sharpe_ratio):.3f}; es la mejor eficiencia riesgo-retorno bajo la tasa libre usada.
-        - **Lectura conjunta:** mínima varianza prioriza estabilidad, mientras que máximo Sharpe prioriza compensación por unidad de riesgo.
+        - **Minima varianza:** ofrece un retorno esperado de {float(min_var_return):.2%} con volatilidad de {float(min_var_vol):.2%}; es la opcion mas defensiva dentro de la simulacion.
+        - **Maximo Sharpe:** ofrece un retorno esperado de {float(max_sharpe_return):.2%} con Sharpe de {float(max_sharpe_ratio):.3f}; es la mejor eficiencia riesgo-retorno bajo la tasa libre usada.
+        - **Lectura conjunta:** minima varianza prioriza estabilidad, mientras que maximo Sharpe prioriza compensacion por unidad de riesgo.
         """
     )
 
 # ==============================
-# Correlación
+# Correlacion
 # ==============================
 corr = returns.corr()
 
-st.markdown("### Matriz de correlación")
+st.markdown("### Matriz de correlacion")
 section_intro(
-    "Relación entre activos",
-    "La matriz de correlación ayuda a entender el potencial de diversificación entre los activos del portafolio.",
+    "Relacion entre activos",
+    "La matriz de correlacion ayuda a entender el potencial de diversificacion entre los activos del portafolio.",
 )
 
 st.plotly_chart(plot_correlation_heatmap(corr), width="stretch")
 
-with st.expander("Leyenda de la matriz de correlación"):
+with st.expander("Leyenda de la matriz de correlacion"):
     st.write(
         """
-        - Una correlación alta y positiva indica que dos activos tienden a moverse en la misma dirección.
-        - Una correlación negativa indica que suelen moverse en direcciones opuestas, lo que puede reducir el riesgo conjunto.
-        - Una correlación cercana a 0 sugiere poca relación lineal entre sus movimientos.
+        - Una correlacion alta y positiva indica que dos activos tienden a moverse en la misma direccion.
+        - Una correlacion negativa indica que suelen moverse en direcciones opuestas, lo que puede reducir el riesgo conjunto.
+        - Una correlacion cercana a 0 sugiere poca relacion lineal entre sus movimientos.
         - En Markowitz, combinar activos con correlaciones bajas o negativas ayuda a diversificar y puede disminuir la volatilidad del portafolio.
-        - La escala de colores permite identificar rápidamente relaciones fuertes, débiles o inversas entre pares de activos.
+        - La escala de colores permite identificar rapidamente relaciones fuertes, debiles o inversas entre pares de activos.
         """
     )
 
@@ -671,22 +630,22 @@ with st.expander("Leyenda de la matriz de correlación"):
 # ==============================
 st.markdown("### Frontera eficiente")
 section_intro(
-    "Relación riesgo-retorno",
-    "El gráfico resume el espacio de portafolios posibles y destaca la frontera eficiente junto con las soluciones óptimas.",
+    "Relacion riesgo-retorno",
+    "El grafico resume el espacio de portafolios posibles y destaca la frontera eficiente junto con las soluciones optimas.",
 )
 
 frontier_fig = prepare_frontier_figure(sim_df, frontier_df, min_var, max_sharpe, manual_portfolio)
 st.plotly_chart(frontier_fig, width="stretch")
 
-with st.expander("Interpretación: frontera eficiente"):
+with st.expander("Interpretacion: frontera eficiente"):
     st.write(
         """
         - Portafolios: la nube de puntos representa combinaciones simuladas de pesos entre los activos.
-        - Frontera eficiente: la línea reúne portafolios dominantes, es decir, los que ofrecen mayor retorno para un nivel de riesgo comparable.
-        - Mínima varianza: el marcador identifica el portafolio con menor volatilidad estimada.
-        - Máximo Sharpe: el marcador identifica el portafolio con mejor exceso de retorno por unidad de riesgo.
-        - Portafolio manual: si ingresas pesos válidos, aparece como un punto adicional para compararlo contra las soluciones del modelo.
-        - Escala de color: representa el ratio Sharpe de los portafolios simulados; tonos más intensos indican mayor eficiencia riesgo-retorno.
+        - Frontera eficiente: la linea reune portafolios dominantes, es decir, los que ofrecen mayor retorno para un nivel de riesgo comparable.
+        - Minima varianza: el marcador identifica el portafolio con menor volatilidad estimada.
+        - Maximo Sharpe: el marcador identifica el portafolio con mejor exceso de retorno por unidad de riesgo.
+        - Portafolio manual: si ingresas pesos validos, aparece como un punto adicional para compararlo contra las soluciones del modelo.
+        - Escala de color: representa el ratio Sharpe de los portafolios simulados; tonos mas intensos indican mayor eficiencia riesgo-retorno.
         """
     )
 
@@ -696,13 +655,13 @@ with st.expander("Interpretación: frontera eficiente"):
 st.markdown("### Composición de portafolios óptimos")
 section_intro(
     "Pesos recomendados",
-    "Estas tablas muestran cómo se distribuye la Participación de cada activo en las soluciones óptimas principales.",
+    "Estas tablas muestran como se distribuye la Participacion de cada activo en las soluciones optimas principales.",
 )
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Portafolio de mínima varianza")
+    st.subheader("Portafolio de minima varianza")
     st.dataframe(
         min_var_weights_df,
         width="stretch",
@@ -710,7 +669,7 @@ with col1:
     )
 
 with col2:
-    st.subheader("Portafolio de máximo Sharpe")
+    st.subheader("Portafolio de maximo Sharpe")
     st.dataframe(
         max_sharpe_weights_df,
         width="stretch",
@@ -719,33 +678,33 @@ with col2:
 
 min_var_top = min_var_weights_df.head(2)
 max_sharpe_top = max_sharpe_weights_df.head(2)
-min_var_top_text = ", ".join(f"{row['Activo']} ({row['Participación']})" for _, row in min_var_top.iterrows())
-max_sharpe_top_text = ", ".join(f"{row['Activo']} ({row['Participación']})" for _, row in max_sharpe_top.iterrows())
+min_var_top_text = ", ".join(f"{row['Activo']} ({row['Participacion']})" for _, row in min_var_top.iterrows())
+max_sharpe_top_text = ", ".join(f"{row['Activo']} ({row['Participacion']})" for _, row in max_sharpe_top.iterrows())
 
-with st.expander("Interpretación: composición de portafolios"):
+with st.expander("Interpretacion: composicion de portafolios"):
     st.write(
         f"""
-        - **Mínima varianza:** los mayores pesos están en {min_var_top_text}. Si uno o dos activos concentran gran parte del peso, la cartera gana estabilidad por esos activos pero reduce diversificación.
-        - **Máximo Sharpe:** los mayores pesos están en {max_sharpe_top_text}. Esta asignación prioriza eficiencia riesgo-retorno, por lo que puede concentrarse más en activos con mejor compensación histórica.
-        - Una composición más distribuida reduce dependencia de activos específicos; una más concentrada puede mejorar una métrica objetivo, pero aumenta sensibilidad a esos activos.
+        - **Minima varianza:** los mayores pesos estan en {min_var_top_text}. Si uno o dos activos concentran gran parte del peso, la cartera gana estabilidad por esos activos pero reduce diversificacion.
+        - **Maximo Sharpe:** los mayores pesos estan en {max_sharpe_top_text}. Esta asignacion prioriza eficiencia riesgo-retorno, por lo que puede concentrarse mas en activos con mejor compensacion historica.
+        - Una composicion mas distribuida reduce dependencia de activos especificos; una mas concentrada puede mejorar una metrica objetivo, pero aumenta sensibilidad a esos activos.
         """
     )
 
 with st.expander("Ver detalles técnicos (tablas completas)"):
-    st.markdown("#### Portafolio de mínima varianza")
+    st.markdown("#### Portafolio de minima varianza")
     st.dataframe(min_var_df, width="stretch", hide_index=True)
-    st.markdown("#### Portafolio de máximo Sharpe")
+    st.markdown("#### Portafolio de maximo Sharpe")
     st.dataframe(max_sharpe_df, width="stretch", hide_index=True)
-    st.markdown("#### Matriz de correlación")
+    st.markdown("#### Matriz de correlacion")
     st.dataframe(corr.round(4), width="stretch")
 
 # ==============================
-# Optimización con retorno objetivo
+# Optimizacion con retorno objetivo
 # ==============================
-st.markdown("### Optimización con retorno objetivo")
+st.markdown("### Optimizacion con retorno objetivo")
 section_intro(
-    "Solución condicionada",
-    "Aquí se busca un portafolio que cumpla un retorno objetivo específico sujeto a las restricciones del modelo.",
+    "Solucion condicionada",
+    "Aqui se busca un portafolio que cumpla un retorno objetivo especifico sujeto a las restricciones del modelo.",
 )
 
 result = optimize_target_return(returns, target_return)
@@ -775,7 +734,7 @@ if result is not None:
         kpi_card(
             "Volatilidad",
             f"{result['volatility']:.2%}",
-            caption="Riesgo estimado de la solución encontrada",
+            caption="Riesgo estimado de la solucion encontrada",
         )
 
     with col4:
@@ -786,7 +745,7 @@ if result is not None:
                 "Peso": np.round(result["weights"], 4),
             }
         )
-        target_weights_df["Participación"] = target_weights_df["Peso"].map(lambda x: f"{x:.2%}")
+        target_weights_df["Participacion"] = target_weights_df["Peso"].map(lambda x: f"{x:.2%}")
         target_weights_df = target_weights_df.sort_values("Peso", ascending=False).reset_index(drop=True)
 
         st.dataframe(
@@ -796,36 +755,36 @@ if result is not None:
         )
 
     target_top = target_weights_df.head(2)
-    target_top_text = ", ".join(f"{row['Activo']} ({row['Participación']})" for _, row in target_top.iterrows())
+    target_top_text = ", ".join(f"{row['Activo']} ({row['Participacion']})" for _, row in target_top.iterrows())
 
-    with st.expander("Interpretación del portafolio con retorno objetivo"):
+    with st.expander("Interpretacion del portafolio con retorno objetivo"):
         st.write(
             f"""
-            - **Retorno esperado:** la solución alcanza {result['return']:.2%} frente al objetivo seleccionado de {target_return:.2%}.
+            - **Retorno esperado:** la solucion alcanza {result['return']:.2%} frente al objetivo seleccionado de {target_return:.2%}.
             - **Volatilidad:** el riesgo anualizado de esta cartera es {result['volatility']:.2%}; ese es el costo de riesgo asociado a la meta elegida.
-            - **Pesos:** los mayores pesos del portafolio objetivo están en {target_top_text}.
-            - Esta solución sirve para analizar una meta específica de rentabilidad; no reemplaza al portafolio de mínima varianza ni al de máximo Sharpe.
+            - **Pesos:** los mayores pesos del portafolio objetivo estan en {target_top_text}.
+            - Esta solucion sirve para analizar una meta especifica de rentabilidad; no reemplaza al portafolio de minima varianza ni al de maximo Sharpe.
             """
         )
 
 else:
-    st.warning("No se pudo encontrar solución para ese nivel de retorno.")
+    st.warning("No se pudo encontrar solucion para ese nivel de retorno.")
 
 # ==============================
-# Interpretación
+# Interpretacion
 # ==============================
-st.markdown("### Interpretación")
+st.markdown("### Interpretacion")
 
 st.success(
     """
     **Lectura sencilla**
 
-    - La matriz de correlación muestra qué tan parecidos son los movimientos entre activos; relaciones bajas o negativas favorecen la diversificación.
-    - La frontera eficiente resume las combinaciones que logran una mejor relación entre retorno esperado y volatilidad.
-    - El portafolio de mínima varianza es la alternativa más defensiva porque prioriza reducir el riesgo estimado.
-    - El portafolio de máximo Sharpe busca la mejor compensación entre retorno adicional y riesgo asumido.
-    - El retorno objetivo agrega una meta concreta de rentabilidad y puede exigir aceptar más volatilidad para alcanzarla.
-    - La decisión final depende de si se prefiere estabilidad, eficiencia riesgo-retorno o cumplir una meta específica.
+    - La matriz de correlacion muestra que tan parecidos son los movimientos entre activos; relaciones bajas o negativas favorecen la diversificacion.
+    - La frontera eficiente resume las combinaciones que logran una mejor relacion entre retorno esperado y volatilidad.
+    - El portafolio de minima varianza es la alternativa mas defensiva porque prioriza reducir el riesgo estimado.
+    - El portafolio de maximo Sharpe busca la mejor compensacion entre retorno adicional y riesgo asumido.
+    - El retorno objetivo agrega una meta concreta de rentabilidad y puede exigir aceptar mas volatilidad para alcanzarla.
+    - La decision final depende de si se prefiere estabilidad, eficiencia riesgo-retorno o cumplir una meta especifica.
     """
 )
 
@@ -833,11 +792,12 @@ with st.expander("Ver interpretación técnica"):
     st.write(
         """
         - Markowitz estima portafolios en el espacio media-varianza usando retornos esperados, volatilidades y covarianzas.
-        - La correlación entre activos determina cuánto riesgo conjunto puede reducirse mediante diversificación.
+        - La correlacion entre activos determina cuanto riesgo conjunto puede reducirse mediante diversificacion.
         - La frontera eficiente aproxima el conjunto de portafolios no dominados frente a las combinaciones simuladas.
-        - El portafolio de mínima varianza minimiza la volatilidad total del portafolio bajo las restricciones disponibles.
-        - El portafolio de máximo Sharpe maximiza el exceso de retorno por unidad de riesgo usando la tasa libre de riesgo.
-        - La optimización con retorno objetivo impone una restricción adicional de rentabilidad; si la meta es exigente, el modelo puede requerir una asignación más riesgosa.
+        - El portafolio de minima varianza minimiza la volatilidad total del portafolio bajo las restricciones disponibles.
+        - El portafolio de maximo Sharpe maximiza el exceso de retorno por unidad de riesgo usando la tasa libre de riesgo.
+        - La optimizacion con retorno objetivo impone una restriccion adicional de rentabilidad; si la meta es exigente, el modelo puede requerir una asignacion mas riesgosa.
         """
     )
+
 
