@@ -7,14 +7,13 @@ import streamlit as st
 from src.api.market import get_market_bundle
 from src.config import ASSETS, DEFAULT_END_DATE, GLOBAL_BENCHMARK, ensure_project_dirs
 from src.context_events import CONTEXT_EVENTS
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import configured_assets, module_params, render_app_shell, render_portfolio_summary_card
+from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 
-st.set_page_config(page_title="Contextualización de activos", layout="wide")
+st.set_page_config(page_title="Contextualizacion de activos", layout="wide")
 apply_global_typography()
-render_sidebar_navigation()
 
 
 # ==============================
@@ -252,10 +251,11 @@ def section_intro(title: str, subtitle: str, caption: str | None = None):
 
 inject_ui_css()
 
-render_page_title(
+render_app_shell(
     "Módulo 0 - Contextualización de activos",
-    "Contexto cualitativo: qué hace cada empresa, qué riesgos la mueven y qué aporta al portafolio.",
+    "Contexto cualitativo: que hace cada empresa, que riesgos la mueven y que aporta al portafolio.",
 )
+ASSETS = configured_assets(ASSETS)
 
 # -----------------------------------------------------------------------------
 # Contexto cualitativo enriquecido por activo
@@ -266,131 +266,131 @@ ASSET_CONTEXT = {
         "sector": "Retail de conveniencia",
         "tipo_exposicion": "Consumo defensivo en Asia",
         "resumen": (
-            "Holding japonés centrado en el negocio de tiendas de conveniencia. "
-            "Dentro del portafolio representa exposición a consumo recurrente y "
-            "a un formato minorista que suele comportarse de forma más defensiva "
-            "que sectores cíclicos como energía."
+            "Holding japones centrado en el negocio de tiendas de conveniencia. "
+            "Dentro del portafolio representa exposicion a consumo recurrente y "
+            "a un formato minorista que suele comportarse de forma mas defensiva "
+            "que sectores ciclicos como energia."
         ),
         "tesis": [
-            "Aporta exposición a consumo básico y gasto recurrente en Japón.",
-            "Permite incorporar diversificación geográfica hacia Asia desarrollada.",
-            "Es útil para contrastar un retail defensivo frente a activos más cíclicos del portafolio.",
+            "Aporta exposicion a consumo basico y gasto recurrente en Japon.",
+            "Permite incorporar diversificacion geografica hacia Asia desarrollada.",
+            "Es util para contrastar un retail defensivo frente a activos mas ciclicos del portafolio.",
         ],
         "riesgos": [
-            "Presión sobre márgenes por costos operativos y competencia.",
-            "Desaceleración del consumo interno en Japón.",
-            "Riesgo de ejecución en el negocio principal de conveniencia.",
+            "Presion sobre margenes por costos operativos y competencia.",
+            "Desaceleracion del consumo interno en Japon.",
+            "Riesgo de ejecucion en el negocio principal de conveniencia.",
         ],
         "catalizadores": [
             "Mejoras operativas en tiendas y eficiencia comercial.",
-            "Resultados trimestrales sólidos en el negocio de conveniencia.",
+            "Resultados trimestrales solidos en el negocio de conveniencia.",
             "Fortalecimiento del posicionamiento del formato de proximidad.",
         ],
         "drivers_riesgo": [
-            "Consumo doméstico japonés.",
-            "Márgenes del negocio minorista.",
-            "Tipo de cambio y percepción del mercado japonés.",
+            "Consumo domestico japones.",
+            "Margenes del negocio minorista.",
+            "Tipo de cambio y percepcion del mercado japones.",
         ],
         "lectura_riesgo": (
-            "En términos de riesgo, este activo debería comportarse como una pieza "
-            "relativamente defensiva dentro del portafolio. En CAPM podría mostrar "
-            "una beta más moderada que BP, mientras que en Markowitz puede ayudar a "
-            "diversificar frente a energía y frente a Latinoamérica."
+            "En terminos de riesgo, este activo deberia comportarse como una pieza "
+            "relativamente defensiva dentro del portafolio. En CAPM podria mostrar "
+            "una beta mas moderada que BP, mientras que en Markowitz puede ayudar a "
+            "diversificar frente a energia y frente a Latinoamerica."
         ),
         "rol_portafolio": (
-            "Activo defensivo asiático orientado a consumo recurrente y retail de conveniencia."
+            "Activo defensivo asiatico orientado a consumo recurrente y retail de conveniencia."
         ),
-        "resumen_sencillo": "Cadena japonesa de tiendas tipo 7-Eleven. Vende productos de consumo diario y suele moverse de forma más estable que sectores cíclicos.",
+        "resumen_sencillo": "Cadena japonesa de tiendas tipo 7-Eleven. Vende productos de consumo diario y suele moverse de forma mas estable que sectores ciclicos.",
         "rol_sencillo": "Rol: Defensivo (consumo diario)",
         "drivers_sencillos": [
-            "Consumo diario en Japón",
-            "Costos operativos y márgenes",
+            "Consumo diario en Japon",
+            "Costos operativos y margenes",
             "Tipo de cambio (JPY)",
         ],
         "ingresos_sencillos": [
             "Ventas en tiendas de conveniencia y retail de proximidad.",
-            "Ingresos ligados a productos de consumo diario y operación comercial en Japón.",
+            "Ingresos ligados a productos de consumo diario y operacion comercial en Japon.",
         ],
-        "opera_sencillo": "Opera principalmente en Japón, con exposición al consumidor asiático desarrollado.",
+        "opera_sencillo": "Opera principalmente en Japon, con exposicion al consumidor asiatico desarrollado.",
         "mueve_precio_sencillo": [
-            "Cambios en consumo diario, márgenes y costos operativos.",
-            "Percepción del mercado sobre Japón y movimientos del yen.",
+            "Cambios en consumo diario, margenes y costos operativos.",
+            "Percepcion del mercado sobre Japon y movimientos del yen.",
         ],
     },
     "Alimentation Couche-Tard": {
         "tags": ["retail", "consumer", "mobility"],
         "sector": "Convenience & mobility",
-        "tipo_exposicion": "Consumo de proximidad y movilidad en Norteamérica y Europa",
+        "tipo_exposicion": "Consumo de proximidad y movilidad en Norteamerica y Europa",
         "resumen": (
-            "Compañía canadiense líder en conveniencia y movilidad, con presencia internacional. "
-            "En el portafolio representa una combinación entre consumo de proximidad, tráfico vial "
+            "Compania canadiense lider en conveniencia y movilidad, con presencia internacional. "
+            "En el portafolio representa una combinacion entre consumo de proximidad, trafico vial "
             "y negocio asociado a estaciones de servicio y conveniencia."
         ),
         "tesis": [
-            "Aporta exposición a un operador global con huella internacional.",
-            "Combina ventas minoristas con exposición al negocio de movilidad.",
-            "Diversifica frente a Asia, Latinoamérica y energía pura.",
+            "Aporta exposicion a un operador global con huella internacional.",
+            "Combina ventas minoristas con exposicion al negocio de movilidad.",
+            "Diversifica frente a Asia, Latinoamerica y energia pura.",
         ],
         "riesgos": [
-            "Dependencia del tráfico, movilidad y entorno de consumo.",
-            "Presión de costos operativos y laborales.",
-            "Sensibilidad de parte del negocio a combustibles y márgenes de movilidad.",
+            "Dependencia del trafico, movilidad y entorno de consumo.",
+            "Presion de costos operativos y laborales.",
+            "Sensibilidad de parte del negocio a combustibles y margenes de movilidad.",
         ],
         "catalizadores": [
-            "Expansión internacional y crecimiento inorgánico.",
+            "Expansion internacional y crecimiento inorganico.",
             "Mejoras en eficiencia y ventas comparables.",
             "Fortaleza operativa de la red Circle K y del negocio de conveniencia.",
         ],
         "drivers_riesgo": [
-            "Tráfico de clientes y movilidad.",
-            "Márgenes de combustible y tienda.",
-            "Consumo en Norteamérica y Europa.",
+            "Trafico de clientes y movilidad.",
+            "Margenes de combustible y tienda.",
+            "Consumo en Norteamerica y Europa.",
         ],
         "lectura_riesgo": (
-            "Este activo suele ocupar una posición intermedia: no es tan defensivo como "
-            "retail alimentario puro, pero tampoco tan cíclico como energía. En VaR/CVaR "
-            "puede amplificar caídas cuando se deteriora el consumo o la movilidad, aunque "
-            "en Markowitz puede aportar diversificación por modelo de negocio."
+            "Este activo suele ocupar una posicion intermedia: no es tan defensivo como "
+            "retail alimentario puro, pero tampoco tan ciclico como energia. En VaR/CVaR "
+            "puede amplificar caidas cuando se deteriora el consumo o la movilidad, aunque "
+            "en Markowitz puede aportar diversificacion por modelo de negocio."
         ),
         "rol_portafolio": (
-            "Activo de conveniencia y movilidad con exposición internacional y perfil mixto entre defensivo y cíclico."
+            "Activo de conveniencia y movilidad con exposicion internacional y perfil mixto entre defensivo y ciclico."
         ),
-        "resumen_sencillo": "Operador de tiendas de conveniencia (Circle K) y estaciones asociadas. Mezcla ventas en tienda y movilidad, por eso es ‘mixto’: parte defensivo, parte cíclico.",
+        "resumen_sencillo": "Operador de tiendas de conveniencia (Circle K) y estaciones asociadas. Mezcla ventas en tienda y movilidad, por eso es mixto: parte defensivo, parte ciclico.",
         "rol_sencillo": "Rol: Mixto (consumo + movilidad)",
         "drivers_sencillos": [
-            "Tráfico de clientes y movilidad",
-            "Márgenes de combustible y tienda",
-            "Consumo en Canadá/EE. UU./Europa",
+            "Trafico de clientes y movilidad",
+            "Margenes de combustible y tienda",
+            "Consumo en Canada/EE. UU./Europa",
         ],
         "ingresos_sencillos": [
             "Ventas en tiendas de conveniencia, especialmente bajo marcas como Circle K.",
-            "Ingresos asociados a estaciones, movilidad y consumo rápido.",
+            "Ingresos asociados a estaciones, movilidad y consumo rapido.",
         ],
-        "opera_sencillo": "Opera en Canadá, Estados Unidos, Europa y otros mercados internacionales.",
+        "opera_sencillo": "Opera en Canada, Estados Unidos, Europa y otros mercados internacionales.",
         "mueve_precio_sencillo": [
-            "Tráfico de clientes, movilidad y fortaleza del consumo.",
-            "Márgenes de combustible, tienda y costos operativos.",
+            "Trafico de clientes, movilidad y fortaleza del consumo.",
+            "Margenes de combustible, tienda y costos operativos.",
         ],
     },
     "FEMSA": {
         "tags": ["retail", "consumer", "latam", "fx"],
         "sector": "Retail de proximidad, bebidas y negocios relacionados",
-        "tipo_exposicion": "Consumo y diversificación empresarial en Latinoamérica",
+        "tipo_exposicion": "Consumo y diversificacion empresarial en Latinoamerica",
         "resumen": (
-            "Empresa mexicana con exposición a retail de proximidad, bebidas y negocios "
+            "Empresa mexicana con exposicion a retail de proximidad, bebidas y negocios "
             "relacionados. Dentro del portafolio cumple el papel de activo latinoamericano "
             "diversificado, con sensibilidad tanto al consumo regional como a variables "
-            "macroeconómicas y cambiarias."
+            "macroeconomicas y cambiarias."
         ),
         "tesis": [
             "Representa el componente latinoamericano del portafolio.",
-            "Combina negocios relativamente defensivos con exposición regional.",
-            "Aporta diversificación frente a Asia, Europa y energía.",
+            "Combina negocios relativamente defensivos con exposicion regional.",
+            "Aporta diversificacion frente a Asia, Europa y energia.",
         ],
         "riesgos": [
             "Riesgo cambiario y sensibilidad al entorno macro regional.",
-            "Presión en márgenes del retail y costos operativos.",
-            "Dependencia parcial del comportamiento del consumo en América Latina.",
+            "Presion en margenes del retail y costos operativos.",
+            "Dependencia parcial del comportamiento del consumo en America Latina.",
         ],
         "catalizadores": [
             "Mejora del entorno macro regional.",
@@ -398,144 +398,144 @@ ASSET_CONTEXT = {
             "Fortaleza de negocios vinculados al consumo recurrente.",
         ],
         "drivers_riesgo": [
-            "Tipo de cambio y tasas en la región.",
-            "Consumo masivo en Latinoamérica.",
-            "Ejecución operativa de sus unidades de negocio.",
+            "Tipo de cambio y tasas en la region.",
+            "Consumo masivo en Latinoamerica.",
+            "Ejecucion operativa de sus unidades de negocio.",
         ],
         "lectura_riesgo": (
-            "En CAPM este activo puede reflejar tanto riesgo sistemático del mercado mexicano "
-            "como riesgo adicional por exposición regional. En VaR/CVaR puede ser sensible a "
-            "episodios de depreciación cambiaria o deterioro macro. En Markowitz es clave porque "
-            "introduce una fuente de riesgo distinta a la europea y asiática."
+            "En CAPM este activo puede reflejar tanto riesgo sistematico del mercado mexicano "
+            "como riesgo adicional por exposicion regional. En VaR/CVaR puede ser sensible a "
+            "episodios de depreciacion cambiaria o deterioro macro. En Markowitz es clave porque "
+            "introduce una fuente de riesgo distinta a la europea y asiatica."
         ),
         "rol_portafolio": (
-            "Activo latinoamericano diversificado que agrega exposición regional, consumo y riesgo cambiario."
+            "Activo latinoamericano diversificado que agrega exposicion regional, consumo y riesgo cambiario."
         ),
-        "resumen_sencillo": "Grupo mexicano con negocios ligados a consumo (ej. retail de proximidad) y presencia regional. Su desempeño puede verse afectado por el entorno macro y el tipo de cambio.",
+        "resumen_sencillo": "Grupo mexicano con negocios ligados a consumo (ej. retail de proximidad) y presencia regional. Su desempeno puede verse afectado por el entorno macro y el tipo de cambio.",
         "rol_sencillo": "Rol: Regional (LatAm + FX)",
         "drivers_sencillos": [
-            "Consumo en México/LatAm",
+            "Consumo en Mexico/LatAm",
             "Tipo de cambio (MXN) y tasas",
-            "Costos y márgenes operativos",
+            "Costos y margenes operativos",
         ],
         "ingresos_sencillos": [
             "Negocios ligados a consumo, retail de proximidad y operaciones regionales.",
-            "Ingresos sensibles al gasto de hogares y al entorno macro de Latinoamérica.",
+            "Ingresos sensibles al gasto de hogares y al entorno macro de Latinoamerica.",
         ],
-        "opera_sencillo": "Opera principalmente en México y Latinoamérica, con exposición regional.",
+        "opera_sencillo": "Opera principalmente en Mexico y Latinoamerica, con exposicion regional.",
         "mueve_precio_sencillo": [
-            "Consumo en México/LatAm, tasas y expectativas macro.",
-            "Tipo de cambio, costos y márgenes operativos.",
+            "Consumo en Mexico/LatAm, tasas y expectativas macro.",
+            "Tipo de cambio, costos y margenes operativos.",
         ],
     },
     "BP": {
         "tags": ["energy", "global"],
-        "sector": "Energía",
-        "tipo_exposicion": "Ciclo energético global",
+        "sector": "Energia",
+        "tipo_exposicion": "Ciclo energetico global",
         "resumen": (
-            "Compañía energética integrada con exposición a distintas etapas de la cadena de valor "
-            "del sector. Dentro del portafolio introduce sensibilidad al ciclo energético global y "
+            "Compania energetica integrada con exposicion a distintas etapas de la cadena de valor "
+            "del sector. Dentro del portafolio introduce sensibilidad al ciclo energetico global y "
             "una fuente de riesgo claramente distinta a los activos de retail y consumo."
         ),
         "tesis": [
-            "Incorpora exposición directa al sector energético.",
+            "Incorpora exposicion directa al sector energetico.",
             "Diversifica sectorialmente frente al bloque de retail y consumo.",
-            "Permite capturar movimientos del ciclo global de petróleo, gas y energía.",
+            "Permite capturar movimientos del ciclo global de petroleo, gas y energia.",
         ],
         "riesgos": [
-            "Alta sensibilidad a precios internacionales de energía.",
-            "Riesgo geopolítico y regulatorio.",
-            "Volatilidad elevada por cambios de estrategia, inversión y transición energética.",
+            "Alta sensibilidad a precios internacionales de energia.",
+            "Riesgo geopolitico y regulatorio.",
+            "Volatilidad elevada por cambios de estrategia, inversion y transicion energetica.",
         ],
         "catalizadores": [
-            "Recuperación de precios energéticos.",
-            "Resultados sólidos en upstream/downstream.",
-            "Mejoras en eficiencia y claridad estratégica.",
+            "Recuperacion de precios energeticos.",
+            "Resultados solidos en upstream/downstream.",
+            "Mejoras en eficiencia y claridad estrategica.",
         ],
         "drivers_riesgo": [
-            "Precio del petróleo y gas.",
-            "Entorno geopolítico global.",
-            "Percepción del mercado sobre transición energética.",
+            "Precio del petroleo y gas.",
+            "Entorno geopolitico global.",
+            "Percepcion del mercado sobre transicion energetica.",
         ],
         "lectura_riesgo": (
-            "Es el activo más claramente cíclico del portafolio. En CAPM debería ser de los más "
+            "Es el activo mas claramente ciclico del portafolio. En CAPM deberia ser de los mas "
             "sensibles al mercado; en VaR/CVaR puede aumentar la cola izquierda del portafolio en "
-            "episodios adversos de commodities o geopolítica. En Markowitz, sin embargo, también puede "
-            "mejorar la diversificación al no depender del mismo motor que retail."
+            "episodios adversos de commodities o geopolitica. En Markowitz, sin embargo, tambien puede "
+            "mejorar la diversificacion al no depender del mismo motor que retail."
         ),
         "rol_portafolio": (
-            "Activo cíclico de energía que introduce riesgo global de commodities y diversificación sectorial."
+            "Activo ciclico de energia que introduce riesgo global de commodities y diversificacion sectorial."
         ),
-        "resumen_sencillo": "Empresa de energía: su precio suele depender más del petróleo/gas y del contexto global que del consumo minorista. Tiende a ser el activo más volátil del portafolio.",
-        "rol_sencillo": "Rol: Cíclico (energía)",
+        "resumen_sencillo": "Empresa de energia: su precio suele depender mas del petroleo/gas y del contexto global que del consumo minorista. Tiende a ser el activo mas volatil del portafolio.",
+        "rol_sencillo": "Rol: Ciclico (energia)",
         "drivers_sencillos": [
-            "Precio del petróleo y gas",
-            "Eventos geopolíticos / OPEP / conflicto",
-            "Expectativas sobre transición energética",
+            "Precio del petroleo y gas",
+            "Eventos geopoliticos / OPEP / conflicto",
+            "Expectativas sobre transicion energetica",
         ],
         "ingresos_sencillos": [
-            "Producción, refinación, comercialización y negocios ligados a petróleo y gas.",
-            "Ingresos muy conectados al ciclo energético global.",
+            "Produccion, refinacion, comercializacion y negocios ligados a petroleo y gas.",
+            "Ingresos muy conectados al ciclo energetico global.",
         ],
-        "opera_sencillo": "Opera globalmente, con exposición a mercados energéticos internacionales.",
+        "opera_sencillo": "Opera globalmente, con exposicion a mercados energeticos internacionales.",
         "mueve_precio_sencillo": [
-            "Precio del petróleo y gas, OPEP y eventos geopolíticos.",
-            "Expectativas sobre transición energética, inversión y regulación.",
+            "Precio del petroleo y gas, OPEP y eventos geopoliticos.",
+            "Expectativas sobre transicion energetica, inversion y regulacion.",
         ],
     },
     "Carrefour": {
         "tags": ["retail", "consumer", "europe"],
         "sector": "Retail alimentario",
-        "tipo_exposicion": "Consumo básico en Europa",
+        "tipo_exposicion": "Consumo basico en Europa",
         "resumen": (
-            "Grupo francés de comercio alimentario y distribución minorista con enfoque multi-formato. "
-            "Dentro del portafolio aporta exposición a consumo básico en Europa y funciona como una pieza "
-            "más defensiva frente a activos con mayor ciclicidad."
+            "Grupo frances de comercio alimentario y distribucion minorista con enfoque multi-formato. "
+            "Dentro del portafolio aporta exposicion a consumo basico en Europa y funciona como una pieza "
+            "mas defensiva frente a activos con mayor ciclicidad."
         ),
         "tesis": [
-            "Aporta exposición a retail alimentario y consumo básico.",
-            "Introduce diversificación europea dentro del portafolio.",
-            "Es comparable con otros formatos de retail del portafolio, pero con perfil más defensivo.",
+            "Aporta exposicion a retail alimentario y consumo basico.",
+            "Introduce diversificacion europea dentro del portafolio.",
+            "Es comparable con otros formatos de retail del portafolio, pero con perfil mas defensivo.",
         ],
         "riesgos": [
-            "Presión competitiva en distribución minorista.",
-            "Sensibilidad de márgenes a inflación de costos.",
+            "Presion competitiva en distribucion minorista.",
+            "Sensibilidad de margenes a inflacion de costos.",
             "Debilidad del consumo en Europa.",
         ],
         "catalizadores": [
             "Mejoras operativas y eficiencia comercial.",
-            "Recuperación del consumo y tráfico en tiendas.",
+            "Recuperacion del consumo y trafico en tiendas.",
             "Avances en estrategia omnicanal y formatos de proximidad.",
         ],
         "drivers_riesgo": [
             "Consumo europeo.",
-            "Márgenes del retail alimentario.",
-            "Competencia de precios y costos logísticos.",
+            "Margenes del retail alimentario.",
+            "Competencia de precios y costos logisticos.",
         ],
         "lectura_riesgo": (
-            "Este activo puede leerse como una pieza defensiva europea. En CAPM podría exhibir una beta "
-            "más moderada que BP y quizá más cercana a negocios de consumo. En Markowitz aporta equilibrio "
-            "al portafolio porque no comparte exactamente el mismo patrón de riesgo que energía ni que "
-            "Latinoamérica."
+            "Este activo puede leerse como una pieza defensiva europea. En CAPM podria exhibir una beta "
+            "mas moderada que BP y quiza mas cercana a negocios de consumo. En Markowitz aporta equilibrio "
+            "al portafolio porque no comparte exactamente el mismo patron de riesgo que energia ni que "
+            "Latinoamerica."
         ),
         "rol_portafolio": (
-            "Activo defensivo europeo enfocado en comercio alimentario y consumo básico."
+            "Activo defensivo europeo enfocado en comercio alimentario y consumo basico."
         ),
-        "resumen_sencillo": "Retail alimentario en Europa. Al vender productos básicos, suele ser más defensivo; aun así, sus márgenes dependen de costos e inflación.",
-        "rol_sencillo": "Rol: Defensivo (consumo básico)",
+        "resumen_sencillo": "Retail alimentario en Europa. Al vender productos basicos, suele ser mas defensivo; aun asi, sus margenes dependen de costos e inflacion.",
+        "rol_sencillo": "Rol: Defensivo (consumo basico)",
         "drivers_sencillos": [
-            "Consumo e inflación en Europa",
+            "Consumo e inflacion en Europa",
             "Competencia de precios",
-            "Costos logísticos y márgenes",
+            "Costos logisticos y margenes",
         ],
         "ingresos_sencillos": [
-            "Ventas de alimentos y productos básicos en supermercados e hipermercados.",
+            "Ventas de alimentos y productos basicos en supermercados e hipermercados.",
             "Ingresos ligados al consumo frecuente de hogares europeos.",
         ],
         "opera_sencillo": "Opera sobre todo en Europa, con Carrefour como referencia francesa.",
         "mueve_precio_sencillo": [
-            "Inflación, competencia de precios y consumo en Europa.",
-            "Costos logísticos, márgenes y eficiencia operativa.",
+            "Inflacion, competencia de precios y consumo en Europa.",
+            "Costos logisticos, margenes y eficiencia operativa.",
         ],
     },
 }
@@ -605,7 +605,7 @@ def _first_sentence(text: str) -> str:
 
 
 def _asset_subtitle(ctx: dict) -> str:
-    return f"{ctx['sector']} con exposición a {ctx['tipo_exposicion'].lower()}."
+    return f"{ctx['sector']} con exposicion a {ctx['tipo_exposicion'].lower()}."
 
 
 def render_asset_executive_header(asset_name: str, meta: dict, ctx: dict) -> None:
@@ -621,7 +621,7 @@ def render_asset_executive_header(asset_name: str, meta: dict, ctx: dict) -> Non
             </div>
             <div class="asset-meta-grid">
                 {_metric_item("Ticker", meta["ticker"])}
-                {_metric_item("País", meta["country"])}
+                {_metric_item("Pais", meta["country"])}
                 {_metric_item("Benchmark local", meta["benchmark_local"])}
                 {_metric_item("Benchmark global", GLOBAL_BENCHMARK)}
             </div>
@@ -634,31 +634,31 @@ def render_asset_executive_header(asset_name: str, meta: dict, ctx: dict) -> Non
 def render_business_understanding(ctx: dict) -> None:
     _section_heading(
         "Entender el negocio",
-        "Perfil operativo del activo antes de interpretar precios, riesgo y diversificación.",
+        "Perfil operativo del activo antes de interpretar precios, riesgo y diversificacion.",
     )
 
     col_left, col_right = st.columns(2)
     with col_left:
         _compact_card(
-            "Qué hace",
-            f"Empresa del sector {ctx['sector'].lower()} con exposición a {ctx['tipo_exposicion'].lower()}.",
+            "Que hace",
+            f"Empresa del sector {ctx['sector'].lower()} con exposicion a {ctx['tipo_exposicion'].lower()}.",
         )
-        _compact_card("De dónde salen los ingresos", ctx["ingresos_sencillos"])
+        _compact_card("De donde salen los ingresos", ctx["ingresos_sencillos"])
 
     with col_right:
-        _compact_card("Dónde opera", ctx["opera_sencillo"])
-        _compact_card("Qué suele mover el precio", ctx["mueve_precio_sencillo"])
+        _compact_card("Donde opera", ctx["opera_sencillo"])
+        _compact_card("Que suele mover el precio", ctx["mueve_precio_sencillo"])
 
 
 def render_investment_quick_read(ctx: dict) -> None:
     _section_heading(
-        "Lectura rápida para inversión",
+        "Lectura rapida para inversion",
         "Aporte, catalizadores y riesgos principales en formato ejecutivo.",
     )
 
     col_contribution, col_catalysts, col_risks = st.columns(3)
     with col_contribution:
-        _compact_card("Qué aporta al portafolio", ctx["tesis"])
+        _compact_card("Que aporta al portafolio", ctx["tesis"])
     with col_catalysts:
         _compact_card("Catalizadores", ctx["catalizadores"])
     with col_risks:
@@ -674,19 +674,19 @@ def render_portfolio_role(meta: dict, ctx: dict) -> None:
     col_div, col_when, col_next = st.columns(3)
     with col_div:
         _compact_card(
-            "Cómo diversifica",
+            "Como diversifica",
             [
-                f"Añade exposición a {ctx['tipo_exposicion'].lower()}.",
-                f"Introduce el mercado de {meta['country']} frente a otros riesgos geográficos.",
+                f"Anade exposicion a {ctx['tipo_exposicion'].lower()}.",
+                f"Introduce el mercado de {meta['country']} frente a otros riesgos geograficos.",
                 ctx["rol_portafolio"],
             ],
         )
     with col_when:
         _compact_card(
-            "Cuándo ayuda",
+            "Cuando ayuda",
             [
                 "Cuando su motor de riesgo difiere del resto del conjunto.",
-                "Cuando la diversificación geográfica o sectorial reduce concentración.",
+                "Cuando la diversificacion geografica o sectorial reduce concentracion.",
                 "Cuando el contexto favorece sus drivers operativos principales.",
             ],
         )
@@ -694,9 +694,9 @@ def render_portfolio_role(meta: dict, ctx: dict) -> None:
         _compact_card(
             "Qué esperar en módulos posteriores",
             [
-                f"CAPM lo contrastará contra {meta['benchmark_local']}.",
-                "VaR/CVaR evaluará su contribución a pérdidas extremas.",
-                "Markowitz medirá su aporte a diversificación y eficiencia.",
+                f"CAPM lo contrastara contra {meta['benchmark_local']}.",
+                "VaR/CVaR evaluara su contribucion a perdidas extremas.",
+                "Markowitz medira su aporte a diversificacion y eficiencia.",
             ],
         )
 
@@ -792,11 +792,11 @@ def _event_importance_for_asset(event: dict, ctx: dict) -> str:
     matches = asset_tags & event_tags
 
     if "energy" in matches:
-        return "Importa porque el activo depende directamente del ciclo de petróleo, gas y riesgo geopolítico."
+        return "Importa porque el activo depende directamente del ciclo de petroleo, gas y riesgo geopolitico."
     if "latam" in matches or "fx" in matches:
         return "Importa porque puede afectar divisas, tasas y apetito por riesgo regional."
     if "retail" in matches or "consumer" in matches:
-        return "Importa porque puede cambiar consumo, costos, márgenes y tráfico de clientes."
+        return "Importa porque puede cambiar consumo, costos, margenes y trafico de clientes."
     if "global" in event_tags:
         return "Importa porque modifica el apetito global por riesgo y la volatilidad del mercado."
     return "Importa porque ayuda a explicar cambios de contexto durante el periodo analizado."
@@ -839,8 +839,8 @@ def _return_interpretation(ret: float | None, years: int) -> str:
     if ret > 0:
         if years == 1:
             return (
-                "El activo está hoy por encima del nivel que tenía hace 1 año, "
-                "lo que indica un desempeño positivo reciente."
+                "El activo esta hoy por encima del nivel que tenía hace 1 año, "
+                "lo que indica un desempeno positivo reciente."
             )
         return (
             "El activo está hoy por encima del nivel observado hace 3 años, "
@@ -848,7 +848,7 @@ def _return_interpretation(ret: float | None, years: int) -> str:
         )
     if years == 1:
         return (
-            "El activo está hoy por debajo del nivel que tenía hace 1 año, "
+            "El activo esta hoy por debajo del nivel que tenía hace 1 año, "
             "lo que refleja una caída o corrección en el último año."
         )
     return (
@@ -864,13 +864,13 @@ def render_market_context_help(
     ret_1y: float | None,
     ret_3y: float | None,
 ) -> None:
-    with st.expander("¿Cómo se calcularon estos retornos?", expanded=False):
+    with st.expander("Cómo se calcularon estos retornos", expanded=False):
         st.markdown(
             f"""
 **Retorno acumulado (1 año)**  
 Se calcula comparando el precio actual con el precio observado hace 1 año.
 
-Fórmula:  
+Formula:  
 `Retorno 1 año = ((precio_actual / precio_hace_1a) - 1) * 100`
 
 Valores usados:  
@@ -884,7 +884,7 @@ Interpretación:
 **Retorno acumulado (3 años)**  
 Se calcula comparando el precio actual con el precio observado hace 3 años.
 
-Fórmula:  
+Formula:  
 `Retorno 3 años = ((precio_actual / precio_hace_3a) - 1) * 100`
 
 Valores usados:  
@@ -945,7 +945,7 @@ def render_performance_context(asset_name: str, meta: dict, ctx: dict) -> None:
             {_price_metric_item("Retorno acumulado (3 años)", _format_return(ret_3y))}
         </div>
         <div class="market-caption">
-            Precio actual = valor observado hoy. Retorno acumulado 1y y 3y = variación porcentual desde esos horizontes hasta la fecha actual.
+            Precio actual = valor observado hoy. Retorno acumulado 1y y 3y = variacion porcentual desde esos horizontes hasta la fecha actual.
         </div>
         """,
         unsafe_allow_html=True,
@@ -1016,7 +1016,7 @@ def render_performance_context(asset_name: str, meta: dict, ctx: dict) -> None:
         st.plotly_chart(fig, width="stretch")
     render_market_context_help(latest_price, price_1y, price_3y, ret_1y, ret_3y)
     st.markdown(
-        '<div class="market-caption">Base 100: la serie parte en 100 para comparar desempeño relativo.</div>',
+        '<div class="market-caption">Base 100: la serie parte en 100 para comparar desempeno relativo.</div>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -1027,7 +1027,7 @@ def render_performance_context(asset_name: str, meta: dict, ctx: dict) -> None:
     st.subheader("Eventos de contexto")
     events = _context_events_for_asset(ctx, series.index.min(), series.index.max())
     if not events:
-        st.caption("No hay eventos guía configurados para este activo en el rango consultado.")
+        st.caption("No hay eventos guia configurados para este activo en el rango consultado.")
     for event in events[:3]:
         st.markdown(
             f"""
@@ -1035,7 +1035,7 @@ def render_performance_context(asset_name: str, meta: dict, ctx: dict) -> None:
                 <div class="context-event-title">{event['titulo']}</div>
                 <div class="context-event-meta">{event['fecha_inicio']} a {event['fecha_fin']}</div>
                 <div class="context-event-body">{_first_sentence(event['nota'])}</div>
-                <div class="context-event-body"><strong>Por qué importa:</strong> {_event_importance_for_asset(event, ctx)}</div>
+                <div class="context-event-body"><strong>Por que importa:</strong> {_event_importance_for_asset(event, ctx)}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1048,7 +1048,7 @@ def render_performance_context(asset_name: str, meta: dict, ctx: dict) -> None:
         st.markdown(
             f"""
             <div class="insight-box">
-                <strong>Movimiento destacado:</strong> una de las caídas semanales más fuertes fue de
+                <strong>Movimiento destacado:</strong> una de las caidas semanales mas fuertes fue de
                 {movement_return:.2%} alrededor de {movement_date.date()}. Puede contextualizarse con
                 {related_context}, sin afirmar causalidad directa.
             </div>
@@ -1058,38 +1058,47 @@ def render_performance_context(asset_name: str, meta: dict, ctx: dict) -> None:
 
 
 # -----------------------------------------------------------------------------
-# Sidebar
+# Selecci-n de vista
 # -----------------------------------------------------------------------------
 asset_names = list(ASSETS.keys())
+render_portfolio_summary_card(ASSETS)
 
-with st.sidebar:
-    st.header("Parámetros")
-
-    vista = st.radio(
-        "Vista",
-        ["Resumen", "Un activo"],
-        index=0,
-    )
+with st.container(border=True):
+    vista_col, asset_col = st.columns([1, 1.4])
+    with vista_col:
+        vista = st.radio(
+            "Vista",
+            ["Resumen", "Un activo"],
+            index=0,
+            horizontal=True,
+        )
 
     selected_asset = None
-    if vista == "Un activo":
-        selected_asset = st.selectbox("Selecciona un activo", asset_names)
+    with asset_col:
+        if vista == "Un activo":
+            selected_asset = st.selectbox("Activo", asset_names, key="context_asset_selector")
+        else:
+            st.markdown("**Vista activa**")
+            st.caption("Resumen del portafolio configurado")
+
+with module_params():
+    st.caption("Este m-dulo usa los activos definidos en la configuraci-n inicial.")
 
 # -----------------------------------------------------------------------------
 # Vista resumida
 # -----------------------------------------------------------------------------
 if vista == "Resumen":
     section_intro(
-        "Lectura estratégica del conjunto",
+        "Lectura estrategica del conjunto",
         (
-            "El portafolio combina consumo defensivo, movilidad, exposición regional y energía. "
-            "Esta mezcla ayuda a interpretar por qué algunos activos estabilizan el conjunto y otros aportan más riesgo."
+            "El portafolio combina consumo defensivo, movilidad, exposicion regional y energia. "
+            "Esta mezcla ayuda a interpretar por que algunos activos estabilizan el conjunto y otros aportan mas riesgo."
         ),
     )
     st.header("Vista resumida del portafolio")
     section_intro(
         "Resumen por activo",
-        "Esta vista resume qué hace cada empresa, qué riesgos la mueven y qué papel cumple dentro del portafolio.",
+        "Esta vista resume que hace cada empresa, que riesgos la mueven y que papel cumple dentro del portafolio.",
         caption="Puente cualitativo para interpretar CAPM, VaR/CVaR y Markowitz.",
     )
 
@@ -1098,7 +1107,7 @@ if vista == "Resumen":
             {
                 "Activo": asset_name,
                 "Ticker": ASSETS[asset_name]["ticker"],
-                "País": ASSETS[asset_name]["country"],
+                "Pais": ASSETS[asset_name]["country"],
                 "Sector": ASSET_CONTEXT[asset_name]["sector"],
                 "Tipo_exposicion": ASSET_CONTEXT[asset_name]["tipo_exposicion"],
                 "Benchmark_local": ASSETS[asset_name]["benchmark_local"],
@@ -1126,14 +1135,14 @@ if vista == "Resumen":
 
     st.markdown(
         """
-**Cómo leer el rol de cada activo**
-- **Defensivo:** tiende a depender de consumo básico o recurrente.
-- **Cíclico:** suele moverse más con petróleo, economía global o shocks externos.
-- **Mixto/Regional:** combina consumo, movilidad, divisas o exposición geográfica específica.
+**Como leer el rol de cada activo**
+- **Defensivo:** tiende a depender de consumo basico o recurrente.
+- **Ciclico:** suele moverse mas con petroleo, economia global o shocks externos.
+- **Mixto/Regional:** combina consumo, movilidad, divisas o exposicion geografica especifica.
 """
     )
 
-    with st.expander("Ver fichas rápidas por activo (opcional)", expanded=False):
+    with st.expander("Ver fichas rapidas por activo (opcional)", expanded=False):
         asset_columns = st.columns(2)
         for index, asset_name in enumerate(asset_names):
             meta = ASSETS[asset_name]
@@ -1143,7 +1152,7 @@ if vista == "Resumen":
                 with st.container(border=True):
                     st.markdown(f"#### {asset_name} ({meta['ticker']})")
                     st.caption(
-                        f"Sector: {ctx['sector']} | País: {meta['country']} | "
+                        f"Sector: {ctx['sector']} | Pais: {meta['country']} | "
                         f"Benchmark local: {meta['benchmark_local']}"
                     )
                     st.write(ctx["resumen_sencillo"])
@@ -1166,3 +1175,4 @@ elif vista == "Un activo":
         ASSETS[selected_asset],
         ASSET_CONTEXT[selected_asset],
     )
+

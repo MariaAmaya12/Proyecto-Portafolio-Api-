@@ -18,8 +18,16 @@ NAVIGATION_PAGES = [
 
 
 def render_sidebar_navigation() -> None:
-    with st.sidebar:
-        st.header("Navegación")
-        for page_path, label in NAVIGATION_PAGES:
-            st.page_link(page_path, label=label)
-        st.divider()
+    st.markdown(
+        """
+        <style>
+        section[data-testid="stSidebar"] {
+            display: none;
+        }
+        div[data-testid="stSidebarCollapsedControl"] {
+            display: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )

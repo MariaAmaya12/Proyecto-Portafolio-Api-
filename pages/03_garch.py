@@ -14,12 +14,11 @@ from src.returns_analysis import compute_return_series
 from src.risk_metrics import validar_serie_para_garch
 from src.services.market_data_client import MarketDataClient
 from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_selected_asset_card
+from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 apply_global_typography()
-render_sidebar_navigation()
 
 
 # ==============================
@@ -73,60 +72,23 @@ def fmt_pvalue(value):
 
 inject_module_css()
 
-render_page_title(
+render_app_shell(
     "Módulo 3: ARCH/GARCH",
-    "Modela volatilidad condicional y pronósticos de riesgo sobre rendimientos del activo.",
+    "Modela volatilidad condicional y pronosticos de riesgo sobre rendimientos del activo.",
 )
+ASSETS = configured_assets(ASSETS)
+horizonte, start_date, end_date = configured_period(default_end=DEFAULT_END_DATE)
+asset_name, ticker = render_selected_asset_card(ASSETS, key="m3_asset_selector")
 
 # ==============================
-# Sidebar
+# Par-metros del m-dulo
 # ==============================
-with st.sidebar:
-    st.header("Filtros")
-    asset_name = st.selectbox("Activo", list(ASSETS.keys()), index=0)
-
-    horizonte = st.selectbox(
-        "Horizonte de análisis",
-        [
-            "1 mes",
-            "Trimestre",
-            "Semestre",
-            "1 año",
-            "2 años",
-            "3 años",
-            "5 años",
-        ],
-        index=3,
-    )
-
-    fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
-
-    if horizonte == "1 mes":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Trimestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Semestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "1 año":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "2 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "3 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "5 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
-        end_date = fecha_fin_ref.date()
+with module_params():
+    st.caption("Este m-dulo usa el activo y horizonte definidos en la vista principal.")
 
 # ==============================
 # Descargar datos
 # ==============================
-ticker = get_ticker(asset_name)
 market_client = MarketDataClient()
 
 bundle = market_client.fetch_bundle(
@@ -163,13 +125,13 @@ price_col = "Adj Close" if "Adj Close" in df.columns else "Close"
 ret_df = compute_return_series(df[price_col])
 
 if "log_return" not in ret_df.columns:
-    st.error("No se encontró la columna 'log_return' para ajustar el modelo GARCH.")
+    st.error("No se encontro la columna 'log_return' para ajustar el modelo GARCH.")
     st.stop()
 
 serie_retornos = ret_df["log_return"]
 
 # ==============================
-# Validación de la serie
+# Validacion de la serie
 # ==============================
 validacion = validar_serie_para_garch(
     serie_retornos,
@@ -182,7 +144,7 @@ if not validacion["ok"]:
         st.error(err)
 
     st.info(
-        "No se ajustó el modelo GARCH porque la serie no cumple las condiciones mínimas "
+        "No se ajusto el modelo GARCH porque la serie no cumple las condiciones minimas "
         "de calidad para un ajuste defendible."
     )
     st.stop()
@@ -198,15 +160,15 @@ volatilidad_movil_21d = serie_garch.rolling(window=21).std()
 # ==============================
 render_section(
     "Volatilidad condicional",
-    f"Evalúa modelos ARCH/GARCH para comparar especificaciones y pronosticar la volatilidad de {asset_name} ({ticker}).",
+    f"Evalua modelos ARCH/GARCH para comparar especificaciones y pronosticar la volatilidad de {asset_name} ({ticker}).",
 )
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
 render_explanation_expander(
     "Fundamento del módulo",
     [
         "La volatilidad condicional cambia en el tiempo y suele agruparse en periodos de calma o turbulencia.",
-        "Los modelos ARCH/GARCH permiten estimar esa dinámica sin asumir una volatilidad histórica constante.",
-        "La serie validada se escala por 100 antes del ajuste para mejorar la estabilidad numérica del modelo.",
+        "Los modelos ARCH/GARCH permiten estimar esa dinamica sin asumir una volatilidad historica constante.",
+        "La serie validada se escala por 100 antes del ajuste para mejorar la estabilidad numerica del modelo.",
     ],
 )
 
@@ -216,7 +178,7 @@ render_explanation_expander(
 results = fit_garch_models(serie_garch)
 
 if results["comparison"].empty:
-    st.warning("No hay suficientes datos o el ajuste no convergió correctamente para los modelos GARCH.")
+    st.warning("No hay suficientes datos o el ajuste no convergio correctamente para los modelos GARCH.")
     st.stop()
 
 # ==============================
@@ -294,7 +256,7 @@ else:
 st.markdown("### KPIs del mejor modelo")
 render_section(
     "Modelo seleccionado",
-    "Indicadores principales de la especificación ganadora bajo el criterio de selección disponible.",
+    "Indicadores principales de la especificacion ganadora bajo el criterio de seleccion disponible.",
 )
 
 k1, k2, k3 = st.columns(3)
@@ -314,7 +276,7 @@ with k3:
     kpi_card(
         "BIC",
         fmt_num(best_bic),
-        caption="Criterio con penalización por complejidad",
+        caption="Criterio con penalizacion por complejidad",
     )
 
 k4, k5, k6 = st.columns(3)
@@ -340,24 +302,24 @@ with k6:
     )
 
 if best_model is None:
-    st.warning("No se generó una lectura automática del mejor modelo.")
+    st.warning("No se genero una lectura automatica del mejor modelo.")
 
 render_explanation_expander(
-    "Cómo interpretar los KPI del modelo GARCH",
+    "Como interpretar los KPI del modelo GARCH",
     [
         "El AIC/BIC sirven para comparar modelos; menor valor indica mejor ajuste relativo.",
         "La persistencia cercana a 1 indica alta memoria de la volatilidad.",
-        "La volatilidad estimada/pronosticada mide la magnitud esperada de fluctuación del activo.",
-        "El mejor modelo no significa predicción perfecta, sino mejor ajuste relativo dentro de los modelos evaluados.",
+        "La volatilidad estimada/pronosticada mide la magnitud esperada de fluctuacion del activo.",
+        "El mejor modelo no significa prediccion perfecta, sino mejor ajuste relativo dentro de los modelos evaluados.",
     ],
 )
 # ==============================
-# Comparación de modelos
+# Comparacion de modelos
 # ==============================
-st.markdown("### 2. Comparación entre modelos")
+st.markdown("### 2. Comparacion entre modelos")
 render_section(
     "Tabla comparativa",
-    "Se comparan las especificaciones candidatas con criterios de ajuste y métricas de volatilidad.",
+    "Se comparan las especificaciones candidatas con criterios de ajuste y metricas de volatilidad.",
 )
 
 preferred_columns = [
@@ -372,7 +334,7 @@ comparison_display_df = comparison_df[visible_columns].copy()
 if "AIC" in comparison_display_df.columns:
     comparison_display_df = comparison_display_df.sort_values("AIC", ascending=True).reset_index(drop=True)
 if "modelo" in comparison_display_df.columns:
-    comparison_display_df["Selección"] = comparison_display_df["modelo"].apply(
+    comparison_display_df["Seleccion"] = comparison_display_df["modelo"].apply(
         lambda model_name: "Mejor modelo" if model_name == best_model else ""
     )
 comparison_display_df = comparison_display_df.rename(
@@ -383,18 +345,18 @@ comparison_display_df = comparison_display_df.rename(
     }
 )
 for column in comparison_display_df.columns:
-    if column not in {"Modelo", "Selección"}:
+    if column not in {"Modelo", "Seleccion"}:
         comparison_display_df[column] = pd.to_numeric(comparison_display_df[column], errors="coerce").apply(fmt_num)
 
 render_table(comparison_display_df, width="stretch", hide_index=True)
 
 render_explanation_expander(
-    "Cómo leer la comparación de modelos",
+    "Como leer la comparacion de modelos",
     [
         "Se comparan modelos por ajuste relativo.",
         "AIC/BIC penalizan complejidad.",
         "El modelo con menor AIC se toma como referencia si esa es la regla usada.",
-        "La tabla ayuda a justificar por qué se seleccionó el mejor modelo.",
+        "La tabla ayuda a justificar por que se selecciono el mejor modelo.",
     ],
 )
 
@@ -444,12 +406,12 @@ with d4:
 st.caption(normality_decision)
 
 render_explanation_expander(
-    "Cómo interpretar el diagnóstico",
+    "Como interpretar el diagnóstico",
     [
-        "La convergencia indica si el modelo logró estimarse correctamente.",
+        "La convergencia indica si el modelo logro estimarse correctamente.",
         "Jarque-Bera se aplica a residuos estandarizados para revisar normalidad residual.",
-        "Un p-value muy pequeño sugiere que pueden persistir colas o eventos extremos no explicados por completo.",
-        "Una persistencia alta indica que los choques de volatilidad tardan más en disiparse.",
+        "Un p-value muy pequeno sugiere que pueden persistir colas o eventos extremos no explicados por completo.",
+        "Una persistencia alta indica que los choques de volatilidad tardan mas en disiparse.",
     ],
 )
 
@@ -471,7 +433,7 @@ st.markdown("### 4. Residuos estandarizados")
 if "std_resid" in results and results["std_resid"] is not None:
     st.plotly_chart(plot_standardized_residuals(results["std_resid"]), width="stretch")
     render_explanation_expander(
-        "Cómo interpretar los residuos estandarizados",
+        "Como interpretar los residuos estandarizados",
         [
             "Residuos alrededor de cero sugieren que el modelo captura buena parte de la estructura media.",
             "Picos extremos persistentes indican episodios que el modelo no absorbe completamente.",
@@ -489,29 +451,29 @@ else:
 # ==============================
 st.markdown("### 5. Volatilidad condicional estimada")
 st.caption(
-    "La gráfica compara cómo cada especificación modela la evolución de la volatilidad condicional a lo largo del tiempo."
+    "La grafica compara como cada especificacion modela la evolucion de la volatilidad condicional a lo largo del tiempo."
 )
 volatility_plot_df = results["volatility"].copy()
 volatility_plot_df.insert(
     0,
-    "Volatilidad móvil 21 días",
+    "Volatilidad movil 21 dias",
     volatilidad_movil_21d.reindex(volatility_plot_df.index),
 )
 volatility_fig = plot_volatility(volatility_plot_df)
 volatility_fig.update_traces(
-    selector=dict(name="Volatilidad móvil 21 días"),
+    selector=dict(name="Volatilidad movil 21 dias"),
     line=dict(color="#64748B", width=2.6, dash="dot"),
 )
 st.plotly_chart(volatility_fig, width="stretch")
 
 render_explanation_expander(
-    "Cómo interpretar la volatilidad estimada",
+    "Como interpretar la volatilidad estimada",
     [
-        "La Volatilidad móvil 21 días es una referencia empírica aproximada calculada a partir de los rendimientos recientes.",
+        "La Volatilidad movil 21 dias es una referencia empirica aproximada calculada a partir de los rendimientos recientes.",
         "Los modelos ARCH, GARCH y EGARCH son estimaciones suavizadas de la volatilidad condicional.",
-        "Un buen modelo no tiene que replicar exactamente todos los movimientos de la Volatilidad móvil 21 días.",
-        "Lo importante es que capture los principales cambios de régimen o episodios de mayor riesgo.",
-        "Si las líneas de los modelos aumentan en los mismos periodos que la Volatilidad móvil 21 días, están capturando adecuadamente episodios de mayor incertidumbre.",
+        "Un buen modelo no tiene que replicar exactamente todos los movimientos de la Volatilidad movil 21 dias.",
+        "Lo importante es que capture los principales cambios de regimen o episodios de mayor riesgo.",
+        "Si las lineas de los modelos aumentan en los mismos periodos que la Volatilidad movil 21 dias, estan capturando adecuadamente episodios de mayor incertidumbre.",
         "La volatilidad condicional permite identificar tramos donde la incertidumbre se concentra.",
         "Una persistencia elevada refuerza la lectura de episodios de riesgo agrupado.",
         "ARCH, GARCH y EGARCH modelan la volatilidad con distintos supuestos sobre choques y memoria.",
@@ -519,16 +481,16 @@ render_explanation_expander(
 )
 
 render_explanation_expander(
-    "Qué significan ARCH, GARCH y EGARCH",
+    "Que significan ARCH, GARCH y EGARCH",
     [
-        "ARCH se enfoca en cómo los choques recientes afectan la volatilidad actual.",
+        "ARCH se enfoca en como los choques recientes afectan la volatilidad actual.",
         "GARCH combina choques recientes con persistencia de volatilidad pasada.",
-        "EGARCH permite capturar respuestas asimétricas ante choques positivos y negativos.",
+        "EGARCH permite capturar respuestas asimetricas ante choques positivos y negativos.",
     ],
 )
 
 # ==============================
-# Pronóstico de volatilidad
+# Pronostico de volatilidad
 # ==============================
 horizon_steps = None
 try:
@@ -537,22 +499,22 @@ except Exception:
     horizon_steps = None
 
 forecast_title = (
-    f"### 6. Pronóstico de volatilidad ({horizon_steps} pasos)"
+    f"### 6. Pronostico de volatilidad ({horizon_steps} pasos)"
     if horizon_steps is not None
-    else "### 6. Pronóstico de volatilidad (10 pasos)"
+    else "### 6. Pronostico de volatilidad (10 pasos)"
 )
 st.markdown(forecast_title)
 st.caption(
-    "El gráfico muestra un pronóstico de volatilidad a varios pasos hacia adelante."
+    "El grafico muestra un pronostico de volatilidad a varios pasos hacia adelante."
 )
 st.plotly_chart(
     plot_forecast(results["forecast"]),
     width="stretch",
 )
 render_explanation_expander(
-    "Cómo interpretar el pronóstico de volatilidad",
+    "Como interpretar el pronostico de volatilidad",
     [
-        "El pronóstico no predice dirección del precio.",
+        "El pronostico no predice direccion del precio.",
         "Pronostica intensidad esperada de la volatilidad.",
         "Mayor volatilidad implica mayor incertidumbre/riesgo.",
         "Debe complementarse con VaR/CVaR, CAPM y benchmark.",
@@ -560,9 +522,9 @@ render_explanation_expander(
 )
 
 # ==============================
-# Conclusión
+# Conclusion
 # ==============================
-st.markdown("### Conclusión")
+st.markdown("### Conclusion")
 if best_model is not None:
     conclusion_parts = [
         f"El modelo ganador fue **{best_model}** por criterio AIC.",
@@ -577,13 +539,14 @@ if best_model is not None:
 
     if forecast_last is not None:
         conclusion_parts.append(
-            f"El pronóstico final de volatilidad de **{fmt_num(forecast_last)}** resume la volatilidad esperada al cierre del horizonte."
+            f"El pronostico final de volatilidad de **{fmt_num(forecast_last)}** resume la volatilidad esperada al cierre del horizonte."
         )
 
     conclusion_parts.append(
-        "Para la gestión de riesgo y VaR, estos resultados ayudan a distinguir entre riesgo reciente, persistencia y riesgo prospectivo."
+        "Para la gestion de riesgo y VaR, estos resultados ayudan a distinguir entre riesgo reciente, persistencia y riesgo prospectivo."
     )
 
     st.success(" ".join(conclusion_parts))
 else:
-    st.info("No fue posible construir una conclusión porque no se seleccionó un modelo final.")
+    st.info("No fue posible construir una conclusion porque no se selecciono un modelo final.")
+

@@ -17,8 +17,8 @@ from src.services.decision_engine import DecisionEngine
 from src.services.market_data_client import MarketDataClient
 from src.services.risk_analyzer import RiskAnalyzer
 from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_portfolio_summary_card
+from src.ui_style import apply_global_typography
 
 try:
     from src.api.macro import macro_snapshot
@@ -27,7 +27,6 @@ except Exception:
 
 ensure_project_dirs()
 apply_global_typography()
-render_sidebar_navigation()
 
 
 # ==============================
@@ -141,7 +140,7 @@ def hero_decision(title, subtitle, level="neutral"):
     </head>
     <body>
         <div class="hero">
-            <div class="badge">Decisión integrada del portafolio</div>
+            <div class="badge">Decision integrada del portafolio</div>
             <div class="title">{sanitize_text(title)}</div>
             <div class="subtitle">{sanitize_text(subtitle)}</div>
         </div>
@@ -153,54 +152,22 @@ def hero_decision(title, subtitle, level="neutral"):
 
 inject_ui_css()
 
-render_page_title(
+render_app_shell(
     "Módulo 9 - Panel de decisión",
     "Integra riesgo, volatilidad, señales técnicas y benchmark para producir una postura de acción más clara.",
 )
+ASSETS = configured_assets(ASSETS)
+horizonte, start_date, end_date = configured_period(DEFAULT_START_DATE, DEFAULT_END_DATE)
+render_portfolio_summary_card(ASSETS)
 
 
 # ==============================
-# Sidebar
+# Par-metros del m-dulo
 # ==============================
-with st.sidebar:
-    st.header("Parámetros")
-
-    horizonte = st.selectbox(
-        "Horizonte de análisis",
-        ["1 mes", "Trimestre", "Semestre", "1 año", "2 años", "3 años", "5 años", "Personalizado"],
-        index=3,
-    )
-
-    fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
-
-    if horizonte == "1 mes":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Trimestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Semestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "1 año":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "2 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "3 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "5 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
-        end_date = fecha_fin_ref.date()
-    else:
-        start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE, key="decision_start")
-        end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="decision_end")
-
-    st.divider()
-    st.subheader("Opciones de análisis")
-    mostrar_detalle = st.checkbox("Mostrar detalle técnico", value=False)
+with module_params():
+    st.header("Par-metros")
+    st.subheader("Opciones de an-lisis")
+    mostrar_detalle = st.checkbox("Mostrar detalle t-cnico", value=False)
     alpha = st.selectbox("Nivel de confianza VaR", [0.95, 0.99], index=0, key="decision_alpha")
     n_sim = st.slider(
         "Simulaciones Monte Carlo",
@@ -213,7 +180,7 @@ with st.sidebar:
 
 
 # ==============================
-# Helpers lógicos
+# Helpers logicos
 # ==============================
 def _get_rf_annual() -> float:
     if macro_snapshot is not None:
@@ -316,7 +283,7 @@ def _classify_risk(var_hist: float, persistencia: float, max_dd: float) -> dict:
             "nivel": "Alto",
             "score": -1,
             "ui": "danger",
-            "mensaje": "El portafolio presenta pérdidas extremas potenciales y/o persistencia de volatilidad suficientemente elevadas como para justificar cautela.",
+            "mensaje": "El portafolio presenta perdidas extremas potenciales y/o persistencia de volatilidad suficientemente elevadas como para justificar cautela.",
         }
     if puntos >= 3:
         return {
@@ -339,7 +306,7 @@ def _classify_benchmark(summary_df: pd.DataFrame, extras_df: pd.DataFrame) -> di
             "nivel": "No concluyente",
             "score": 0,
             "ui": "warning",
-            "mensaje": "No fue posible construir una comparación robusta frente al benchmark.",
+            "mensaje": "No fue posible construir una comparacion robusta frente al benchmark.",
         }
 
     try:
@@ -347,8 +314,8 @@ def _classify_benchmark(summary_df: pd.DataFrame, extras_df: pd.DataFrame) -> di
         bench_ret = float(summary_df.loc[summary_df["serie"] == "Benchmark", "ret_anualizado"].iloc[0])
 
         alpha = np.nan
-        if not extras_df.empty and "Alpha de Jensen" in extras_df["métrica"].values:
-            alpha = float(extras_df.loc[extras_df["métrica"] == "Alpha de Jensen", "valor"].iloc[0])
+        if not extras_df.empty and "Alpha de Jensen" in extras_df["metrica"].values:
+            alpha = float(extras_df.loc[extras_df["metrica"] == "Alpha de Jensen", "valor"].iloc[0])
 
         if port_ret > bench_ret and (pd.isna(alpha) or alpha >= 0):
             return {
@@ -370,7 +337,7 @@ def _classify_benchmark(summary_df: pd.DataFrame, extras_df: pd.DataFrame) -> di
             "nivel": "No concluyente",
             "score": 0,
             "ui": "warning",
-            "mensaje": "La comparación relativa no muestra una ventaja consistente; algunas métricas son mixtas y no confirman dominancia clara.",
+            "mensaje": "La comparacion relativa no muestra una ventaja consistente; algunas metricas son mixtas y no confirman dominancia clara.",
         }
     except Exception:
         return {
@@ -386,10 +353,10 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
 
     if total >= 2:
         return {
-            "titulo": "Compra táctica",
+            "titulo": "Compra tactica",
             "ui": "positive",
-            "mensaje_general": "La lectura integrada favorece una postura compradora o de incremento táctico de exposición.",
-            "mensaje_riesgo": "El principal riesgo es que un cambio brusco de mercado revierta la señal técnica y deteriore el perfil de volatilidad.",
+            "mensaje_general": "La lectura integrada favorece una postura compradora o de incremento tactico de exposicion.",
+            "mensaje_riesgo": "El principal riesgo es que un cambio brusco de mercado revierta la senal tecnica y deteriore el perfil de volatilidad.",
             "mensaje_formal": "La combinación de riesgo contenido, sesgo técnico favorable y comparación relativa no adversa respalda una postura de compra táctica dentro de la ventana analizada.",
             "score_total": total,
         }
@@ -398,28 +365,28 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
         return {
             "titulo": "Mantener / compra selectiva",
             "ui": "warning",
-            "mensaje_general": "La lectura integrada permite mantener exposición y considerar compras selectivas, pero no justifica una expansión agresiva de riesgo.",
-            "mensaje_riesgo": "El principal riesgo es entrar con confirmación incompleta y enfrentar un deterioro posterior en benchmark o volatilidad.",
-            "mensaje_formal": "La evidencia agregada no es suficientemente fuerte para una postura agresiva, pero tampoco justifica deshacer exposición. La decisión razonable es mantener y, en todo caso, comprar de forma selectiva.",
+            "mensaje_general": "La lectura integrada permite mantener exposicion y considerar compras selectivas, pero no justifica una expansion agresiva de riesgo.",
+            "mensaje_riesgo": "El principal riesgo es entrar con confirmacion incompleta y enfrentar un deterioro posterior en benchmark o volatilidad.",
+            "mensaje_formal": "La evidencia agregada no es suficientemente fuerte para una postura agresiva, pero tampoco justifica deshacer exposicion. La decision razonable es mantener y, en todo caso, comprar de forma selectiva.",
             "score_total": total,
         }
 
     if total == -1:
         return {
-            "titulo": "Reducir exposición",
+            "titulo": "Reducir exposicion",
             "ui": "warning",
-            "mensaje_general": "La lectura integrada sugiere reducir parcialmente exposición o evitar nuevas compras hasta que mejoren las condiciones.",
-            "mensaje_riesgo": "El riesgo central es mantener una posición relativamente alta en un contexto donde la evidencia agregada se ha debilitado.",
-            "mensaje_formal": "La combinación de señales no favorece una ampliación de posición. La decisión más consistente es reducir exposición marginalmente y esperar mejor confirmación estadística y técnica.",
+            "mensaje_general": "La lectura integrada sugiere reducir parcialmente exposicion o evitar nuevas compras hasta que mejoren las condiciones.",
+            "mensaje_riesgo": "El riesgo central es mantener una posicion relativamente alta en un contexto donde la evidencia agregada se ha debilitado.",
+            "mensaje_formal": "La combinacion de senales no favorece una ampliacion de posicion. La decision mas consistente es reducir exposicion marginalmente y esperar mejor confirmacion estadistica y tecnica.",
             "score_total": total,
         }
 
     return {
         "titulo": "Venta / postura defensiva",
         "ui": "danger",
-        "mensaje_general": "La lectura integrada favorece una postura defensiva: reducir exposición de forma relevante o priorizar salida.",
+        "mensaje_general": "La lectura integrada favorece una postura defensiva: reducir exposicion de forma relevante o priorizar salida.",
         "mensaje_riesgo": "El principal riesgo es permanecer sobreexpuesto en un entorno donde coinciden riesgo elevado, deterioro técnico y/o rezago relativo.",
-        "mensaje_formal": "La evidencia integrada es adversa. Desde una perspectiva de control de riesgo, la postura más defendible es de venta o reducción sustancial de exposición.",
+        "mensaje_formal": "La evidencia integrada es adversa. Desde una perspectiva de control de riesgo, la postura mas defendible es de venta o reduccion sustancial de exposicion.",
         "score_total": total,
     }
 
@@ -534,7 +501,7 @@ def build_ml_risk_payload(
         drawdown = cumulative / cumulative.cummax().replace(0, np.nan) - 1.0
         return _finite_float(drawdown.min(), 0.0)
 
-    # Fallbacks neutrales: el endpoint requiere floats finitos aun si faltan indicadores tecnicos.
+    # Fallbacks neutrales: el endpoint requiere floats finitos aun si faltan indicadores técnicos.
     rsi = 50.0
     macd_hist = 0.0
     bb_position = 0.5
@@ -613,7 +580,7 @@ valid_asset_tickers = [ticker for ticker in asset_tickers if ticker in returns_a
 returns = risk_analyzer.clean_returns(returns_all[valid_asset_tickers])
 
 if returns.empty or len(returns) < 30:
-    st.error(data_error_message("No hay suficientes datos para construir el panel de decisión."))
+    st.error(data_error_message("No hay suficientes datos para construir el panel de decision."))
     st.stop()
 
 portfolio_returns, weights = risk_analyzer.portfolio_returns(returns)
@@ -630,8 +597,8 @@ risk_table = risk_analyzer.compute_var_tables(
 
 var_hist = np.nan
 cvar_hist = np.nan
-if not risk_table.empty and "Histórico" in risk_table["método"].values:
-    row_hist = risk_table.loc[risk_table["método"] == "Histórico"].iloc[0]
+if not risk_table.empty and "Historico" in risk_table["metodo"].values:
+    row_hist = risk_table.loc[risk_table["metodo"] == "Historico"].iloc[0]
     var_hist = float(row_hist["VaR_diario"])
     cvar_hist = float(row_hist["CVaR_diario"])
 
@@ -683,7 +650,7 @@ ml_risk_score = fetch_ml_risk_score(ml_risk_payload)
 # ==============================
 st.markdown("### Resumen del módulo")
 st.caption(
-    "Panel integrador opcional para resumir riesgo, técnica y benchmark en una postura de acción del portafolio."
+    "Panel integrador opcional para resumir riesgo, tecnica y benchmark en una postura de accion del portafolio."
 )
 
 st.caption(f"Periodo analizado: {start_date} a {end_date}")
@@ -691,10 +658,10 @@ st.caption(f"Periodo analizado: {start_date} a {end_date}")
 hero_text = decision["mensaje_general"]
 hero_decision(decision["titulo"], hero_text, level=decision["ui"])
 
-st.markdown("### Pilares de la decisión")
+st.markdown("### Pilares de la decision")
 render_section(
-    "Qué está empujando la decisión",
-    "La postura final se construye combinando riesgo agregado, lectura técnica, comparación frente al benchmark y una señal auxiliar ML.",
+    "Que esta empujando la decision",
+    "La postura final se construye combinando riesgo agregado, lectura tecnica, comparacion frente al benchmark y una senal auxiliar ML.",
 )
 
 c1, c2, c3, c4 = st.columns(4)
@@ -710,7 +677,7 @@ with c1:
 
 with c2:
     kpi_card(
-        "Técnica",
+        "Tecnica",
         signal_summary["lectura"],
         delta="Pilar 2",
         delta_type=signal_summary["ui"] == "positive" and "pos" or signal_summary["ui"] == "danger" and "neg" or "neu",
@@ -723,7 +690,7 @@ with c3:
         bench_view["nivel"],
         delta="Pilar 3",
         delta_type="pos" if bench_view["nivel"] == "Superior" else "neg" if bench_view["nivel"] == "Inferior" else "neu",
-        caption="Comparación frente al benchmark global.",
+        caption="Comparacion frente al benchmark global.",
     )
 
 with c4:
@@ -739,10 +706,10 @@ with c4:
             delta="Pilar 4",
             delta_type=ml_delta_type,
             caption=(
-                "Score auxiliar ML a 5 días. "
-                f"Score ML: {ml_score_value:.3f} | Horizonte: {ml_horizon} días | Modelo: {ml_model}"
+                "Score auxiliar ML a 5 dias. "
+                f"Score ML: {ml_score_value:.3f} | Horizonte: {ml_horizon} dias | Modelo: {ml_model}"
                 if pd.notna(ml_score_value)
-                else f"Score auxiliar ML a 5 días. Horizonte: {ml_horizon} días | Modelo: {ml_model}"
+                else f"Score auxiliar ML a 5 dias. Horizonte: {ml_horizon} dias | Modelo: {ml_model}"
             ),
         )
     else:
@@ -761,29 +728,29 @@ if mostrar_detalle and not ml_risk_score and "decision_ml_risk_error" in st.sess
         st.caption(ml_error.technical_detail)
 
 render_explanation_expander(
-    "Cómo interpretar los pilares",
+    "Como interpretar los pilares",
     [
-        "Riesgo: resume VaR histórico, persistencia GARCH y drawdown.",
+        "Riesgo: resume VaR historico, persistencia GARCH y drawdown.",
         "Técnica: resume señales favorables, neutrales y desfavorables.",
-        "Benchmark: resume desempeño relativo y Alpha de Jensen.",
+        "Benchmark: resume desempeno relativo y Alpha de Jensen.",
         "Riesgo ML: score auxiliar a 5 días estimado con variables recientes de retorno, volatilidad e indicadores técnicos.",
-        "La decisión final combina los tres componentes principales y usa el score ML como apoyo visual.",
+        "La decision final combina los tres componentes principales y usa el score ML como apoyo visual.",
     ],
 )
 
-st.markdown("### Métricas mínimas de soporte")
+st.markdown("### Metricas minimas de soporte")
 render_section(
     "Indicadores clave",
-    "Estas métricas respaldan la decisión sin repetir todo el detalle de módulos anteriores.",
+        "Estas métricas respaldan la decisión sin repetir todo el detalle de módulos anteriores.",
 )
 
 k1, k2, k3, k4 = st.columns(4)
 
 with k1:
     kpi_card(
-        "VaR histórico",
+        "VaR historico",
         f"{var_hist:.2%}" if pd.notna(var_hist) else "N/D",
-        caption="Pérdida umbral estimada.",
+        caption="Perdida umbral estimada.",
     )
 
 with k2:
@@ -800,9 +767,9 @@ with k2:
     )
 
 alpha_jensen = np.nan
-if not extras_df.empty and "Alpha de Jensen" in extras_df["métrica"].values:
+if not extras_df.empty and "Alpha de Jensen" in extras_df["metrica"].values:
     try:
-        alpha_jensen = float(extras_df.loc[extras_df["métrica"] == "Alpha de Jensen", "valor"].iloc[0])
+        alpha_jensen = float(extras_df.loc[extras_df["metrica"] == "Alpha de Jensen", "valor"].iloc[0])
     except Exception:
         alpha_jensen = np.nan
 
@@ -810,9 +777,9 @@ with k3:
     kpi_card(
         "Alpha de Jensen",
         f"{alpha_jensen:.4f}" if pd.notna(alpha_jensen) else "N/D",
-        delta="Comparación relativa",
+        delta="Comparacion relativa",
         delta_type="pos" if pd.notna(alpha_jensen) and alpha_jensen > 0 else "neg" if pd.notna(alpha_jensen) and alpha_jensen < 0 else "neu",
-        caption="Desempeño ajustado por riesgo.",
+        caption="Desempeno ajustado por riesgo.",
     )
 
 balance_signals = signal_summary["favorables"] - signal_summary["desfavorables"]
@@ -830,35 +797,35 @@ with k4:
     )
 
 render_explanation_expander(
-    "Cómo interpretar las métricas de soporte",
+    "Como interpretar las metricas de soporte",
     [
-        "VaR histórico: aproxima la pérdida umbral del portafolio en la ventana analizada.",
-        "Persistencia GARCH: refleja cuánta memoria conserva la volatilidad.",
-        "Alpha de Jensen: mide desempeño relativo ajustado por riesgo frente al benchmark.",
+        "VaR historico: aproxima la perdida umbral del portafolio en la ventana analizada.",
+        "Persistencia GARCH: refleja cuanta memoria conserva la volatilidad.",
+        "Alpha de Jensen: mide desempeno relativo ajustado por riesgo frente al benchmark.",
         "Balance de señales: resume la diferencia entre señales favorables y desfavorables.",
     ]
     + (
-        ["Si la persistencia aparece como N/D, significa que el modelo GARCH no entregó un valor alpha + beta válido para la ventana seleccionada."]
+        ["Si la persistencia aparece como N/D, significa que el modelo GARCH no entrego un valor alpha + beta valido para la ventana seleccionada."]
         if pd.isna(persistencia)
         else []
     ),
 )
 
-st.markdown("### Cómo interpretar el resultado")
+st.markdown("### Como interpretar el resultado")
 st.success(
-    f"Decisión sugerida: **{decision['titulo']}**. {decision['mensaje_general']}"
+    f"Decision sugerida: **{decision['titulo']}**. {decision['mensaje_general']}"
 )
 
 render_explanation_expander(
-    "Cómo interpretar la decisión integrada",
+    "Como interpretar la decision integrada",
     [
-        "La postura final surge de combinar riesgo agregado, lectura técnica y desempeño relativo frente al benchmark.",
-        "Riesgo agregado: se aproxima mediante VaR histórico, persistencia GARCH y drawdown.",
+        "La postura final surge de combinar riesgo agregado, lectura tecnica y desempeno relativo frente al benchmark.",
+        "Riesgo agregado: se aproxima mediante VaR historico, persistencia GARCH y drawdown.",
         "Lectura técnica: se resume a partir del balance entre señales favorables y desfavorables de los activos.",
-        "Benchmark: se evalúa en términos de retorno relativo y Alpha de Jensen.",
-        "El score ML se usa como señal auxiliar y no como recomendación financiera independiente.",
-        f"Conclusión formal: {decision['mensaje_formal']}",
-        f"Riesgo de implementación de la postura: {decision['mensaje_riesgo']}",
+        "Benchmark: se evalua en terminos de retorno relativo y Alpha de Jensen.",
+        "El score ML se usa como senal auxiliar y no como recomendacion financiera independiente.",
+        f"Conclusion formal: {decision['mensaje_formal']}",
+        f"Riesgo de implementacion de la postura: {decision['mensaje_riesgo']}",
     ],
 )
 
@@ -866,7 +833,7 @@ if mostrar_detalle:
     with st.expander("Ver detalle técnico del score"):
         detalle_df = pd.DataFrame(
             {
-                "Componente": ["Riesgo", "Técnica", "Benchmark", "Score total"],
+                "Componente": ["Riesgo", "Tecnica", "Benchmark", "Score total"],
                 "Lectura": [
                     risk_view["nivel"],
                     signal_summary["lectura"],
@@ -882,3 +849,4 @@ if mostrar_detalle:
             }
         )
         render_table(detalle_df, hide_index=True, width="stretch")
+

@@ -26,12 +26,11 @@ from src.plots import plot_scatter_regression
 from src.services.capm_analyzer import CAPMAnalyzer
 from src.services.market_data_client import MarketDataClient
 from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell
+from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 apply_global_typography()
-render_sidebar_navigation()
 
 PORTFOLIO_OPTION = "Portafolio (equiponderado)"
 WEIGHT_TOL = 1e-4
@@ -140,7 +139,7 @@ def returns_from_close_cached(close_series: pd.Series) -> pd.Series:
 
 
 def fallback_asset_returns(asset_label: str, asset_ticker: str) -> pd.Series:
-    st.warning(f"No se encontró {asset_ticker} en la matriz inicial; se consulta nuevamente al backend.")
+    st.warning(f"No se encontro {asset_ticker} en la matriz inicial; se consulta nuevamente al backend.")
     try:
         bundle = fetch_capm_bundle_cached(tickers=(asset_ticker,), start=str(start_date), end=str(end_date))
     except BackendAPIError as exc:
@@ -151,7 +150,7 @@ def fallback_asset_returns(asset_label: str, asset_ticker: str) -> pd.Series:
 
     returns = bundle.get("returns", pd.DataFrame())
     if returns.empty or asset_ticker not in returns.columns:
-        st.error("El backend no devolvió retornos válidos para el activo seleccionado.")
+        st.error("El backend no devolvio retornos validos para el activo seleccionado.")
         st.caption(f"Activo seleccionado: {asset_label} | Ticker: {asset_ticker}")
         st.stop()
     return pd.to_numeric(returns[asset_ticker], errors="coerce").dropna()
@@ -251,16 +250,16 @@ def build_asset_betas_table(
             "Benchmark usado (local)": bench_ticker,
             "Beta (local)": "Sin datos",
             "Retorno esperado (CAPM local)": "Sin datos",
-            "Clasificación (local)": "Sin datos",
+            "Clasificacion (local)": "Sin datos",
             "Alpha diaria (local)": "Sin datos",
-            "R² (local)": "Sin datos",
+            "R (local)": "Sin datos",
             "p-value beta (local)": "Sin datos",
             "Benchmark global": GLOBAL_BENCHMARK,
             "Beta (ACWI)": "N/D",
             "Retorno esperado (CAPM ACWI)": "N/D",
-            "Clasificación (ACWI)": "N/D",
+            "Clasificacion (ACWI)": "N/D",
             "Alpha diaria (ACWI)": "N/D",
-            "R² (ACWI)": "N/D",
+            "R (ACWI)": "N/D",
             "p-value beta (ACWI)": "N/D",
         }
 
@@ -275,9 +274,9 @@ def build_asset_betas_table(
                     {
                         "Beta (local)": fmt_num(local_result.get("beta")),
                         "Retorno esperado (CAPM local)": fmt_pct(local_result.get("expected_return_capm_annual"), digits=2),
-                        "Clasificación (local)": local_result.get("classification", "Sin datos"),
+                        "Clasificacion (local)": local_result.get("classification", "Sin datos"),
                         "Alpha diaria (local)": fmt_alpha_daily(local_result.get("alpha_diaria")),
-                        "R² (local)": fmt_num(local_result.get("r_squared")),
+                        "R (local)": fmt_num(local_result.get("r_squared")),
                         "p-value beta (local)": fmt_num(local_result.get("p_value_beta")),
                     }
                 )
@@ -291,9 +290,9 @@ def build_asset_betas_table(
                         {
                             "Beta (ACWI)": fmt_num(global_result.get("beta")),
                             "Retorno esperado (CAPM ACWI)": fmt_pct(global_result.get("expected_return_capm_annual"), digits=2),
-                            "Clasificación (ACWI)": global_result.get("classification", "N/D"),
+                            "Clasificacion (ACWI)": global_result.get("classification", "N/D"),
                             "Alpha diaria (ACWI)": fmt_alpha_daily(global_result.get("alpha_diaria")),
-                            "R² (ACWI)": fmt_num(global_result.get("r_squared")),
+                            "R (ACWI)": fmt_num(global_result.get("r_squared")),
                             "p-value beta (ACWI)": fmt_num(global_result.get("p_value_beta")),
                         }
                     )
@@ -303,7 +302,7 @@ def build_asset_betas_table(
         rows.append(row)
 
     if global_benchmark_failed:
-        notes.append(f"No se pudieron calcular columnas ACWI porque {GLOBAL_BENCHMARK} no devolvió datos.")
+        notes.append(f"No se pudieron calcular columnas ACWI porque {GLOBAL_BENCHMARK} no devolvio datos.")
 
     return pd.DataFrame(rows), notes
 
@@ -316,14 +315,14 @@ def build_asset_summary_table(betas_df: pd.DataFrame) -> pd.DataFrame:
             "Benchmark usado (local)",
             "Beta (local)",
             "Retorno esperado (CAPM local)",
-            "Clasificación (local)",
+            "Clasificacion (local)",
         ]
     ].rename(
         columns={
             "Benchmark usado (local)": "Benchmark local",
             "Beta (local)": "Beta local",
             "Retorno esperado (CAPM local)": "Retorno CAPM local",
-            "Clasificación (local)": "Clasificación local",
+            "Clasificacion (local)": "Clasificacion local",
         }
     )
 
@@ -378,61 +377,40 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-render_page_title(
+render_app_shell(
     "Módulo 4 - CAPM y Beta",
     "Evalúa sensibilidad al mercado, rendimiento esperado y riesgo sistemático del activo.",
 )
+ASSETS = configured_assets(ASSETS)
+horizonte, start_date, end_date = configured_period(default_end=DEFAULT_END_DATE)
 
 # ==============================
-# Sidebar
+# Selecci-n de an-lisis y periodo
 # ==============================
-with st.sidebar:
+st.markdown("### Activo seleccionado")
+with st.container(border=True):
+    selector_col, ticker_col, period_col = st.columns([1.5, 0.85, 1.1])
+    with selector_col:
+        asset_name = st.selectbox("Activo", [PORTFOLIO_OPTION] + list(ASSETS.keys()), index=1, key="m4_asset_selector")
+
+    display_ticker = "Portafolio" if asset_name == PORTFOLIO_OPTION else get_ticker(asset_name)
+    with ticker_col:
+        st.markdown("**Referencia**")
+        st.caption(display_ticker)
+    with period_col:
+        st.markdown("**Periodo analizado**")
+        st.caption(f"{horizonte}: {start_date} a {end_date}")
+
+manual_weights_enabled = False
+manual_weights = {}
+manual_weights_validation_error = None
+
+# ==============================
+# Par-metros del m-dulo
+# ==============================
+with module_params():
     st.header("Parámetros CAPM")
-    asset_name = st.selectbox("Activo", [PORTFOLIO_OPTION] + list(ASSETS.keys()), index=1)
-    manual_weights_enabled = False
-    manual_weights = {}
-    manual_weights_validation_error = None
-
-    horizonte = st.selectbox(
-        "Horizonte de análisis",
-        [
-            "1 mes",
-            "Trimestre",
-            "Semestre",
-            "1 año",
-            "2 años",
-            "3 años",
-            "5 años",
-        ],
-        index=3,
-    )
-
-    fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
-
-    if horizonte == "1 mes":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Trimestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Semestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "1 año":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "2 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "3 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "5 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
-        end_date = fecha_fin_ref.date()
-
     if asset_name == PORTFOLIO_OPTION:
-        st.divider()
         manual_weights_enabled = st.checkbox("Definir pesos manualmente (opcional)", value=False)
         if manual_weights_enabled:
             st.caption("Ingresa pesos entre 0 y 1. La suma debe ser 1.00 para calcular el CAPM.")
@@ -464,6 +442,8 @@ with st.sidebar:
                     st.warning("La suma de pesos es menor que 1.00. Ajusta los pesos para continuar.")
                 else:
                     st.error("Los pesos no cumplen la validación requerida.")
+    else:
+        st.caption("El CAPM usa el activo y horizonte definidos en la vista principal.")
 
 # ==============================
 # Datos
@@ -692,7 +672,7 @@ with c2:
 
 with c3:
     kpi_card(
-        "R²",
+        "R",
         fmt_num(r_squared),
         delta=r2_delta,
         delta_type=r2_delta_type,
@@ -709,17 +689,17 @@ with c4:
     )
 
 render_explanation_expander(
-    "Cómo interpretar los KPI CAPM",
+    "Como interpretar los KPI CAPM",
     [
         "Beta: sensibilidad frente al benchmark y medida del riesgo sistemático.",
         "Alpha diaria: rendimiento no explicado por el benchmark.",
-        "R²: proporción explicada por la regresión CAPM.",
+        "R: proporcion explicada por la regresion CAPM.",
         "Retorno esperado anual: estimación CAPM usando la tasa libre de riesgo desde la API macro.",
     ],
 )
 
 # ==============================
-# Clasificación
+# Clasificacion
 # ==============================
 st.markdown(f"### {classification_title}")
 soft_note("Lectura rápida de la beta", class_msg)
@@ -750,7 +730,7 @@ if is_portfolio:
                 st.caption(f"- {note}")
 
 # ==============================
-# Regresión CAPM
+# Regresion CAPM
 # ==============================
 st.markdown("### Regresión CAPM")
 render_section(
@@ -767,10 +747,10 @@ fig = plot_scatter_regression(
 st.plotly_chart(fig, width="stretch")
 
 # ==============================
-# Cómo leer el gráfico
+# Como leer el grafico
 # ==============================
 render_explanation_expander(
-    "Cómo interpretar el gráfico CAPM",
+    "Como interpretar el grafico CAPM",
     [
         f"Cada punto representa una observación del {entity_label} frente al benchmark.",
         "La línea de regresión resume la relación promedio.",
@@ -780,14 +760,14 @@ render_explanation_expander(
 )
 
 # ==============================
-# Tabla técnica
+# Tabla tecnica
 # ==============================
 summary_df = pd.DataFrame(
     {
         "Métrica": [
             "Beta",
             "Alpha diaria",
-            "R²",
+            "R",
             "p-value beta",
             "Retorno esperado anual",
             "Clasificación",
@@ -811,7 +791,7 @@ with st.expander("Ver tabla técnica completa"):
     render_table(summary_df, hide_index=True, width="stretch")
 
 # ==============================
-# Interpretación económica
+# Interpretacion economica
 # ==============================
 st.markdown("### Interpretación económica del CAPM")
 st.info(
@@ -837,3 +817,4 @@ with st.expander("Riesgo sistemático, no sistemático y diversificación", expa
         - El **CAPM** remunera principalmente la exposición al riesgo sistemático, capturada por la beta.
         """
     )
+

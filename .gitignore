@@ -52,3 +52,5 @@ htmlcov/
 !models/.gitkeep
 !models/signal_classifier.joblib
 !models/risk_classifier.joblib
+
+data/user_portfolios.json

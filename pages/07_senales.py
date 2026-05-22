@@ -9,16 +9,18 @@ from src.indicators import compute_all_indicators
 from src.services.market_data_client import MarketDataClient
 from src.signals import evaluate_signals
 from src.ui_components import render_explanation_expander, render_section, render_table
-from src.ui_navigation import render_sidebar_navigation
-from src.ui_style import apply_global_typography, render_page_title
+from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_portfolio_summary_card
+from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 apply_global_typography()
-render_sidebar_navigation()
-render_page_title(
+render_app_shell(
     "Módulo 7 - Señales y alertas",
     "Resume señales técnicas por activo y las traduce en una lectura operativa más clara.",
 )
+ASSETS = configured_assets(ASSETS)
+horizonte, start_date, end_date = configured_period(DEFAULT_START_DATE, DEFAULT_END_DATE)
+render_portfolio_summary_card(ASSETS)
 
 
 SIGNAL_LABELS = {
@@ -30,8 +32,8 @@ SIGNAL_LABELS = {
     "boll_sell": "Bollinger venta",
     "golden_cross": "Golden cross",
     "death_cross": "Death cross",
-    "stoch_buy": "Estocástico compra",
-    "stoch_sell": "Estocástico venta",
+    "stoch_buy": "Estocastico compra",
+    "stoch_sell": "Estocastico venta",
 }
 
 
@@ -182,8 +184,8 @@ def signal_card(asset_name, ticker, recommendation, semaforo_estado, semaforo_ms
             <div class="ticker">{sanitize_text(ticker)}</div>
             <div class="pill">{sanitize_text(recommendation)}</div>
 
-            <div class="subtitle">Semáforo</div>
-            <div class="text"><strong>{sanitize_text(semaforo_estado)}</strong> · {sanitize_text(semaforo_msg)}</div>
+            <div class="subtitle">Semaforo</div>
+            <div class="text"><strong>{sanitize_text(semaforo_estado)}</strong>  {sanitize_text(semaforo_msg)}</div>
 
             <div class="scores">
                 <div class="score-box">
@@ -209,7 +211,7 @@ inject_ui_css()
 
 
 # ==============================
-# Helpers lógicos
+# Helpers logicos
 # ==============================
 def normalize_flags(flags: dict) -> dict:
     return {k: bool(v) for k, v in flags.items()}
@@ -224,8 +226,8 @@ def signal_table(flags: dict) -> pd.DataFrame:
     clean = normalize_flags(flags)
     return pd.DataFrame(
         {
-            "Señal": [SIGNAL_LABELS.get(k, k) for k in clean.keys()],
-            "Activa": ["Sí" if v else "No" for v in clean.values()],
+            "Senal": [SIGNAL_LABELS.get(k, k) for k in clean.keys()],
+            "Activa": ["Si" if v else "No" for v in clean.values()],
         }
     )
 
@@ -239,8 +241,8 @@ DIAGNOSTIC_COLUMN_ALIASES = {
     "Bollinger inferior": ["BB_lower", "BB_low", "boll_lower", "bb_lower", "lower_band", "Bollinger Lower"],
     "Media 50": ["sma_50", "SMA_50", "ma_50", "MA_50"],
     "Media 200": ["sma_200", "SMA_200", "ma_200", "MA_200"],
-    "Estocástico K": ["STOCH_K", "stoch_k", "Stoch_K", "%K", "stochastic_k"],
-    "Estocástico D": ["STOCH_D", "stoch_d", "Stoch_D", "%D", "stochastic_d"],
+    "Estocastico K": ["STOCH_K", "stoch_k", "Stoch_K", "%K", "stochastic_k"],
+    "Estocastico D": ["STOCH_D", "stoch_d", "Stoch_D", "%D", "stochastic_d"],
 }
 
 
@@ -281,7 +283,7 @@ def diagnostic_column_summary(ind: pd.DataFrame) -> tuple[pd.DataFrame, list]:
                 {
                     "Indicador esperado": label,
                     "Columnas encontradas": "NO EXISTE",
-                    "NaN en última fila": "NO EXISTE",
+                    "NaN en ultima fila": "NO EXISTE",
                 }
             )
             continue
@@ -299,7 +301,7 @@ def diagnostic_column_summary(ind: pd.DataFrame) -> tuple[pd.DataFrame, list]:
             {
                 "Indicador esperado": label,
                 "Columnas encontradas": ", ".join(str(col) for col in matches),
-                "NaN en última fila": nan_status if nan_status else "Sin última fila",
+                "NaN en ultima fila": nan_status if nan_status else "Sin ultima fila",
             }
         )
 
@@ -404,14 +406,14 @@ def build_historical_signal_points(ind: pd.DataFrame, thresholds: dict) -> pd.Da
             (stoch_k > stoch_d)
             & (stoch_k.shift(1) <= stoch_d.shift(1))
             & (stoch_k <= thresholds["stoch_oversold"]),
-            "Estocástico compra",
+            "Estocastico compra",
             "buy",
         )
         append_mask(
             (stoch_k < stoch_d)
             & (stoch_k.shift(1) >= stoch_d.shift(1))
             & (stoch_k >= thresholds["stoch_overbought"]),
-            "Estocástico venta",
+            "Estocastico venta",
             "sell",
         )
 
@@ -459,7 +461,7 @@ def plot_asset_signals(ind: pd.DataFrame, asset_name: str, ticker: str, signal_p
                     name="Señales de compra",
                     marker=dict(color="#16a34a", size=10, symbol="triangle-up"),
                     customdata=buy_points["signal"],
-                    hovertemplate="Fecha: %{x|%Y-%m-%d}<br>Señal: %{customdata}<br>Precio: %{y:.2f}<extra></extra>",
+                    hovertemplate="Fecha: %{x|%Y-%m-%d}<br>Senal: %{customdata}<br>Precio: %{y:.2f}<extra></extra>",
                 )
             )
 
@@ -472,7 +474,7 @@ def plot_asset_signals(ind: pd.DataFrame, asset_name: str, ticker: str, signal_p
                     name="Señales de venta",
                     marker=dict(color="#dc2626", size=10, symbol="triangle-down"),
                     customdata=sell_points["signal"],
-                    hovertemplate="Fecha: %{x|%Y-%m-%d}<br>Señal: %{customdata}<br>Precio: %{y:.2f}<extra></extra>",
+                    hovertemplate="Fecha: %{x|%Y-%m-%d}<br>Senal: %{customdata}<br>Precio: %{y:.2f}<extra></extra>",
                 )
             )
 
@@ -513,7 +515,7 @@ def render_diagnostic(
         )
 
         if ind is None:
-            st.warning("No hay DataFrame de indicadores para este activo porque la descarga llegó vacía.")
+            st.warning("No hay DataFrame de indicadores para este activo porque la descarga llego vacia.")
             return
 
         st.markdown("**Columnas reales en indicadores**")
@@ -528,22 +530,22 @@ def render_diagnostic(
             "Indicador esperado",
         ].tolist()
         if missing_critical:
-            st.warning(f"Columnas críticas faltantes: {', '.join(missing_critical)}")
+            st.warning(f"Columnas criticas faltantes: {', '.join(missing_critical)}")
 
         if key_columns:
             st.markdown("**Últimas 5 filas de columnas clave existentes**")
             render_table(ind[key_columns].tail(5), hide_index=True, width="stretch")
         else:
-            st.warning("No se encontró ninguna columna clave esperada en el DataFrame de indicadores.")
+            st.warning("No se encontro ninguna columna clave esperada en el DataFrame de indicadores.")
 
         if signal and signal.get("diagnostics"):
             st.markdown("**Evaluación de señales**")
             signal_diag = pd.DataFrame(signal["diagnostics"])
-            signal_diag["Señal"] = signal_diag["signal"].map(SIGNAL_LABELS).fillna(signal_diag["signal"])
+            signal_diag["Senal"] = signal_diag["signal"].map(SIGNAL_LABELS).fillna(signal_diag["signal"])
             render_table(
                 signal_diag[
                     [
-                        "Señal",
+                        "Senal",
                         "evaluated",
                         "active",
                         "reason",
@@ -593,12 +595,12 @@ def classify_signal_risk(signal: dict) -> dict:
             "estado": "Neutral",
             "ui": "warning",
             "mensaje": (
-                "No hay una ventaja técnica clara; el activo luce en zona de espera."
+                "No hay una ventaja tecnica clara; el activo luce en zona de espera."
             ),
         }
 
     return {
-        "estado": "Mixto / Precaución",
+        "estado": "Mixto / Precaucion",
         "ui": "warning",
         "mensaje": (
             "Existen señales mixtas o poco concluyentes entre tendencia, momentum y reversión."
@@ -607,59 +609,17 @@ def classify_signal_risk(signal: dict) -> dict:
 
 
 # ==============================
-# Sidebar
+# Par-metros del m-dulo
 # ==============================
-with st.sidebar:
-    st.header("Parámetros")
+with module_params():
+    st.header("Par-metros")
 
-    horizonte = st.selectbox(
-        "Horizonte de análisis",
-        [
-            "1 mes",
-            "Trimestre",
-            "Semestre",
-            "1 año",
-            "2 años",
-            "3 años",
-            "5 años",
-            "Personalizado",
-        ],
-        index=3,
-    )
-
-    fecha_fin_ref = pd.to_datetime(DEFAULT_END_DATE)
-
-    if horizonte == "1 mes":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Trimestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "Semestre":
-        start_date = (fecha_fin_ref - pd.DateOffset(months=6)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "1 año":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=1)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "2 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=2)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "3 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=3)).date()
-        end_date = fecha_fin_ref.date()
-    elif horizonte == "5 años":
-        start_date = (fecha_fin_ref - pd.DateOffset(years=5)).date()
-        end_date = fecha_fin_ref.date()
-    else:
-        start_date = st.date_input("Fecha inicial", value=DEFAULT_START_DATE, key="sig_start")
-        end_date = st.date_input("Fecha final", value=DEFAULT_END_DATE, key="sig_end")
-
-    st.divider()
-    with st.expander("Umbrales configurables"):
+    with st.container(border=True):
+        st.markdown("**Umbrales configurables**")
         rsi_overbought = st.slider("RSI sobrecompra", min_value=60, max_value=90, value=70)
         rsi_oversold = st.slider("RSI sobreventa", min_value=10, max_value=40, value=30)
-        stoch_overbought = st.slider("Estocástico sobrecompra", min_value=60, max_value=95, value=80)
-        stoch_oversold = st.slider("Estocástico sobreventa", min_value=5, max_value=40, value=20)
+        stoch_overbought = st.slider("Estoc-stico sobrecompra", min_value=60, max_value=95, value=80)
+        stoch_oversold = st.slider("Estoc-stico sobreventa", min_value=5, max_value=40, value=20)
 
     st.divider()
     modo_diagnostico = st.checkbox("Modo diagnóstico (temporal)", value=False)
@@ -670,7 +630,7 @@ with st.sidebar:
 
 
 # ==============================
-# Introducción
+# Introduccion
 # ==============================
 render_section(
     "Cómo leer este módulo",
@@ -678,7 +638,7 @@ render_section(
 )
 
 render_explanation_expander(
-    "Cómo interpretar el semáforo técnico",
+    "Como interpretar el semáforo técnico",
     [
         "Favorable: predominan señales de entrada o fortaleza técnica.",
         "Neutral / Precaución: señales mixtas o sin ventaja clara.",
@@ -689,7 +649,7 @@ render_explanation_expander(
 
 
 # ==============================
-# Construcción de tarjetas
+# Construccion de tarjetas
 # ==============================
 cards_data = []
 market_client = MarketDataClient()
@@ -761,7 +721,7 @@ for asset_name, meta in ASSETS.items():
             "ticker": ticker,
             "df": df,
             "ind": ind,
-            "recommendation": signal.get("recommendation", "Sin recomendación"),
+            "recommendation": signal.get("recommendation", "Sin recomendacion"),
             "semaforo_estado": semaforo["estado"],
             "semaforo_msg": semaforo["mensaje"],
             "score_buy": signal.get("score_buy", 0),
@@ -781,7 +741,7 @@ if not cards_data:
 
 
 # ==============================
-# Gráfico de señales por activo
+# Grafico de senales por activo
 # ==============================
 st.markdown("### Gráfico de señales por activo")
 render_section(
@@ -812,7 +772,7 @@ st.plotly_chart(
 )
 
 render_explanation_expander(
-    "Cómo interpretar el gráfico de señales",
+    "Como interpretar el gráfico de señales",
     [
         "Los marcadores de compra indican activación histórica de señales técnicas alcistas.",
         "Los marcadores de venta indican activación histórica de señales técnicas bajistas.",
@@ -855,7 +815,7 @@ for i in range(0, len(cards_data), 2):
 
 
 # ==============================
-# Interpretación breve final
+# Interpretacion breve final
 # ==============================
 favorables = sum(1 for x in cards_data if x["semaforo_estado"] == "Favorable")
 desfavorables = sum(1 for x in cards_data if x["semaforo_estado"] == "Desfavorable")
@@ -884,3 +844,4 @@ else:
         y {mixtas} neutrales o mixtos. En este caso conviene revisar activo por activo antes de tomar una decisión.
         """
     )
+
