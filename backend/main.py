@@ -33,7 +33,7 @@ from src.markowitz import (
 from src.portfolio_optimization import optimize_target_return
 from src.preprocess import equal_weight_portfolio, equal_weight_vector
 from src.returns_analysis import compute_return_series, descriptive_stats, normality_tests, stylized_facts_comment
-from src.risk_metrics import risk_comparison_table, validate_weights
+from src.risk_metrics import kupiec_test, risk_comparison_table, validate_weights
 from src.services.macro_service import MacroService
 from src.services.market_service import MarketService
 from src.signals import evaluate_signals
@@ -206,12 +206,23 @@ class SignalResult(BaseModel):
     details: SignalDetails
 
 
+class KupiecResult(BaseModel):
+    violations: int
+    n_obs: int
+    expected_fail_rate: float
+    observed_fail_rate: float
+    lr_stat: float | None = None
+    p_value: float | None = None
+    conclusion: str
+
+
 class VarCvarMetricRecord(BaseModel):
     method: str
     var_daily: float
     cvar_daily: float
     var_annualized: float
     cvar_annualized: float
+    kupiec: KupiecResult | None = None
 
 
 class WeightRecord(BaseModel):
@@ -715,10 +726,38 @@ def normality_test_records(df: pd.DataFrame) -> List[NormalityTestRecord]:
     return records
 
 
-def risk_metric_records(df: pd.DataFrame) -> List[VarCvarMetricRecord]:
+def _kupiec_from_dict(k: dict) -> KupiecResult | None:
+    if not k:
+        return None
+    def _safe_float(v: Any) -> float | None:
+        try:
+            f = float(v)
+            return None if math.isnan(f) else f
+        except (TypeError, ValueError):
+            return None
+    return KupiecResult(
+        violations=int(k.get("violations", 0)),
+        n_obs=int(k.get("n_obs", 0)),
+        expected_fail_rate=float(k.get("expected_fail_rate", 0.0)),
+        observed_fail_rate=float(k.get("observed_fail_rate", 0.0)),
+        lr_stat=_safe_float(k.get("lr_stat")),
+        p_value=_safe_float(k.get("p_value")),
+        conclusion=str(k.get("conclusion", "")),
+    )
+
+
+def risk_metric_records(
+    df: pd.DataFrame,
+    portfolio_returns: pd.Series | None = None,
+    alpha: float = 0.95,
+) -> List[VarCvarMetricRecord]:
     rows = []
     for row in dataframe_to_json_records(df):
         method = row.get("método") or row.get("mÃ©todo") or row.get("metodo") or ""
+        kupiec: KupiecResult | None = None
+        if portfolio_returns is not None:
+            var_val = float(row.get("VaR_diario") or 0.0)
+            kupiec = _kupiec_from_dict(kupiec_test(portfolio_returns, var_val, alpha))
         rows.append(
             VarCvarMetricRecord(
                 method=str(method),
@@ -726,6 +765,7 @@ def risk_metric_records(df: pd.DataFrame) -> List[VarCvarMetricRecord]:
                 cvar_daily=float(row.get("CVaR_diario") or 0.0),
                 var_annualized=float(row.get("VaR_anualizado") or 0.0),
                 cvar_annualized=float(row.get("CVaR_anualizado") or 0.0),
+                kupiec=kupiec,
             )
         )
     return rows
@@ -1337,7 +1377,7 @@ async def risk_var_cvar(
         end=payload.end,
         alpha=payload.alpha,
         weights=[float(value) for value in weights],
-        table=risk_metric_records(table),
+        table=risk_metric_records(table, portfolio_returns=portfolio_returns, alpha=payload.alpha),
     )
 
 
@@ -1523,6 +1563,14 @@ def ml_predict(
         model_version=result["model_version"],
         log_id=log.id,
     )
+
+
+@app.post("/predict", response_model=MLPredictResponse)
+def predict(
+    payload: MLPredictRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> MLPredictResponse:
+    return ml_predict(payload, db)
 
 
 @app.post("/ml/risk-score", response_model=MLRiskScoreResponse)

@@ -9,6 +9,7 @@ from src.config import (
 )
 from src.download import data_error_message
 from src.garch_models import fit_garch_models
+from src.volatility import ewma_volatility
 from src.plots import plot_forecast, plot_standardized_residuals, plot_volatility
 from src.returns_analysis import compute_return_series
 from src.risk_metrics import validar_serie_para_garch
@@ -19,41 +20,6 @@ from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 apply_global_typography()
-
-
-# ==============================
-# Estilos UI
-# ==============================
-def inject_module_css():
-    st.markdown(
-        """
-        <style>
-        .section-intro-box {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 16px 18px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-            margin-bottom: 0.75rem;
-        }
-
-        .section-intro-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.2rem;
-        }
-
-        .section-intro-subtitle {
-            font-size: 0.86rem;
-            color: #64748b;
-            line-height: 1.45;
-        }
-
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def fmt_num(value):
@@ -69,8 +35,6 @@ def fmt_pvalue(value):
         return "< 0.001"
     return f"{numeric_value:.3f}"
 
-
-inject_module_css()
 
 render_app_shell(
     "Módulo 3: ARCH/GARCH",
@@ -520,6 +484,63 @@ render_explanation_expander(
         "Debe complementarse con VaR/CVaR, CAPM y benchmark.",
     ],
 )
+
+# ==============================
+# EWMA — Volatilidad exponencialmente ponderada
+# ==============================
+st.markdown("### 7. Volatilidad EWMA (λ = 0.94)")
+render_section(
+    "EWMA como referencia complementaria",
+    "La volatilidad EWMA pondera mas los retornos recientes sin necesidad de ajustar un modelo parametrico completo.",
+)
+render_explanation_expander(
+    "Que es EWMA y como se compara con GARCH",
+    [
+        "EWMA (Exponentially Weighted Moving Average) calcula la volatilidad asignando mayor peso a observaciones recientes.",
+        "El parametro lambda (λ = 0.94) controla el decaimiento: valores cercanos a 1 dan mas peso al pasado lejano.",
+        "A diferencia de GARCH, EWMA no estima parametros por maxima verosimilitud ni tiene constante de largo plazo.",
+        "RiskMetrics popularizo EWMA con λ = 0.94 para datos diarios.",
+        "Sirve como referencia rapida: si EWMA y GARCH convergen, la señal de riesgo es mas robusta.",
+    ],
+)
+
+try:
+    ewma_vol_value = ewma_volatility(serie_retornos, lambda_=0.94, annualize=True, periods_per_year=252)
+    ewma_daily = ewma_volatility(serie_retornos, lambda_=0.94, annualize=False)
+    e1, e2 = st.columns(2)
+    with e1:
+        kpi_card(
+            "Vol. EWMA diaria",
+            f"{ewma_daily:.4f}" if pd.notna(ewma_daily) else "N/D",
+            caption="Volatilidad EWMA del último período (λ=0.94)",
+        )
+    with e2:
+        kpi_card(
+            "Vol. EWMA anualizada",
+            f"{ewma_vol_value:.4f}" if pd.notna(ewma_vol_value) else "N/D",
+            caption="Anualizada con √252",
+        )
+
+    ewma_series = serie_retornos.ewm(span=int(1 / (1 - 0.94)), adjust=False).std()
+    import plotly.graph_objects as _go
+    ewma_fig = _go.Figure()
+    ewma_fig.add_trace(_go.Scatter(
+        x=ewma_series.index,
+        y=ewma_series.values,
+        mode="lines",
+        name="Volatilidad EWMA",
+        line=dict(color="#0EA5E9", width=2),
+    ))
+    ewma_fig.update_layout(
+        title="Volatilidad EWMA a lo largo del tiempo",
+        xaxis_title="Fecha",
+        yaxis_title="Volatilidad (escala original)",
+        height=350,
+        margin=dict(l=40, r=20, t=40, b=40),
+    )
+    st.plotly_chart(ewma_fig, width="stretch")
+except Exception as _ewma_exc:
+    st.info(f"No fue posible calcular la volatilidad EWMA: {_ewma_exc}")
 
 # ==============================
 # Conclusion

@@ -14,6 +14,7 @@ from src.plots import (
     plot_stochastic,
 )
 from src.services.market_data_client import MarketDataClient
+from src.ui_components import kpi_card, section_intro
 from src.ui_layout import configured_assets, module_params, render_app_shell
 from src.ui_style import apply_global_typography
 from src.signal import compute_signal
@@ -26,197 +27,6 @@ from src.ticker_validation import (
 ensure_project_dirs()
 apply_global_typography()
 
-
-# ==============================
-# Estilos UI
-# ==============================
-def inject_kpi_cards_css():
-    st.markdown(
-        """
-        <style>
-        .section-intro-box {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 16px 18px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-            margin-bottom: 0.75rem;
-        }
-
-        .section-intro-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.2rem;
-        }
-
-        .section-intro-subtitle {
-            font-size: 0.86rem;
-            color: #64748b;
-            line-height: 1.45;
-        }
-
-        .asset-focus {
-            align-items: center;
-            background: linear-gradient(180deg, #eef6ff 0%, #f8fbff 100%);
-            border: 1px solid rgba(37, 99, 235, 0.18);
-            border-radius: 14px;
-            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.07);
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            margin: -0.15rem 0 1rem;
-            padding: 16px 18px;
-        }
-
-        .asset-focus-label {
-            color: #1e3a8a;
-            font-size: 0.78rem;
-            font-weight: 850;
-            letter-spacing: 0.02em;
-            margin-bottom: 0.18rem;
-            text-transform: uppercase;
-        }
-
-        .asset-focus-name {
-            color: #0f172a;
-            font-size: clamp(1.25rem, 2.3vw, 1.75rem);
-            font-weight: 900;
-            line-height: 1.12;
-        }
-
-        .asset-focus-meta {
-            color: #475569;
-            font-size: 0.88rem;
-            font-weight: 700;
-            line-height: 1.35;
-            text-align: right;
-            white-space: nowrap;
-        }
-
-        @media (max-width: 760px) {
-            .asset-focus {
-                align-items: flex-start;
-                flex-direction: column;
-            }
-
-            .asset-focus-meta {
-                text-align: left;
-                white-space: normal;
-            }
-        }
-
-        .kpi-card {
-            background: #eef6ff;
-            border: 1px solid rgba(37, 99, 235, 0.18);
-            border-radius: 14px;
-            padding: 20px 18px 18px;
-            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
-            min-height: 168px;
-            height: 100%;
-        }
-
-        .kpi-label {
-            color: #1e3a8a;
-            font-size: 0.9rem;
-            font-weight: 800;
-            line-height: 1.2;
-            margin-bottom: 0.35rem;
-        }
-
-        .kpi-value {
-            color: #0f172a;
-            font-size: clamp(1.7rem, 2.6vw, 2.25rem);
-            font-weight: 900;
-            line-height: 1.1;
-            overflow-wrap: anywhere;
-            margin-bottom: 0.55rem;
-        }
-
-        .kpi-delta {
-            display: inline-block;
-            width: fit-content;
-            font-size: 0.78rem;
-            font-weight: 800;
-            padding: 0.24rem 0.55rem;
-            border-radius: 999px;
-            margin-bottom: 0.45rem;
-        }
-
-        .kpi-delta.pos {
-            background-color: rgba(22, 163, 74, 0.12);
-            color: #15803d;
-        }
-
-        .kpi-delta.neg {
-            background-color: rgba(220, 38, 38, 0.12);
-            color: #b91c1c;
-        }
-
-        .kpi-delta.neu {
-            background-color: rgba(100, 116, 139, 0.13);
-            color: #475569;
-        }
-
-        .kpi-caption {
-            color: #475569;
-            font-size: 0.82rem;
-            font-weight: 650;
-            line-height: 1.3;
-            overflow-wrap: anywhere;
-        }
-
-        .kpi-spacer {
-            height: 1.65rem;
-            margin-bottom: 0.45rem;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def section_intro(title: str, subtitle: str):
-    st.markdown(
-        f"""
-        <div class="section-intro-box">
-            <div class="section-intro-title">{title}</div>
-            <div class="section-intro-subtitle">{subtitle}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def sanitize_text(text):
-    if text is None:
-        return ""
-    return str(text).replace("<", "").replace(">", "")
-
-
-def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
-    title = sanitize_text(title)
-    value = sanitize_text(value)
-    delta = sanitize_text(delta) if delta is not None else ""
-    caption = sanitize_text(caption)
-
-    delta_html = (
-        f'<div class="kpi-delta {delta_type}">{delta}</div>'
-        if delta
-        else '<div class="kpi-spacer"></div>'
-    )
-
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-label">{title}</div>
-            <div class="kpi-value">{value}</div>
-            {delta_html}
-            <div class="kpi-caption">{caption}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def fmt_number(value, decimals: int = 2) -> str:
@@ -437,8 +247,6 @@ def prepare_stochastic_fig(fig):
     fig.update_layout(height=430, margin=dict(l=42, r=24, t=52, b=42))
     return fig
 
-
-inject_kpi_cards_css()
 
 render_app_shell(
     "Módulo 1 - Análisis técnico",
@@ -755,32 +563,36 @@ with st.expander("Lectura actual de medias móviles", expanded=False):
     st.markdown(explain_moving_averages(close_now, sma_now, ema_now))
 
 # ==============================
-# Indicadores esenciales
+# Indicadores técnicos en tabs
 # ==============================
-st.markdown("### Indicadores esenciales")
+st.markdown("### Indicadores técnicos")
 section_intro(
-    "Momentum y volatilidad",
-    "RSI y Bollinger ayudan a detectar zonas extremas y cambios en el rango reciente del precio.",
+    "Momentum, volatilidad y señales complementarias",
+    "RSI, Bollinger, MACD y estocástico organizados por pestañas para facilitar la lectura del activo.",
 )
 
-st.plotly_chart(
-    prepare_rsi_fig(plot_rsi(chart_df, rsi_col=rsi_col)),
-    width="stretch",
-    config=PLOT_CONFIG,
-)
-with st.expander("Lectura actual del RSI", expanded=False):
-    st.markdown(explain_rsi(rsi_now))
+tab_rsi, tab_bb, tab_macd, tab_stoch = st.tabs(["RSI", "Bollinger", "MACD", "Estocástico"])
 
-st.plotly_chart(
-    prepare_bollinger_fig(plot_bollinger(chart_df)),
-    width="stretch",
-    config=PLOT_CONFIG,
-)
-with st.expander("Lectura actual de Bandas de Bollinger", expanded=False):
-    st.markdown(explain_bollinger(close_now, bb_low_now, bb_mid_now, bb_up_now))
-with st.expander("Cómo leer las Bandas de Bollinger", expanded=False):
-    st.markdown(
-        """
+with tab_rsi:
+    st.plotly_chart(
+        prepare_rsi_fig(plot_rsi(chart_df, rsi_col=rsi_col)),
+        width="stretch",
+        config=PLOT_CONFIG,
+    )
+    with st.expander("Lectura actual del RSI", expanded=False):
+        st.markdown(explain_rsi(rsi_now))
+
+with tab_bb:
+    st.plotly_chart(
+        prepare_bollinger_fig(plot_bollinger(chart_df)),
+        width="stretch",
+        config=PLOT_CONFIG,
+    )
+    with st.expander("Lectura actual de Bandas de Bollinger", expanded=False):
+        st.markdown(explain_bollinger(close_now, bb_low_now, bb_mid_now, bb_up_now))
+    with st.expander("Cómo leer las Bandas de Bollinger", expanded=False):
+        st.markdown(
+            """
 - **Close:** precio de cierre del activo.
 - **BB_up:** banda superior; marca una zona alta frente al rango reciente.
 - **BB_mid:** media móvil central; sirve como referencia de equilibrio.
@@ -788,27 +600,19 @@ with st.expander("Cómo leer las Bandas de Bollinger", expanded=False):
 - **Interpretación:** acercarse a la banda superior sugiere presión alcista relativa; acercarse a la inferior sugiere debilidad o presión vendedora.
 - **Volatilidad:** bandas en expansión indican mayor dispersión del precio; bandas comprimidas muestran menor rango y posible pausa antes de un nuevo movimiento.
 """
+        )
+
+with tab_macd:
+    st.plotly_chart(
+        prepare_macd_fig(plot_macd(chart_df)),
+        width="stretch",
+        config=PLOT_CONFIG,
     )
-
-# ==============================
-# Bloque avanzado
-# ==============================
-st.markdown("### Bloque avanzado")
-section_intro(
-    "Señales complementarias de momentum",
-    "MACD y estocástico agregan confirmación sobre aceleración, cruces y posibles zonas extendidas.",
-)
-
-st.plotly_chart(
-    prepare_macd_fig(plot_macd(chart_df)),
-    width="stretch",
-    config=PLOT_CONFIG,
-)
-with st.expander("Lectura actual del MACD", expanded=False):
-    st.markdown(explain_macd(macd_now, macd_signal_now, macd_hist_now))
-with st.expander("Cómo leer el MACD", expanded=False):
-    st.markdown(
-        """
+    with st.expander("Lectura actual del MACD", expanded=False):
+        st.markdown(explain_macd(macd_now, macd_signal_now, macd_hist_now))
+    with st.expander("Cómo leer el MACD", expanded=False):
+        st.markdown(
+            """
 - **MACD:** mide diferencia entre medias exponenciales y resume cambios de momentum.
 - **MACD_signal:** linea suavizada usada para confirmar cruces.
 - **MACD_hist:** distancia entre MACD y señal; muestra aceleración o pérdida de impulso.
@@ -816,25 +620,26 @@ with st.expander("Cómo leer el MACD", expanded=False):
 - **Histograma:** positivo confirma impulso favorable; negativo confirma debilidad.
 - **Linea cero:** cruzar por encima de cero refuerza momentum positivo; cruzar por debajo refuerza cautela.
 """
-    )
+        )
 
-st.plotly_chart(
-    prepare_stochastic_fig(plot_stochastic(chart_df)),
-    width="stretch",
-    config=PLOT_CONFIG,
-)
-with st.expander("Lectura actual del oscilador estocastico", expanded=False):
-    st.markdown(explain_stochastic(stoch_k_now, stoch_d_now))
-with st.expander("Cómo leer el oscilador estocástico", expanded=False):
-    st.markdown(
-        """
+with tab_stoch:
+    st.plotly_chart(
+        prepare_stochastic_fig(plot_stochastic(chart_df)),
+        width="stretch",
+        config=PLOT_CONFIG,
+    )
+    with st.expander("Lectura actual del oscilador estocastico", expanded=False):
+        st.markdown(explain_stochastic(stoch_k_now, stoch_d_now))
+    with st.expander("Cómo leer el oscilador estocástico", expanded=False):
+        st.markdown(
+            """
 - **%K:** linea rapida; ubica el cierre frente al rango reciente.
 - **%D:** línea suavizada de %K; ayuda a confirmar la señal.
 - **Zonas:** sobre 80 indica zona alta; bajo 20 indica zona baja.
 - **Cruces:** %K sobre %D sugiere mejora de corto plazo; %K bajo %D sugiere perdida de impulso.
 - **Timing:** es util para leer impulso tactico, especialmente cuando confirma la tendencia observada en precio y medias.
 """
-    )
+        )
 
 # ==============================
 # Datos recientes

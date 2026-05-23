@@ -327,56 +327,6 @@ def build_asset_summary_table(betas_df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-st.markdown(
-    """
-    <style>
-    .section-intro-box {
-        background: #ffffff;
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        border-radius: 18px;
-        padding: 16px 18px;
-        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-        margin-bottom: 0.75rem;
-    }
-
-    .section-intro-title {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #0f172a;
-        margin-bottom: 0.2rem;
-    }
-
-    .section-intro-subtitle {
-        font-size: 0.86rem;
-        color: #64748b;
-        line-height: 1.45;
-    }
-
-    .soft-explain-box {
-        background: #eff6ff;
-        border: 1px solid rgba(37, 99, 235, 0.16);
-        border-radius: 14px;
-        padding: 14px 16px;
-        margin: 0.65rem 0 0.9rem 0;
-    }
-
-    .soft-explain-title {
-        color: #0f172a;
-        font-size: 0.95rem;
-        font-weight: 750;
-        margin-bottom: 0.25rem;
-    }
-
-    .soft-explain-body {
-        color: #334155;
-        font-size: 0.88rem;
-        line-height: 1.5;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 render_app_shell(
     "Módulo 4 - CAPM y Beta",
     "Evalúa sensibilidad al mercado, rendimiento esperado y riesgo sistemático del activo.",

@@ -14,6 +14,7 @@ from src.app_state import (
 )
 from src.auth import AUTH_SESSION_KEY, AUTH_USER_SESSION_KEY
 from src.config import DEFAULT_END_DATE, GLOBAL_BENCHMARK
+from src.ui_style import apply_dashboard_css
 
 
 SHOW_PORTFOLIO_CONFIG_SESSION_KEY = "show_portfolio_configurator"
@@ -158,6 +159,7 @@ def _module_entry(module: str) -> dict | None:
 
 
 def inject_app_shell_css() -> None:
+    apply_dashboard_css()
     st.markdown(
         """
         <style>

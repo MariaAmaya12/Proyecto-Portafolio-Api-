@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 
 from src.config import ASSETS, DEFAULT_START_DATE, DEFAULT_END_DATE, get_ticker, ensure_project_dirs
@@ -12,167 +11,13 @@ from src.returns_analysis import (
 )
 from src.services.market_data_client import MarketDataClient
 from src.plots import plot_histogram_with_normal, plot_qq, plot_box
+from src.ui_components import kpi_card, section_intro
 from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_selected_asset_card
 from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 apply_global_typography()
 
-
-# ==============================
-# Estilos UI
-# ==============================
-def inject_kpi_cards_css():
-    st.markdown(
-        """
-        <style>
-        .section-intro-box {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 16px 18px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-            margin-bottom: 0.75rem;
-        }
-
-        .section-intro-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.2rem;
-        }
-
-        .section-intro-subtitle {
-            font-size: 0.86rem;
-            color: #64748b;
-            line-height: 1.45;
-        }
-
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def section_intro(title: str, subtitle: str):
-    st.markdown(
-        f"""
-        <div class="section-intro-box">
-            <div class="section-intro-title">{title}</div>
-            <div class="section-intro-subtitle">{subtitle}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def sanitize_text(text):
-    if text is None:
-        return ""
-    return str(text).replace("<", "").replace(">", "")
-
-
-def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
-    title = sanitize_text(title)
-    value = sanitize_text(value)
-    delta = sanitize_text(delta) if delta is not None else ""
-    caption = sanitize_text(caption)
-
-    delta_html = ""
-    if delta:
-        delta_html = f'<div class="kpi-delta {delta_type}">{delta}</div>'
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{
-                margin: 0;
-                padding: 0;
-                background: transparent;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }}
-
-            .kpi-card {{
-                background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
-                border: 1px solid rgba(37, 99, 235, 0.20);
-                border-radius: 18px;
-                padding: 20px 18px 16px 18px;
-                box-shadow: 0 6px 18px rgba(37, 99, 235, 0.10);
-                min-height: 160px;
-                box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                overflow-wrap: anywhere;
-            }}
-
-            .kpi-label {{
-                font-size: 0.88rem;
-                font-weight: 700;
-                color: #1e3a8a;
-                margin-bottom: 0.35rem;
-                letter-spacing: 0;
-            }}
-
-            .kpi-value {{
-                font-size: 1.78rem;
-                font-weight: 800;
-                color: #0f172a;
-                line-height: 1.14;
-                margin-bottom: 0.45rem;
-                overflow-wrap: anywhere;
-            }}
-
-            .kpi-delta {{
-                display: inline-block;
-                width: fit-content;
-                font-size: 0.80rem;
-                font-weight: 700;
-                padding: 0.28rem 0.55rem;
-                border-radius: 999px;
-                margin-top: 0.10rem;
-            }}
-
-            .kpi-delta.pos {{
-                background-color: rgba(22, 163, 74, 0.10);
-                color: #15803d;
-            }}
-
-            .kpi-delta.neg {{
-                background-color: rgba(220, 38, 38, 0.10);
-                color: #b91c1c;
-            }}
-
-            .kpi-delta.neu {{
-                background-color: rgba(100, 116, 139, 0.10);
-                color: #475569;
-            }}
-
-            .kpi-caption {{
-                font-size: 0.80rem;
-                color: #334155;
-                margin-top: 0.65rem;
-                line-height: 1.42;
-                overflow-wrap: anywhere;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="kpi-card">
-            <div>
-                <div class="kpi-label">{title}</div>
-                <div class="kpi-value">{value}</div>
-                {delta_html}
-            </div>
-            <div class="kpi-caption">{caption}</div>
-        </div>
-    </body>
-    </html>
-    """
-
-    components.html(html, height=190)
 
 
 def format_p_value(p_value):
@@ -246,8 +91,6 @@ def render_statistical_interpretation(
         """
     )
 
-
-inject_kpi_cards_css()
 
 render_app_shell(
     "Módulo 2 - Rendimientos y propiedades empíricas",
@@ -497,19 +340,13 @@ with st.expander("Interpretacion de KPIs"):
     )
 
 # ==============================
-# Graficos principales
+# Graficos de distribución en tabs
 # ==============================
-st.markdown("### Distribucion de rendimientos")
+st.markdown("### Distribución de rendimientos")
 section_intro(
-    "Forma de la distribucion",
-    "Los graficos permiten visualizar la dispersion, la asimetria y la presencia de valores extremos en los rendimientos.",
+    "Forma, dispersión y contraste con normalidad",
+    "Histograma, boxplot y Q-Q plot permiten visualizar la forma de la distribución, detectar extremos y evaluar la hipótesis de normalidad.",
 )
-
-col3, col4 = st.columns(2)
-with col3:
-    st.plotly_chart(plot_histogram_with_normal(series), width="stretch")
-with col4:
-    st.plotly_chart(plot_box(series), width="stretch")
 
 skew_distribution_text = (
     "sesgo hacia perdidas extremas"
@@ -531,44 +368,48 @@ outlier_text = (
     else f"aparecen {outlier_count} observaciones atipicas bajo el criterio IQR"
 )
 
-st.caption(
-    f"Se observa una distribucion {dispersion_text}, con {skew_distribution_text} y donde {outlier_text}."
-)
+tab_hist, tab_box, tab_qq = st.tabs(["Histograma", "Boxplot", "Q-Q Plot"])
 
-with st.expander("Interpretacion del histograma y boxplot"):
-    st.markdown(
-        f"""
+with tab_hist:
+    st.plotly_chart(plot_histogram_with_normal(series), width="stretch")
+    st.caption(
+        f"Se observa una distribucion {dispersion_text}, con {skew_distribution_text} y donde {outlier_text}."
+    )
+    with st.expander("Interpretacion del histograma"):
+        st.markdown(
+            f"""
         - **Dispersion:** la volatilidad diaria de **{vol_ret:.4%}** sugiere rendimientos **{dispersion_text}**.
         - **Asimetria:** el valor de **{"Sin datos" if skew_value is None else f"{skew_value:.2f}"}** apunta a **{skew_distribution_text}**.
+        - **Lectura de riesgo:** una distribución con más dispersión puede subestimar riesgo si se resume solo con media y desviación estándar.
+            """
+        )
+
+with tab_box:
+    st.plotly_chart(plot_box(series), width="stretch")
+    st.caption(f"El boxplot muestra que {outlier_text}, con mínimo de {min_ret:.4%} y máximo de {max_ret:.4%}.")
+    with st.expander("Interpretacion del boxplot"):
+        st.markdown(
+            f"""
         - **Extremos:** el boxplot indica que **{outlier_text}**, coherente con un minimo de **{min_ret:.4%}** y un maximo de **{max_ret:.4%}**.
-        - **Lectura de riesgo:** una distribución con más dispersión o con extremos visibles puede subestimar riesgo si se resume solo con media y desviación estándar.
-        """
-    )
+        - **Asimetria:** el valor de **{"Sin datos" if skew_value is None else f"{skew_value:.2f}"}** apunta a **{skew_distribution_text}**.
+        - **Lectura de riesgo:** observaciones atípicas visibles en el boxplot señalan eventos extremos que el VaR paramétrico normal puede subestimar.
+            """
+        )
 
-# ==============================
-# Grafico Q-Q
-# ==============================
-st.markdown("### Grafico Q-Q")
-section_intro(
-    "Contraste visual con normalidad",
-    "El grafico Q-Q compara cuantiles estandarizados para verificar si la serie sigue la forma esperada bajo normalidad.",
-)
-
-qq_fig = plot_qq(qq_df)
-qq_fig.update_yaxes(scaleanchor="x", scaleratio=1)
-qq_fig.update_layout(height=480, margin=dict(l=48, r=28, t=58, b=46))
-st.plotly_chart(qq_fig, width="stretch")
-
-st.caption("El Q-Q plot permite contrastar visualmente la normalidad, especialmente en las colas.")
-
-with st.expander("Interpretacion del grafico Q-Q"):
-    st.markdown(
-        f"""
+with tab_qq:
+    qq_fig = plot_qq(qq_df)
+    qq_fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    qq_fig.update_layout(height=480, margin=dict(l=48, r=28, t=58, b=46))
+    st.plotly_chart(qq_fig, width="stretch")
+    st.caption("El Q-Q plot permite contrastar visualmente la normalidad, especialmente en las colas.")
+    with st.expander("Interpretacion del grafico Q-Q"):
+        st.markdown(
+            f"""
         - Si los puntos siguen la diagonal, la serie se aproxima a una normal; diferencias marcadas en las colas sugieren no normalidad.
         - Este contraste visual debe leerse junto con **Jarque-Bera = {jb_decision.lower()}** y **Shapiro-Wilk = {format_p_value(shapiro_p_value)}**.
         - Cuando las colas se apartan de la diagonal, la evidencia visual refuerza la presencia de eventos extremos y limita una aproximacion normal simple para medir riesgo.
-        """
-    )
+            """
+        )
 
 # ==============================
 # Tablas principales

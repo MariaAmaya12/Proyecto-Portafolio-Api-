@@ -20,35 +20,6 @@ DEFAULT_MATRIX_RETURNS_TEXT = "0.01,-0.005,0.003,-0.002\n0.006,-0.002,0.001,-0.0
 apply_global_typography()
 
 
-def inject_page_css() -> None:
-    st.markdown(
-        """
-        <style>
-        .section-intro-box {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 16px 18px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-            margin-bottom: 0.8rem;
-        }
-        .section-intro-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.2rem;
-        }
-        .section-intro-subtitle {
-            font-size: 0.86rem;
-            color: #64748b;
-            line-height: 1.45;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def parse_float_list(raw_values: str, label: str = "valores", min_length: int = 1) -> list[float]:
     if not raw_values or not raw_values.strip():
         raise ValueError(f"Ingresa {label} separados por coma.")
@@ -608,8 +579,6 @@ def render_stress_testing_tab() -> None:
         ],
     )
 
-
-inject_page_css()
 
 render_app_shell(
     "Modelos financieros avanzados",

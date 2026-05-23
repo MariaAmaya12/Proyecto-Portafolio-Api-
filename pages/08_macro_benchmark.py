@@ -31,37 +31,6 @@ ensure_project_dirs()
 apply_global_typography()
 
 
-def inject_kpi_cards_css():
-    st.markdown(
-        """
-        <style>
-        .section-intro-box {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 16px 18px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-            margin-bottom: 0.75rem;
-        }
-
-        .section-intro-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.2rem;
-        }
-
-        .section-intro-subtitle {
-            font-size: 0.86rem;
-            color: #64748b;
-            line-height: 1.45;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def fmt_pct(value, digits=2):
     numeric_value = pd.to_numeric(value, errors="coerce")
     return f"{numeric_value:.{digits}%}" if pd.notna(numeric_value) else "N/D"
@@ -136,8 +105,6 @@ def render_conclusion_box(message: str):
         unsafe_allow_html=True,
     )
 
-
-inject_kpi_cards_css()
 
 render_app_shell(
     "Módulo 8 - Contexto macro y benchmark",

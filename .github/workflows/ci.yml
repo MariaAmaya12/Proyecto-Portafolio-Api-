@@ -23,7 +23,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Check Python syntax
-        run: python -m compileall backend src pages tests
+        run: python -m compileall app.py backend src pages tests
 
       - name: Run tests
         run: pytest

@@ -40,35 +40,6 @@ SIGNAL_LABELS = {
 # ==============================
 # UI helpers
 # ==============================
-def inject_ui_css():
-    st.markdown(
-        """
-        <style>
-        .section-intro-box {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 16px 18px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-            margin-bottom: 0.8rem;
-        }
-        .section-intro-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.2rem;
-        }
-        .section-intro-subtitle {
-            font-size: 0.86rem;
-            color: #64748b;
-            line-height: 1.45;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def sanitize_text(text):
     if text is None:
         return ""
@@ -207,7 +178,6 @@ def signal_card(asset_name, ticker, recommendation, semaforo_estado, semaforo_ms
     components.html(html, height=290)
 
 
-inject_ui_css()
 
 
 # ==============================

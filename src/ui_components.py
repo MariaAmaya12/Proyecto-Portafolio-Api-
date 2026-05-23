@@ -13,6 +13,10 @@ def _sanitize_text(text: object) -> str:
     return str(text).replace("<", "").replace(">", "")
 
 
+def sanitize_text(text: object) -> str:
+    return _sanitize_text(text)
+
+
 def render_section(title: str, subtitle: str | None = None) -> None:
     subtitle_html = ""
     if subtitle:
@@ -177,3 +181,39 @@ def kpi_card(
 
 def render_table(df: pd.DataFrame, hide_index: bool = True, width: str = "stretch") -> None:
     st.dataframe(df, hide_index=hide_index, width=width)
+
+
+# Alias used by older page code
+section_intro = render_section
+
+
+def module_header(title: str, description: str, badge: str | None = None) -> None:
+    badge_html = ""
+    if badge:
+        badge_html = f'<div class="module-header-badge">{_sanitize_text(badge)}</div>'
+    st.markdown(
+        f"""
+        <div class="module-header-box">
+            {badge_html}
+            <div class="module-header-title">{_sanitize_text(title)}</div>
+            <div class="module-header-desc">{_sanitize_text(description)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def conclusion_box(message: str, kind: str = "success", label: str | None = None) -> None:
+    modifier = {"success": "", "warn": " warn", "danger": " danger"}.get(kind, "")
+    label_html = ""
+    if label:
+        label_html = f'<div class="conclusion-box-label">{_sanitize_text(label)}</div>'
+    st.markdown(
+        f"""
+        <div class="conclusion-box{modifier}">
+            {label_html}
+            {_sanitize_text(message)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )

@@ -98,35 +98,6 @@ def metric_value(df: pd.DataFrame, metric_name: str, default=np.nan) -> float:
     return float(value) if pd.notna(value) else default
 
 
-def inject_ui_css():
-    st.markdown(
-        """
-        <style>
-        .section-intro-box {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 16px 18px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-            margin-bottom: 0.8rem;
-        }
-        .section-intro-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.2rem;
-        }
-        .section-intro-subtitle {
-            font-size: 0.86rem;
-            color: #64748b;
-            line-height: 1.45;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def hero_decision(title, subtitle, level="neutral"):
     styles = {
         "positive": {
@@ -209,8 +180,6 @@ def hero_decision(title, subtitle, level="neutral"):
     """
     components.html(html, height=190)
 
-
-inject_ui_css()
 
 render_app_shell(
     "Módulo 9 - Panel de decisión",

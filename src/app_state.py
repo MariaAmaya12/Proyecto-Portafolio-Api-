@@ -128,6 +128,36 @@ def _write_portfolio_store(store: dict) -> None:
         json.dump(store, file, ensure_ascii=True, indent=2)
 
 
+def _persist_portfolio_sqlite(payload: dict) -> None:
+    """Complementary SQLite persistence — does not replace the JSON flow."""
+    try:
+        from backend.database import SessionLocal
+        from backend.models import Portfolio as _PortfolioORM
+        db = SessionLocal()
+        try:
+            name = payload.get("portfolio_name") or "Portafolio RiskLab USTA"
+            tickers_json = json.dumps(payload.get("selected_tickers", []))
+            weights_json = json.dumps(payload.get("selected_weights", {}))
+            horizon = str(payload.get("selected_horizon", ""))
+            existing = db.query(_PortfolioORM).filter_by(name=name).first()
+            if existing:
+                existing.tickers = tickers_json
+                existing.weights = weights_json
+                existing.horizon = horizon
+            else:
+                db.add(_PortfolioORM(
+                    name=name,
+                    tickers=tickers_json,
+                    weights=weights_json,
+                    horizon=horizon,
+                ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+
 def _portfolio_payload(config: dict) -> dict:
     return {
         "portfolio_name": config.get("portfolio_name") or "Portafolio RiskLab USTA",
@@ -170,6 +200,7 @@ def save_user_portfolio(config: dict, username: str | None = None) -> dict:
         saved = existing
 
     _write_portfolio_store(store)
+    _persist_portfolio_sqlite(payload)
     return dict(saved)
 
 

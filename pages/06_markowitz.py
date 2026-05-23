@@ -12,186 +12,12 @@ from src.api.macro import macro_snapshot
 from src.portfolio_optimization import optimize_target_return
 from src.services.market_data_client import MarketDataClient
 from src.services.portfolio_optimizer import PortfolioOptimizer
+from src.ui_components import kpi_card, section_intro, sanitize_text
 from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_portfolio_summary_card
 from src.ui_style import apply_global_typography
 
 ensure_project_dirs()
 apply_global_typography()
-
-
-# ==============================
-# Estilos UI
-# ==============================
-def inject_kpi_cards_css():
-    st.markdown(
-        """
-        <style>
-        .section-intro-box {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 16px 18px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-            margin-bottom: 0.75rem;
-        }
-
-        .section-intro-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.2rem;
-        }
-
-        .section-intro-subtitle {
-            font-size: 0.86rem;
-            color: #64748b;
-            line-height: 1.45;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def section_intro(title: str, subtitle: str):
-    st.markdown(
-        f"""
-        <div class="section-intro-box">
-            <div class="section-intro-title">{title}</div>
-            <div class="section-intro-subtitle">{subtitle}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def sanitize_text(text):
-    if text is None:
-        return ""
-    return str(text).replace("<", "").replace(">", "")
-
-
-def kpi_card(title, value, delta=None, delta_type="neu", caption=""):
-    title = sanitize_text(title)
-    value = sanitize_text(value)
-    delta = sanitize_text(delta) if delta is not None else ""
-    caption = sanitize_text(caption)
-
-    delta_html = ""
-    if delta:
-        delta_html = f'<div class="kpi-delta {delta_type}">{delta}</div>'
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{
-                margin: 0;
-                padding: 0;
-                background: transparent;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }}
-
-            .kpi-card {{
-                background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
-                border: 1px solid rgba(37, 99, 235, 0.18);
-                border-radius: 18px;
-                box-shadow: 0 4px 14px rgba(30, 64, 175, 0.10);
-                min-height: 195px;
-                height: 195px;
-                box-sizing: border-box;
-                overflow: visible;
-            }}
-
-            .kpi-card-inner {{
-                min-height: 195px;
-                height: 195px;
-                box-sizing: border-box;
-                padding: 18px 18px 16px 18px;
-                display: flex;
-                flex-direction: column;
-                justify-content: flex-start;
-            }}
-
-            .kpi-title,
-            .kpi-label {{
-                font-size: 0.88rem;
-                font-weight: 600;
-                color: #475569;
-                margin-bottom: 0.35rem;
-                letter-spacing: 0.2px;
-                line-height: 1.22;
-                min-height: 44px;
-                overflow-wrap: anywhere;
-                white-space: normal;
-            }}
-
-            .kpi-value {{
-                font-size: 1.85rem;
-                font-weight: 800;
-                color: #0f172a;
-                line-height: 1.1;
-                margin-bottom: 0.45rem;
-                overflow-wrap: anywhere;
-                white-space: normal;
-            }}
-
-            .kpi-delta {{
-                display: inline-block;
-                width: fit-content;
-                font-size: 0.80rem;
-                font-weight: 700;
-                padding: 0.28rem 0.55rem;
-                border-radius: 999px;
-                margin-top: 0.10rem;
-            }}
-
-            .kpi-badge-slot {{
-                min-height: 34px;
-                display: flex;
-                align-items: center;
-            }}
-
-            .kpi-delta.pos {{
-                background-color: rgba(22, 163, 74, 0.10);
-                color: #15803d;
-            }}
-
-            .kpi-delta.neg {{
-                background-color: rgba(220, 38, 38, 0.10);
-                color: #b91c1c;
-            }}
-
-            .kpi-delta.neu {{
-                background-color: rgba(100, 116, 139, 0.10);
-                color: #475569;
-            }}
-
-            .kpi-caption {{
-                font-size: 0.78rem;
-                color: #64748b;
-                margin-top: auto;
-                line-height: 1.35;
-                overflow-wrap: anywhere;
-                white-space: normal;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="kpi-card">
-            <div class="kpi-card-inner">
-                <div class="kpi-title kpi-label">{title}</div>
-                <div class="kpi-value">{value}</div>
-                <div class="kpi-badge-slot">{delta_html}</div>
-                <div class="kpi-caption">{caption}</div>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
-    components.html(html, height=215)
 
 
 def ensure_dataframe(obj):
@@ -297,8 +123,6 @@ def prepare_frontier_figure(sim_df, frontier_df, min_var, max_sharpe, manual_por
     )
     return fig
 
-
-inject_kpi_cards_css()
 
 render_app_shell(
     "Módulo 6 - Optimización de portafolio (Markowitz)",
