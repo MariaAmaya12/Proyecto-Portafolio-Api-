@@ -62,27 +62,42 @@ ASSET_DESCRIPTIONS = {
 ASSET_DETAILS = {
     "Seven & i Holdings": {
         "market": "Japón",
+        "sector": "Retail y tiendas de conveniencia",
         "role": "Exposición defensiva a consumo asiático.",
+        "exposure": "Consumo básico y conveniencia en Asia.",
+        "relevance": "Aporta diversificación geográfica y sectorial frente a activos europeos, latinoamericanos y energéticos.",
         "description": "Compañía japonesa de retail y tiendas de conveniencia. Aporta exposición al mercado asiático y al sector consumo defensivo.",
     },
     "Alimentation Couche-Tard": {
         "market": "Canadá / global",
+        "sector": "Conveniencia y combustibles",
         "role": "Consumo defensivo con ingresos diversificados.",
+        "exposure": "Operación global de tiendas de conveniencia y estaciones de servicio.",
+        "relevance": "Complementa el portafolio con ingresos recurrentes y presencia en Norteamérica y otros mercados desarrollados.",
         "description": "Operador de tiendas de conveniencia y combustibles con presencia internacional. Aporta estabilidad operativa y exposición a consumo recurrente.",
     },
     "FEMSA": {
         "market": "México / Latinoamérica",
+        "sector": "Comercio, bebidas y servicios",
         "role": "Exposición regional a comercio y bebidas.",
+        "exposure": "Consumo latinoamericano y redes comerciales de gran escala.",
+        "relevance": "Introduce diversificación regional y sensibilidad a dinámicas de consumo en mercados emergentes.",
         "description": "Grupo mexicano vinculado a comercio, bebidas y servicios. Aporta diversificación latinoamericana y consumo de gran escala.",
     },
     "BP": {
         "market": "Reino Unido / global",
+        "sector": "Energía integrada",
         "role": "Exposición al ciclo energético.",
+        "exposure": "Petróleo, gas, refinación y transición energética.",
+        "relevance": "Añade exposición a materias primas y un perfil de riesgo distinto al consumo defensivo.",
         "description": "Empresa integrada de energía con operaciones globales. Aporta sensibilidad a materias primas, petróleo, gas y transición energética.",
     },
     "Carrefour": {
         "market": "Francia / Europa",
+        "sector": "Retail alimentario",
         "role": "Consumo básico europeo.",
+        "exposure": "Supermercados e hipermercados en Europa y mercados relacionados.",
+        "relevance": "Refuerza la diversificación defensiva del portafolio con exposición al consumo básico europeo.",
         "description": "Retail alimentario europeo con operación multiformato. Aporta exposición al consumo defensivo y al mercado europeo.",
     },
 }
@@ -539,6 +554,7 @@ def _inject_home_styles() -> None:
             display: block;
             left: 0;
             margin: 0;
+            pointer-events: none;
             position: absolute;
             right: 0;
             text-decoration: none !important;
@@ -547,6 +563,7 @@ def _inject_home_styles() -> None:
             z-index: 3;
         }
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.asset-card-click-target) div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]) {
+            height: auto;
             left: 0;
             margin: 0;
             min-height: 0;
@@ -557,6 +574,20 @@ def _inject_home_styles() -> None:
             right: 0;
             top: 0;
             bottom: 3.25rem;
+            z-index: 3;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.asset-card-click-target) div[data-testid="stElementContainer"]:has(div[class*="st-key-asset_card_click_"]) {
+            bottom: 3.25rem;
+            height: auto !important;
+            left: 0;
+            margin: 0 !important;
+            min-height: 0 !important;
+            opacity: 0;
+            overflow: hidden;
+            padding: 0 !important;
+            position: absolute;
+            right: 0;
+            top: 0;
             z-index: 3;
         }
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.asset-card-click-target) div[data-testid="stButton"] {
@@ -586,6 +617,95 @@ def _inject_home_styles() -> None:
             right: 0;
             bottom: 3.25rem;
             left: 0;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.asset-card-click-target) div[class*="st-key-asset_card_click_"] {
+            bottom: 3.25rem;
+            height: auto !important;
+            left: 0;
+            margin: 0 !important;
+            min-height: 0 !important;
+            opacity: 0;
+            overflow: hidden;
+            padding: 0 !important;
+            position: absolute;
+            right: 0;
+            top: 0;
+            z-index: 3;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.asset-card-click-target) div[class*="st-key-asset_card_click_"] .stButton {
+            bottom: 0 !important;
+            left: 0 !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+            opacity: 0;
+            padding: 0 !important;
+            position: absolute !important;
+            right: 0 !important;
+            top: 0 !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.asset-card-click-target) div[class*="st-key-asset_card_click_"] .stButton > button {
+            background: transparent !important;
+            border: 0 !important;
+            bottom: 0 !important;
+            box-shadow: none !important;
+            color: transparent !important;
+            cursor: pointer !important;
+            left: 0 !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+            outline: 0 !important;
+            padding: 0 !important;
+            pointer-events: auto !important;
+            position: absolute !important;
+            right: 0 !important;
+            top: 0 !important;
+        }
+        div[class*="st-key-asset_card_shell_"] {
+            position: relative;
+        }
+        div[class*="st-key-asset_card_shell_"] div[data-testid="stElementContainer"]:has(div[class*="st-key-asset_card_click_"]) {
+            bottom: 3.25rem !important;
+            height: auto !important;
+            left: 0 !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+            opacity: 0 !important;
+            overflow: hidden !important;
+            padding: 0 !important;
+            position: absolute !important;
+            right: 0 !important;
+            top: 0 !important;
+            z-index: 3 !important;
+        }
+        div[class*="st-key-asset_card_shell_"] div[class*="st-key-asset_card_click_"] {
+            bottom: 3.25rem !important;
+            left: 0 !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+            opacity: 0 !important;
+            overflow: visible !important;
+            padding: 0 !important;
+            position: absolute !important;
+            right: 0 !important;
+            top: 0 !important;
+            z-index: 4 !important;
+        }
+        div[class*="st-key-asset_card_shell_"] div[class*="st-key-asset_card_click_"] button {
+            background: transparent !important;
+            border: 0 !important;
+            bottom: 0 !important;
+            box-shadow: none !important;
+            color: transparent !important;
+            cursor: pointer !important;
+            left: 0 !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+            outline: 0 !important;
+            padding: 0 !important;
+            pointer-events: auto !important;
+            position: absolute !important;
+            right: 0 !important;
+            top: 0 !important;
         }
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.asset-card-click-target) div[data-testid="stCheckbox"] {
             position: relative;
@@ -1138,12 +1258,17 @@ def _render_portfolio_choice_step() -> None:
 def _asset_info_body(asset_name: str) -> None:
     ticker = AVAILABLE_ASSETS.get(asset_name, asset_name)
     details = ASSET_DETAILS.get(asset_name, {})
-    st.markdown(f"**{asset_name} ({ticker})**")
-    st.write(details.get("description", ASSET_DESCRIPTIONS.get(asset_name, "Activo disponible para el portafolio.")))
-    if details.get("market"):
-        st.caption(f"Mercado/país: {details['market']}")
-    if details.get("role"):
-        st.caption(f"Rol dentro del portafolio: {details['role']}")
+    complementary_fields = [
+        ("Mercado/país", details.get("market")),
+        ("Sector", details.get("sector")),
+        ("Rol dentro del portafolio", details.get("role")),
+        ("Tipo de exposición", details.get("exposure")),
+        ("Relevancia financiera", details.get("relevance")),
+    ]
+    for label, value in complementary_fields:
+        if value:
+            st.caption(f"{label}: {value}")
+    st.caption(f"Ticker de referencia: {ticker}")
     if st.button("Cerrar", key=f"close_asset_info_{ticker}"):
         _clear_active_asset_info()
         st.rerun()
@@ -1240,7 +1365,7 @@ def _render_asset_card_selector(selected_asset_names: list[str]) -> list[str]:
         status_label = "Seleccionado" if is_selected else "Disponible"
 
         with columns[index % len(columns)]:
-            with st.container(border=True):
+            with st.container(border=True, key=f"asset_card_shell_{index}"):
                 st.markdown(
                     f"""<div
                     class="asset-card-click-target {status_class}"
