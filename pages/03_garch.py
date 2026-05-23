@@ -14,7 +14,7 @@ from src.plots import plot_forecast, plot_standardized_residuals, plot_volatilit
 from src.returns_analysis import compute_return_series
 from src.risk_metrics import validar_serie_para_garch
 from src.services.market_data_client import MarketDataClient
-from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
+from src.ui_components import conclusion_box, kpi_card, module_header, render_explanation_expander, render_section, render_table
 from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_selected_asset_card
 from src.ui_style import apply_global_typography
 
@@ -31,9 +31,9 @@ def fmt_pvalue(value):
     numeric_value = pd.to_numeric(value, errors="coerce")
     if pd.isna(numeric_value):
         return "N/D"
-    if numeric_value < 0.001:
-        return "< 0.001"
-    return f"{numeric_value:.3f}"
+    if numeric_value < 0.0001:
+        return "< 0.0001"
+    return f"{numeric_value:.4f}"
 
 
 render_app_shell(
@@ -49,6 +49,16 @@ asset_name, ticker = render_selected_asset_card(ASSETS, key="m3_asset_selector")
 # ==============================
 with module_params():
     st.caption("Este módulo usa el activo y horizonte definidos en la vista principal.")
+    _lambda = st.slider(
+        "Lambda EWMA",
+        min_value=0.80,
+        max_value=0.99,
+        value=0.94,
+        step=0.01,
+        format="%.2f",
+        key="m3_lambda",
+        help="Mayor lambda = mayor peso al pasado. RiskMetrics estándar usa 0.94.",
+    )
 
 # ==============================
 # Descargar datos
@@ -122,22 +132,15 @@ volatilidad_movil_21d = serie_garch.rolling(window=21).std()
 # ==============================
 # Encabezado del módulo
 # ==============================
-render_section(
-    "Volatilidad condicional",
-    f"Evalua modelos ARCH/GARCH para comparar especificaciones y pronosticar la volatilidad de {asset_name} ({ticker}).",
+module_header(
+    "Módulo 3: Volatilidad condicional",
+    "Estimación de volatilidad con EWMA y modelos ARCH/GARCH para evaluar persistencia, riesgo reciente y pronóstico de volatilidad.",
+    badge="EWMA · ARCH · GARCH · EGARCH",
 )
-st.caption(f"Periodo analizado: {start_date} a {end_date}")
-render_explanation_expander(
-    "Fundamento del módulo",
-    [
-        "La volatilidad condicional cambia en el tiempo y suele agruparse en periodos de calma o turbulencia.",
-        "Los modelos ARCH/GARCH permiten estimar esa dinamica sin asumir una volatilidad historica constante.",
-        "La serie validada se escala por 100 antes del ajuste para mejorar la estabilidad numerica del modelo.",
-    ],
-)
+st.caption(f"Periodo analizado: {start_date} a {end_date}  ·  Activo: {asset_name} ({ticker})")
 
 # ==============================
-# Ajuste de modelos
+# Ajuste de modelos GARCH
 # ==============================
 results = fit_garch_models(serie_garch)
 
@@ -146,7 +149,7 @@ if results["comparison"].empty:
     st.stop()
 
 # ==============================
-# Resultados principales
+# Variables de resultado
 # ==============================
 comparison_df = results["comparison"].copy()
 if "AIC" in comparison_df.columns:
@@ -201,9 +204,12 @@ else:
     normality_decision = "No fue posible evaluar normalidad de residuos estandarizados."
 
 if pd.notna(persistence):
-    if persistence >= 0.90:
+    if persistence >= 1.0:
+        persistence_label = "Revisar estacionariedad"
+        persistence_delta = "neg"
+    elif persistence >= 0.90:
         persistence_label = "Alta persistencia"
-        persistence_delta = "pos"
+        persistence_delta = "neg"
     elif persistence >= 0.75:
         persistence_label = "Persistencia media"
         persistence_delta = "neu"
@@ -214,360 +220,475 @@ else:
     persistence_label = None
     persistence_delta = "neu"
 
-# ==============================
-# KPIs del mejor modelo
-# ==============================
-st.markdown("### KPIs del mejor modelo")
-render_section(
-    "Modelo seleccionado",
-    "Indicadores principales de la especificacion ganadora bajo el criterio de seleccion disponible.",
-)
+# EWMA computations (configurable lambda)
+try:
+    _ewma_daily = ewma_volatility(serie_retornos, lambda_=_lambda, annualize=False)
+    _ewma_annual = ewma_volatility(serie_retornos, lambda_=_lambda, annualize=True, periods_per_year=252)
+except Exception:
+    _ewma_daily = None
+    _ewma_annual = None
 
-k1, k2, k3 = st.columns(3)
-with k1:
-    kpi_card(
-        "Mejor modelo",
-        str(best_model) if best_model is not None else "N/D",
-        caption="Referencia seleccionada por menor AIC",
-    )
-with k2:
-    kpi_card(
-        "AIC",
-        fmt_num(best_aic),
-        caption="Menor valor favorece el ajuste relativo",
-    )
-with k3:
-    kpi_card(
-        "BIC",
-        fmt_num(best_bic),
-        caption="Criterio con penalizacion por complejidad",
-    )
-
-k4, k5, k6 = st.columns(3)
-with k4:
-    kpi_card(
-        "Persistencia",
-        fmt_num(persistence),
-        delta=persistence_label,
-        delta_type=persistence_delta,
-        caption="Memoria de la volatilidad estimada",
-    )
-with k5:
-    kpi_card(
-        "Volatilidad pronosticada",
-        fmt_num(forecast_last),
-        caption="Último valor del pronóstico a 10 pasos",
-    )
-with k6:
-    kpi_card(
-        "Log-Likelihood",
-        fmt_num(best_loglik),
-        caption="Log-verosimilitud del modelo ganador",
-    )
-
-if best_model is None:
-    st.warning("No se genero una lectura automatica del mejor modelo.")
-
-render_explanation_expander(
-    "Como interpretar los KPI del modelo GARCH",
-    [
-        "El AIC/BIC sirven para comparar modelos; menor valor indica mejor ajuste relativo.",
-        "La persistencia cercana a 1 indica alta memoria de la volatilidad.",
-        "La volatilidad estimada/pronosticada mide la magnitud esperada de fluctuacion del activo.",
-        "El mejor modelo no significa prediccion perfecta, sino mejor ajuste relativo dentro de los modelos evaluados.",
-    ],
-)
-# ==============================
-# Comparacion de modelos
-# ==============================
-st.markdown("### 2. Comparacion entre modelos")
-render_section(
-    "Tabla comparativa",
-    "Se comparan las especificaciones candidatas con criterios de ajuste y métricas de volatilidad.",
-)
-
-preferred_columns = [
-    "modelo",
-    "AIC",
-    "BIC",
-    "loglik",
-    "persistencia",
-]
-visible_columns = [col for col in preferred_columns if col in comparison_df.columns]
-comparison_display_df = comparison_df[visible_columns].copy()
-if "AIC" in comparison_display_df.columns:
-    comparison_display_df = comparison_display_df.sort_values("AIC", ascending=True).reset_index(drop=True)
-if "modelo" in comparison_display_df.columns:
-    comparison_display_df["Seleccion"] = comparison_display_df["modelo"].apply(
-        lambda model_name: "Mejor modelo" if model_name == best_model else ""
-    )
-comparison_display_df = comparison_display_df.rename(
-    columns={
-        "modelo": "Modelo",
-        "loglik": "Log-Likelihood",
-        "persistencia": "Persistencia",
-    }
-)
-for column in comparison_display_df.columns:
-    if column not in {"Modelo", "Seleccion"}:
-        comparison_display_df[column] = pd.to_numeric(comparison_display_df[column], errors="coerce").apply(fmt_num)
-
-render_table(comparison_display_df, width="stretch", hide_index=True)
-
-render_explanation_expander(
-    "Como leer la comparacion de modelos",
-    [
-        "Se comparan modelos por ajuste relativo.",
-        "AIC/BIC penalizan complejidad.",
-        "El modelo con menor AIC se toma como referencia si esa es la regla usada.",
-        "La tabla ayuda a justificar por que se selecciono el mejor modelo.",
-    ],
-)
-
-# ==============================
-# Diagnóstico
-# ==============================
-st.markdown("### 3. Diagnóstico del modelo seleccionado")
-render_section(
-    "Diagnóstico",
-    "Se resume si el ajuste converge y si los residuos estandarizados mantienen señales relevantes.",
-)
-
-d1, d2, d3, d4 = st.columns(4)
-
-with d1:
-    kpi_card(
-        "Convergencia",
-        str(best_converged),
-        caption="Estado de convergencia del ajuste",
-    )
-
-with d2:
-    kpi_card(
-        "JB residuos est.",
-        fmt_num(jb_stat),
-        caption="Jarque-Bera sobre residuos estandarizados",
-    )
-
-with d3:
-    kpi_card(
-        "p-value JB",
-        fmt_pvalue(jb_pvalue),
-        delta="Rechaza normalidad" if normality_rejected else "No rechaza" if normality_rejected is False else None,
-        delta_type="neg" if normality_rejected else "pos" if normality_rejected is False else "neu",
-        caption="Prueba sobre residuos estandarizados",
-    )
-
-with d4:
-    kpi_card(
-        "Persistencia",
-        fmt_num(persistence),
-        delta=persistence_label,
-        delta_type=persistence_delta,
-        caption="Memoria de la volatilidad",
-    )
-
-st.caption(normality_decision)
-
-render_explanation_expander(
-    "Como interpretar el diagnóstico",
-    [
-        "La convergencia indica si el modelo logro estimarse correctamente.",
-        "Jarque-Bera se aplica a residuos estandarizados para revisar normalidad residual.",
-        "Un p-value muy pequeno sugiere que pueden persistir colas o eventos extremos no explicados por completo.",
-        "Una persistencia alta indica que los choques de volatilidad tardan mas en disiparse.",
-    ],
-)
-
-if not diagnostics_df.empty:
-    with st.expander("Ver detalle técnico del diagnóstico"):
-        diagnostics_display_df = diagnostics_df.copy()
-        if "valor" in diagnostics_display_df.columns:
-            diagnostics_display_df["valor"] = diagnostics_display_df["valor"].apply(
-                lambda value: fmt_num(value) if pd.notna(pd.to_numeric(value, errors="coerce")) else value
-            )
-        render_table(diagnostics_display_df, width="stretch", hide_index=True)
+if _ewma_annual is not None and pd.notna(_ewma_annual):
+    if _ewma_annual < 0.15:
+        _ewma_signal = "Baja"
+        _ewma_signal_type = "pos"
+    elif _ewma_annual <= 0.30:
+        _ewma_signal = "Moderada"
+        _ewma_signal_type = "neu"
+    else:
+        _ewma_signal = "Alta"
+        _ewma_signal_type = "neg"
 else:
-    st.info("No se generaron diagnósticos adicionales para el modelo seleccionado.")
+    _ewma_signal = "N/D"
+    _ewma_signal_type = "neu"
 
-# ==============================
-# Residuos estandarizados
-# ==============================
-st.markdown("### 4. Residuos estandarizados")
-if "std_resid" in results and results["std_resid"] is not None:
-    st.plotly_chart(plot_standardized_residuals(results["std_resid"]), width="stretch")
-    render_explanation_expander(
-        "Como interpretar los residuos estandarizados",
-        [
-            "Residuos alrededor de cero sugieren que el modelo captura buena parte de la estructura media.",
-            "Picos extremos persistentes indican episodios que el modelo no absorbe completamente.",
-            "Esta revisión complementa el diagnóstico formal y ayuda a evaluar riesgo extremo.",
-        ],
-    )
-
-    with st.expander("Ver residuos estandarizados"):
-        render_table(results["std_resid"].tail(20), width="stretch", hide_index=False)
-else:
-    st.info("No se generaron residuos estandarizados para el modelo seleccionado.")
-
-# ==============================
-# Volatilidad condicional estimada
-# ==============================
-st.markdown("### 5. Volatilidad condicional estimada")
-st.caption(
-    "La grafica compara como cada especificacion modela la evolucion de la volatilidad condicional a lo largo del tiempo."
-)
-volatility_plot_df = results["volatility"].copy()
-volatility_plot_df.insert(
-    0,
-    "Volatilidad movil 21 dias",
-    volatilidad_movil_21d.reindex(volatility_plot_df.index),
-)
-volatility_fig = plot_volatility(volatility_plot_df)
-volatility_fig.update_traces(
-    selector=dict(name="Volatilidad movil 21 dias"),
-    line=dict(color="#64748B", width=2.6, dash="dot"),
-)
-st.plotly_chart(volatility_fig, width="stretch")
-
-render_explanation_expander(
-    "Como interpretar la volatilidad estimada",
-    [
-        "La Volatilidad movil 21 dias es una referencia empirica aproximada calculada a partir de los rendimientos recientes.",
-        "Los modelos ARCH, GARCH y EGARCH son estimaciones suavizadas de la volatilidad condicional.",
-        "Un buen modelo no tiene que replicar exactamente todos los movimientos de la Volatilidad movil 21 dias.",
-        "Lo importante es que capture los principales cambios de regimen o episodios de mayor riesgo.",
-        "Si las lineas de los modelos aumentan en los mismos periodos que la Volatilidad movil 21 dias, estan capturando adecuadamente episodios de mayor incertidumbre.",
-        "La volatilidad condicional permite identificar tramos donde la incertidumbre se concentra.",
-        "Una persistencia elevada refuerza la lectura de episodios de riesgo agrupado.",
-        "ARCH, GARCH y EGARCH modelan la volatilidad con distintos supuestos sobre choques y memoria.",
-    ],
-)
-
-render_explanation_expander(
-    "Que significan ARCH, GARCH y EGARCH",
-    [
-        "ARCH se enfoca en como los choques recientes afectan la volatilidad actual.",
-        "GARCH combina choques recientes con persistencia de volatilidad pasada.",
-        "EGARCH permite capturar respuestas asimétricas ante choques positivos y negativos.",
-    ],
-)
-
-# ==============================
-# Pronostico de volatilidad
-# ==============================
 horizon_steps = None
 try:
     horizon_steps = int(results["forecast"]["horizonte"].max())
 except Exception:
-    horizon_steps = None
+    horizon_steps = 10
 
-forecast_title = (
-    f"### 6. Pronostico de volatilidad ({horizon_steps} pasos)"
-    if horizon_steps is not None
-    else "### 6. Pronostico de volatilidad (10 pasos)"
-)
-st.markdown(forecast_title)
-st.caption(
-    "El grafico muestra un pronostico de volatilidad a varios pasos hacia adelante."
-)
-st.plotly_chart(
-    plot_forecast(results["forecast"]),
-    width="stretch",
-)
-render_explanation_expander(
-    "Como interpretar el pronostico de volatilidad",
-    [
-        "El pronostico no predice direccion del precio.",
-        "Pronostica intensidad esperada de la volatilidad.",
-        "Mayor volatilidad implica mayor incertidumbre/riesgo.",
-        "Debe complementarse con VaR/CVaR, CAPM y benchmark.",
-    ],
-)
-
-# ==============================
-# EWMA — Volatilidad exponencialmente ponderada
-# ==============================
-st.markdown("### 7. Volatilidad EWMA (λ = 0.94)")
-render_section(
-    "EWMA como referencia complementaria",
-    "La volatilidad EWMA pondera mas los retornos recientes sin necesidad de ajustar un modelo parametrico completo.",
-)
-render_explanation_expander(
-    "Que es EWMA y como se compara con GARCH",
-    [
-        "EWMA (Exponentially Weighted Moving Average) calcula la volatilidad asignando mayor peso a observaciones recientes.",
-        "El parametro lambda (λ = 0.94) controla el decaimiento: valores cercanos a 1 dan mas peso al pasado lejano.",
-        "A diferencia de GARCH, EWMA no estima parametros por maxima verosimilitud ni tiene constante de largo plazo.",
-        "RiskMetrics popularizo EWMA con λ = 0.94 para datos diarios.",
-        "Sirve como referencia rapida: si EWMA y GARCH convergen, la señal de riesgo es mas robusta.",
-    ],
-)
-
+_vol_current = None
 try:
-    ewma_vol_value = ewma_volatility(serie_retornos, lambda_=0.94, annualize=True, periods_per_year=252)
-    ewma_daily = ewma_volatility(serie_retornos, lambda_=0.94, annualize=False)
-    e1, e2 = st.columns(2)
-    with e1:
+    _vol_df_raw = results.get("volatility")
+    if _vol_df_raw is not None and not _vol_df_raw.empty:
+        _best_col = None
+        if best_model:
+            for _c in _vol_df_raw.columns:
+                if str(best_model).upper() in str(_c).upper():
+                    _best_col = _c
+                    break
+        if _best_col is None:
+            _best_col = _vol_df_raw.columns[0]
+        _vals = _vol_df_raw[_best_col].dropna()
+        if not _vals.empty:
+            _vol_current = float(_vals.iloc[-1])
+except Exception:
+    _vol_current = None
+
+import plotly.graph_objects as _go
+
+# ==============================
+# Pestañas internas
+# ==============================
+_tabs = st.tabs(["EWMA", "Comparación", "Modelos GARCH", "Diagnóstico", "Pronóstico", "Detalle técnico"])
+
+# =========================================
+# Tab 1: EWMA
+# =========================================
+with _tabs[0]:
+    render_section(
+        "EWMA: volatilidad con ponderación exponencial",
+        "El modelo EWMA asigna mayor peso a los rendimientos recientes. Es útil para capturar cambios rápidos en el riesgo sin estimar un modelo paramétrico completo.",
+    )
+    st.caption(f"Lambda configurado: **{_lambda:.2f}**  ·  Modifícalo en el panel lateral → *Parámetros del módulo*.")
+
+    _e1, _e2, _e3, _e4 = st.columns(4)
+    with _e1:
         kpi_card(
             "Vol. EWMA diaria",
-            f"{ewma_daily:.4f}" if pd.notna(ewma_daily) else "N/D",
-            caption="Volatilidad EWMA del último período (λ=0.94)",
+            f"{_ewma_daily * 100:.2f}%" if _ewma_daily is not None and pd.notna(_ewma_daily) else "N/D",
+            caption="Volatilidad diaria en escala porcentual.",
         )
-    with e2:
+    with _e2:
         kpi_card(
             "Vol. EWMA anualizada",
-            f"{ewma_vol_value:.4f}" if pd.notna(ewma_vol_value) else "N/D",
-            caption="Anualizada con √252",
+            f"{_ewma_annual * 100:.2f}%" if _ewma_annual is not None and pd.notna(_ewma_annual) else "N/D",
+            caption=f"Escalada × √252 con λ={_lambda:.2f}.",
+        )
+    with _e3:
+        kpi_card(
+            "Lambda",
+            f"{_lambda:.2f}",
+            caption="Mayor lambda = mayor memoria del pasado.",
+        )
+    with _e4:
+        kpi_card(
+            "Señal de riesgo EWMA",
+            _ewma_signal,
+            delta_type=_ewma_signal_type,
+            caption="Baja <15% · Moderada 15–30% · Alta >30% (anualizada).",
         )
 
-    ewma_series = serie_retornos.ewm(span=int(1 / (1 - 0.94)), adjust=False).std()
-    import plotly.graph_objects as _go
-    ewma_fig = _go.Figure()
-    ewma_fig.add_trace(_go.Scatter(
-        x=ewma_series.index,
-        y=ewma_series.values,
-        mode="lines",
-        name="Volatilidad EWMA",
-        line=dict(color="#0EA5E9", width=2),
-    ))
-    ewma_fig.update_layout(
-        title="Volatilidad EWMA a lo largo del tiempo",
-        xaxis_title="Fecha",
-        yaxis_title="Volatilidad (escala original)",
-        height=350,
-        margin=dict(l=40, r=20, t=40, b=40),
-    )
-    st.plotly_chart(ewma_fig, width="stretch")
-except Exception as _ewma_exc:
-    st.info(f"No fue posible calcular la volatilidad EWMA: {_ewma_exc}")
+    try:
+        _ewma_chart = serie_retornos.ewm(alpha=(1 - _lambda), adjust=False).std() * 100
+        _rolling_21 = serie_retornos.rolling(window=21).std() * 100
+        _ewma_fig = _go.Figure()
+        _ewma_fig.add_trace(_go.Scatter(
+            x=_ewma_chart.index,
+            y=_ewma_chart.values,
+            mode="lines",
+            name=f"EWMA (λ={_lambda:.2f})",
+            line=dict(color="#0EA5E9", width=2),
+        ))
+        _ewma_fig.add_trace(_go.Scatter(
+            x=_rolling_21.index,
+            y=_rolling_21.values,
+            mode="lines",
+            name="Rolling 21 días",
+            line=dict(color="#64748B", width=1.8, dash="dot"),
+        ))
+        _ewma_fig.update_layout(
+            title=f"Evolución de la volatilidad EWMA (λ={_lambda:.2f})",
+            xaxis_title="Fecha",
+            yaxis_title="Volatilidad (%)",
+            height=340,
+            margin=dict(l=40, r=20, t=50, b=50),
+            legend=dict(orientation="h", y=-0.2),
+        )
+        st.plotly_chart(_ewma_fig, width="stretch")
+    except Exception:
+        st.info("No fue posible generar el gráfico EWMA.")
 
-# ==============================
-# Conclusion
-# ==============================
-st.markdown("### Conclusion")
-if best_model is not None:
-    conclusion_parts = [
-        f"El modelo ganador fue **{best_model}** por criterio AIC.",
+    conclusion_box(
+        "EWMA permite observar cómo cambia el riesgo reciente del activo. "
+        "Si la volatilidad EWMA sube, los rendimientos recientes muestran mayor inestabilidad. "
+        "A diferencia de GARCH, EWMA no selecciona parámetros por AIC/BIC: su comportamiento depende directamente del valor de lambda.",
+        kind="success",
+        label="Lectura para exposición",
+    )
+
+# =========================================
+# Tab 2: Comparación EWMA vs GARCH
+# =========================================
+with _tabs[1]:
+    render_section(
+        "Dos enfoques complementarios",
+        "EWMA reacciona rápidamente a choques recientes. GARCH estima una estructura condicional de volatilidad y permite evaluar persistencia, ajuste estadístico y pronóstico.",
+    )
+
+    _ewma_daily_pct = (_ewma_daily * 100) if _ewma_daily is not None and pd.notna(_ewma_daily) else None
+    if _ewma_daily_pct is not None and forecast_last is not None:
+        _diff_daily = _ewma_daily_pct - forecast_last
+        if abs(_diff_daily) < 0.3:
+            _lectura_comp = "Niveles similares"
+            _comp_type = "neu"
+        elif _diff_daily > 0:
+            _lectura_comp = "EWMA > GARCH"
+            _comp_type = "neg"
+        else:
+            _lectura_comp = "EWMA < GARCH"
+            _comp_type = "pos"
+    else:
+        _lectura_comp = "No disponible"
+        _comp_type = "neu"
+
+    _c1, _c2, _c3, _c4 = st.columns(4)
+    with _c1:
+        kpi_card(
+            "Vol. EWMA diaria",
+            f"{_ewma_daily_pct:.2f}%" if _ewma_daily_pct is not None else "N/D",
+            caption=f"λ={_lambda:.2f}, escala porcentual.",
+        )
+    with _c2:
+        kpi_card(
+            "Vol. pronosticada GARCH",
+            fmt_num(forecast_last),
+            caption=f"Diaria, modelo {best_model or 'N/D'} al último paso.",
+        )
+    with _c3:
+        kpi_card(
+            "Mejor modelo GARCH",
+            str(best_model) if best_model else "N/D",
+            caption="Seleccionado por menor AIC.",
+        )
+    with _c4:
+        kpi_card(
+            "Lectura comparativa",
+            _lectura_comp,
+            delta_type=_comp_type,
+            caption="EWMA diaria vs pronóstico GARCH (escala ×100).",
+        )
+
+    st.markdown("#### Comparación conceptual: EWMA vs GARCH")
+    _comp_conceptual = pd.DataFrame([
+        {"Aspecto": "Tipo de modelo", "EWMA": "Ponderación exponencial", "GARCH/EGARCH": "Paramétrico condicional"},
+        {"Aspecto": "Parámetros", "EWMA": f"Solo lambda (λ={_lambda:.2f})", "GARCH/EGARCH": "Estimados por máxima verosimilitud"},
+        {"Aspecto": "Reacción a choques", "EWMA": "Alta (muy reactivo)", "GARCH/EGARCH": "Moderada (estructura persistente)"},
+        {"Aspecto": "Persistencia", "EWMA": "Implícita en lambda", "GARCH/EGARCH": f"Explícita ({fmt_num(persistence)})"},
+        {"Aspecto": "Selección estadística", "EWMA": "No usa AIC/BIC", "GARCH/EGARCH": "Selección por AIC/BIC"},
+        {"Aspecto": "Uso en gestión de riesgo", "EWMA": "Referencia reactiva de corto plazo", "GARCH/EGARCH": "Persistencia y pronóstico condicional"},
+    ])
+    render_table(_comp_conceptual, hide_index=True, width="stretch")
+
+    render_explanation_expander(
+        "EWMA vs GARCH: diferencias clave",
+        [
+            f"EWMA asigna mayor peso a retornos recientes con λ={_lambda:.2f} (RiskMetrics usa 0.94).",
+            "GARCH estima parámetros por máxima verosimilitud e incluye una constante de largo plazo.",
+            "EWMA es más reactivo; GARCH captura mejor la estructura de persistencia.",
+            "Cuando ambos coinciden en el nivel de riesgo, la señal es más robusta.",
+        ],
+    )
+
+    conclusion_box(
+        "EWMA se usa como referencia reactiva de corto plazo, mientras que GARCH/EGARCH permite modelar "
+        "persistencia condicional. Si ambos modelos señalan niveles similares de riesgo, "
+        "la lectura de volatilidad es más robusta.",
+        kind="success",
+        label="Conclusión comparativa",
+    )
+
+# =========================================
+# Tab 3: Modelos GARCH
+# =========================================
+with _tabs[2]:
+    render_section(
+        "Selección de modelos ARCH/GARCH",
+        "Se comparan ARCH(1), GARCH(1,1) y EGARCH(1,1) usando criterios de información. El menor AIC/BIC favorece el mejor ajuste relativo penalizando complejidad.",
+    )
+
+    if pd.notna(persistence) and persistence >= 1.0:
+        st.warning(
+            f"Persistencia elevada ({fmt_num(persistence)}): revisar estacionariedad o interpretación "
+            "según la especificación del modelo. Para EGARCH, la persistencia puede calcularse de forma distinta a alpha+beta."
+        )
+
+    _g1, _g2, _g3, _g4, _g5 = st.columns(5)
+    with _g1:
+        kpi_card(
+            "Mejor modelo",
+            str(best_model) if best_model else "N/D",
+            caption="Seleccionado por menor AIC.",
+        )
+    with _g2:
+        kpi_card(
+            "AIC",
+            fmt_num(best_aic),
+            caption="Menor valor = mejor ajuste relativo.",
+        )
+    with _g3:
+        kpi_card(
+            "BIC",
+            fmt_num(best_bic),
+            caption="Penaliza complejidad del modelo.",
+        )
+    with _g4:
+        kpi_card(
+            "Log-Likelihood",
+            fmt_num(best_loglik),
+            caption="Log-verosimilitud del modelo ganador.",
+        )
+    with _g5:
+        _persist_warn = pd.notna(persistence) and persistence >= 1.0
+        kpi_card(
+            "Persistencia",
+            fmt_num(persistence),
+            delta="⚠ Revisar" if _persist_warn else persistence_label,
+            delta_type="neg" if _persist_warn else persistence_delta,
+            caption="Memoria de la volatilidad estimada.",
+        )
+
+    if best_model is None:
+        st.warning("No se generó una lectura automática del mejor modelo.")
+
+    st.markdown("#### Tabla comparativa — modelos GARCH")
+    _garch_cols = ["modelo", "AIC", "BIC", "loglik", "persistencia"]
+    _vis_cols = [c for c in _garch_cols if c in comparison_df.columns]
+    _garch_display = comparison_df[_vis_cols].copy()
+    if "AIC" in _garch_display.columns:
+        _garch_display = _garch_display.sort_values("AIC", ascending=True).reset_index(drop=True)
+    if "modelo" in _garch_display.columns:
+        _garch_display["Selección"] = _garch_display["modelo"].apply(
+            lambda m: "Mejor" if m == best_model else ""
+        )
+    _garch_display = _garch_display.rename(columns={
+        "modelo": "Modelo",
+        "loglik": "Log-Likelihood",
+        "persistencia": "Persistencia",
+    })
+    for _col in _garch_display.columns:
+        if _col not in {"Modelo", "Selección"}:
+            _garch_display[_col] = pd.to_numeric(_garch_display[_col], errors="coerce").apply(fmt_num)
+    render_table(_garch_display, hide_index=True, width="stretch")
+
+    render_explanation_expander(
+        "Cómo leer AIC/BIC",
+        [
+            "AIC y BIC son criterios de selección que equilibran ajuste y complejidad.",
+            "Un AIC menor indica mejor ajuste relativo; BIC penaliza más los parámetros adicionales.",
+            "El modelo con menor AIC se selecciona como referencia cuando converge correctamente.",
+            "Para EGARCH, la persistencia no equivale directamente a alpha+beta del GARCH estándar.",
+        ],
+    )
+
+# =========================================
+# Tab 4: Diagnóstico
+# =========================================
+with _tabs[3]:
+    render_section(
+        "Diagnóstico del modelo seleccionado",
+        "Se evalúa si el modelo converge y si los residuos estandarizados conservan patrones relevantes después del ajuste.",
+    )
+
+    _d1, _d2, _d3, _d4 = st.columns(4)
+    with _d1:
+        kpi_card(
+            "Convergencia",
+            str(best_converged),
+            caption="Estado de convergencia del ajuste.",
+        )
+    with _d2:
+        kpi_card(
+            "JB residuos est.",
+            fmt_num(jb_stat),
+            caption="Jarque-Bera sobre residuos estandarizados.",
+        )
+    with _d3:
+        _pv_fmt = (
+            f"{jb_pvalue:.4f}" if pd.notna(jb_pvalue) and jb_pvalue >= 0.0001
+            else "< 0.0001" if pd.notna(jb_pvalue)
+            else "N/D"
+        )
+        kpi_card(
+            "p-value JB",
+            _pv_fmt,
+            delta="Rechaza normalidad" if normality_rejected else "No rechaza" if normality_rejected is False else None,
+            delta_type="neg" if normality_rejected else "pos" if normality_rejected is False else "neu",
+            caption="H0: residuos con distribución normal.",
+        )
+    with _d4:
+        _norm_label = (
+            "Rechaza normalidad" if normality_rejected
+            else "No rechaza normalidad" if normality_rejected is False
+            else "N/D"
+        )
+        _norm_type = "neg" if normality_rejected else "pos" if normality_rejected is False else "neu"
+        kpi_card(
+            "Normalidad residuos",
+            _norm_label,
+            delta_type=_norm_type,
+            caption=normality_decision,
+        )
+
+    st.caption("ARCH-LM: no disponible en la implementación actual. Ver pestaña Detalle técnico para contexto metodológico.")
+
+    if "std_resid" in results and results["std_resid"] is not None:
+        st.markdown("#### Residuos estandarizados")
+        st.plotly_chart(plot_standardized_residuals(results["std_resid"]), width="stretch")
+        with st.expander("Ver tabla de residuos estandarizados"):
+            render_table(results["std_resid"].tail(30), width="stretch", hide_index=False)
+    else:
+        st.info("No se generaron residuos estandarizados para el modelo seleccionado.")
+
+    conclusion_box(
+        "Si los residuos estandarizados rechazan normalidad, esto sugiere colas pesadas o choques extremos "
+        "no capturados completamente por el supuesto de distribución. "
+        "Esto no invalida automáticamente el modelo, pero debe mencionarse como limitación metodológica.",
+        kind="warn",
+        label="Diagnóstico del modelo",
+    )
+
+# =========================================
+# Tab 5: Pronóstico
+# =========================================
+with _tabs[4]:
+    render_section(
+        "Pronóstico de volatilidad",
+        "El modelo seleccionado proyecta la volatilidad esperada para los próximos pasos, útil para anticipar riesgo prospectivo.",
+    )
+
+    _p1, _p2, _p3 = st.columns(3)
+    with _p1:
+        kpi_card(
+            "Volatilidad actual",
+            fmt_num(_vol_current),
+            caption=f"Último valor estimado por {best_model or 'N/D'}.",
+        )
+    with _p2:
+        kpi_card(
+            "Volatilidad pronosticada",
+            fmt_num(forecast_last),
+            caption=f"Último paso del pronóstico a {horizon_steps} pasos.",
+        )
+    with _p3:
+        kpi_card(
+            "Horizonte",
+            f"{horizon_steps} pasos" if horizon_steps else "N/D",
+            caption="Pasos hacia adelante proyectados por el modelo.",
+        )
+
+    st.plotly_chart(plot_forecast(results["forecast"]), width="stretch")
+
+    _conclusion_parts = [
+        "EWMA permite capturar cambios recientes en la volatilidad del activo, "
+        "mientras que el modelo GARCH/EGARCH seleccionado permite evaluar persistencia y pronosticar riesgo condicional. "
+        "En conjunto, ambos enfoques fortalecen la lectura del riesgo: combinan sensibilidad de corto plazo "
+        "con modelación estadística de la volatilidad."
     ]
-
-    if pd.notna(persistence):
-        conclusion_parts.append(
-            f"La persistencia de **{fmt_num(persistence)}** indica el grado de memoria de los choques de volatilidad."
+    if best_model and pd.notna(persistence):
+        _conclusion_parts.append(
+            f"El modelo {best_model} presenta una persistencia de {fmt_num(persistence)}, lo que indica "
+            + (
+                "alta memoria en los choques de volatilidad."
+                if persistence >= 0.90
+                else "memoria moderada en los choques de volatilidad."
+            )
         )
+    _conclusion_parts.append(normality_decision)
 
-    conclusion_parts.append(normality_decision)
-
-    if forecast_last is not None:
-        conclusion_parts.append(
-            f"El pronostico final de volatilidad de **{fmt_num(forecast_last)}** resume la volatilidad esperada al cierre del horizonte."
-        )
-
-    conclusion_parts.append(
-        "Para la gestion de riesgo y VaR, estos resultados ayudan a distinguir entre riesgo reciente, persistencia y riesgo prospectivo."
+    conclusion_box(
+        " ".join(_conclusion_parts),
+        kind="success",
+        label="Conclusión del análisis de volatilidad",
     )
 
-    st.success(" ".join(conclusion_parts))
-else:
-    st.info("No fue posible construir una conclusion porque no se selecciono un modelo final.")
+# =========================================
+# Tab 6: Detalle técnico
+# =========================================
+with _tabs[5]:
+    render_section(
+        "Detalle técnico del módulo",
+        "Fundamento metodológico, parámetros del modelo y tablas técnicas de respaldo.",
+    )
 
+    with st.expander("Fundamento del módulo"):
+        st.write(
+            """
+            - La volatilidad condicional cambia en el tiempo y suele agruparse en periodos de calma o turbulencia.
+            - Los modelos ARCH/GARCH permiten estimar esa dinámica sin asumir una volatilidad histórica constante.
+            - La serie validada se escala por 100 antes del ajuste para mejorar la estabilidad numérica del modelo.
+            - EWMA es la referencia más inmediata: sin estimación paramétrica, con reactividad directa al lambda elegido.
+            """
+        )
+
+    with st.expander("Qué significan ARCH, GARCH y EGARCH"):
+        st.write(
+            """
+            - **ARCH** modela la volatilidad actual en función de los choques cuadráticos pasados.
+            - **GARCH** combina choques recientes con la volatilidad condicional pasada (memoria).
+            - **EGARCH** captura respuestas asimétricas ante choques positivos y negativos.
+            - **EWMA** asigna mayor peso a retornos recientes con el parámetro lambda (sin estimación por MV).
+            """
+        )
+
+    with st.expander("Volatilidad condicional estimada (todos los modelos)"):
+        st.caption("Comparación de cómo cada especificación modela la evolución de la volatilidad condicional a lo largo del tiempo.")
+        _vol_plot_df = results["volatility"].copy()
+        _vol_plot_df.insert(0, "Volatilidad movil 21 dias", volatilidad_movil_21d.reindex(_vol_plot_df.index))
+        _vol_fig = plot_volatility(_vol_plot_df)
+        _vol_fig.update_traces(
+            selector=dict(name="Volatilidad movil 21 dias"),
+            line=dict(color="#64748B", width=2.6, dash="dot"),
+        )
+        st.plotly_chart(_vol_fig, width="stretch")
+
+    if not diagnostics_df.empty:
+        with st.expander("Diagnóstico técnico completo"):
+            _diag_display = diagnostics_df.copy()
+            if "valor" in _diag_display.columns:
+                _diag_display["valor"] = _diag_display["valor"].apply(
+                    lambda v: fmt_num(v) if pd.notna(pd.to_numeric(v, errors="coerce")) else v
+                )
+            render_table(_diag_display, width="stretch", hide_index=True)
+
+    with st.expander("Notas metodológicas"):
+        st.write(
+            """
+            - ARCH-LM no está disponible en la implementación actual. Para una validación completa, se recomienda complementar con esta prueba.
+            - La persistencia de EGARCH puede no equivaler directamente a alpha+beta del GARCH estándar.
+            - El módulo escala los retornos por 100 antes del ajuste GARCH. Los resultados están en esa escala (unidades ×100).
+            - EWMA se calcula sobre los retornos en escala decimal. La volatilidad EWMA se multiplica por 100 para comparación visual.
+            - Los valores de volatilidad EWMA se muestran en porcentaje (e.g., 1.79%). Los valores GARCH también están escalados ×100.
+            """
+        )

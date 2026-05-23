@@ -16,7 +16,7 @@ from src.benchmark import benchmark_summary
 from src.services.decision_engine import DecisionEngine
 from src.services.market_data_client import MarketDataClient
 from src.services.risk_analyzer import RiskAnalyzer
-from src.ui_components import kpi_card, render_explanation_expander, render_section, render_table
+from src.ui_components import conclusion_box, kpi_card, module_header, render_explanation_expander, render_section, render_table
 from src.ui_layout import configured_assets, configured_period, module_params, render_app_shell, render_portfolio_summary_card
 from src.ui_style import apply_global_typography
 
@@ -171,7 +171,7 @@ def hero_decision(title, subtitle, level="neutral"):
     </head>
     <body>
         <div class="hero">
-            <div class="badge">Decision integrada del portafolio</div>
+            <div class="badge">Decisión integrada del portafolio</div>
             <div class="title">{sanitize_text(title)}</div>
             <div class="subtitle">{sanitize_text(subtitle)}</div>
         </div>
@@ -183,20 +183,22 @@ def hero_decision(title, subtitle, level="neutral"):
 
 render_app_shell(
     "Módulo 9 - Panel de decisión",
-    "Integra riesgo, volatilidad, señales técnicas y benchmark para producir una postura de acción más clara.",
+    "Integra riesgo, volatilidad, señales técnicas, benchmark y ML para producir una postura de acción más clara.",
 )
 ASSETS = configured_assets(ASSETS)
 horizonte, start_date, end_date = configured_period(DEFAULT_START_DATE, DEFAULT_END_DATE)
 render_portfolio_summary_card(ASSETS)
-
+module_header(
+    "Módulo 9 – Panel de decisión integrado",
+    "Combina riesgo extremo, volatilidad GARCH, señales técnicas, benchmark y modelo ML para entregar una postura de acción clara sobre el portafolio.",
+    badge="ML · GARCH · Kupiec · Benchmark",
+)
 
 # ==============================
 # Parámetros del módulo
 # ==============================
 with module_params():
-    st.header("Parámetros")
-    st.subheader("Opciones de análisis")
-    mostrar_detalle = st.checkbox("Mostrar detalle t-cnico", value=False)
+    st.caption("Parámetros del análisis integrado.")
     alpha = st.selectbox("Nivel de confianza VaR", [0.95, 0.99], index=0, key="decision_alpha")
     n_sim = st.slider(
         "Simulaciones Monte Carlo",
@@ -206,10 +208,11 @@ with module_params():
         step=5000,
         key="decision_nsim",
     )
+    mostrar_detalle = st.checkbox("Mostrar detalle técnico", value=False)
 
 
 # ==============================
-# Helpers logicos
+# Helpers lógicos
 # ==============================
 def _get_rf_annual() -> float:
     if macro_snapshot is not None:
@@ -312,7 +315,7 @@ def _classify_risk(var_hist: float, persistencia: float, max_dd: float) -> dict:
             "nivel": "Alto",
             "score": -1,
             "ui": "danger",
-            "mensaje": "El portafolio presenta perdidas extremas potenciales y/o persistencia de volatilidad suficientemente elevadas como para justificar cautela.",
+            "mensaje": "El portafolio presenta pérdidas extremas potenciales y/o persistencia de volatilidad suficientemente elevadas como para justificar cautela.",
         }
     if puntos >= 3:
         return {
@@ -335,16 +338,16 @@ def _classify_benchmark(summary_df: pd.DataFrame, extras_df: pd.DataFrame) -> di
             "nivel": "No concluyente",
             "score": 0,
             "ui": "warning",
-            "mensaje": "No fue posible construir una comparacion robusta frente al benchmark.",
+            "mensaje": "No fue posible construir una comparación robusta frente al benchmark.",
         }
 
     try:
         port_ret = float(summary_df.loc[summary_df["serie"] == "Portafolio", "ret_anualizado"].iloc[0])
         bench_ret = float(summary_df.loc[summary_df["serie"] == "Benchmark", "ret_anualizado"].iloc[0])
 
-        alpha = metric_value(extras_df, "Alpha de Jensen")
+        alpha_j = metric_value(extras_df, "Alpha de Jensen")
 
-        if port_ret > bench_ret and (pd.isna(alpha) or alpha >= 0):
+        if port_ret > bench_ret and (pd.isna(alpha_j) or alpha_j >= 0):
             return {
                 "nivel": "Superior",
                 "score": 1,
@@ -352,7 +355,7 @@ def _classify_benchmark(summary_df: pd.DataFrame, extras_df: pd.DataFrame) -> di
                 "mensaje": "El portafolio presenta una lectura relativa favorable frente al benchmark en la ventana analizada.",
             }
 
-        if port_ret < bench_ret and (pd.isna(alpha) or alpha < 0):
+        if port_ret < bench_ret and (pd.isna(alpha_j) or alpha_j < 0):
             return {
                 "nivel": "Inferior",
                 "score": -1,
@@ -380,9 +383,9 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
 
     if total >= 2:
         return {
-            "titulo": "Compra tactica",
+            "titulo": "Compra táctica",
             "ui": "positive",
-            "mensaje_general": "La lectura integrada favorece una postura compradora o de incremento tactico de exposicion.",
+            "mensaje_general": "La lectura integrada favorece una postura compradora o de incremento táctico de exposición.",
             "mensaje_riesgo": "El principal riesgo es que un cambio brusco de mercado revierta la señal técnica y deteriore el perfil de volatilidad.",
             "mensaje_formal": "La combinación de riesgo contenido, sesgo técnico favorable y comparación relativa no adversa respalda una postura de compra táctica dentro de la ventana analizada.",
             "score_total": total,
@@ -392,18 +395,18 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
         return {
             "titulo": "Mantener / compra selectiva",
             "ui": "warning",
-            "mensaje_general": "La lectura integrada permite mantener exposicion y considerar compras selectivas, pero no justifica una expansion agresiva de riesgo.",
-            "mensaje_riesgo": "El principal riesgo es entrar con confirmacion incompleta y enfrentar un deterioro posterior en benchmark o volatilidad.",
-            "mensaje_formal": "La evidencia agregada no es suficientemente fuerte para una postura agresiva, pero tampoco justifica deshacer exposicion. La decision razonable es mantener y, en todo caso, comprar de forma selectiva.",
+            "mensaje_general": "La lectura integrada permite mantener exposición y considerar compras selectivas, pero no justifica una expansión agresiva de riesgo.",
+            "mensaje_riesgo": "El principal riesgo es entrar con confirmación incompleta y enfrentar un deterioro posterior en benchmark o volatilidad.",
+            "mensaje_formal": "La evidencia agregada no es suficientemente fuerte para una postura agresiva, pero tampoco justifica deshacer exposición. La decisión razonable es mantener y, en todo caso, comprar de forma selectiva.",
             "score_total": total,
         }
 
     if total == -1:
         return {
-            "titulo": "Reducir exposicion",
+            "titulo": "Reducir exposición",
             "ui": "warning",
-            "mensaje_general": "La lectura integrada sugiere reducir parcialmente exposicion o evitar nuevas compras hasta que mejoren las condiciones.",
-            "mensaje_riesgo": "El riesgo central es mantener una posicion relativamente alta en un contexto donde la evidencia agregada se ha debilitado.",
+            "mensaje_general": "La lectura integrada sugiere reducir parcialmente la exposición o evitar nuevas compras hasta que mejoren las condiciones.",
+            "mensaje_riesgo": "El riesgo central es mantener una posición relativamente alta en un contexto donde la evidencia agregada se ha debilitado.",
             "mensaje_formal": "La combinación de señales no favorece una ampliación de posición. La decisión más consistente es reducir exposición marginalmente y esperar mejor confirmación estadística y técnica.",
             "score_total": total,
         }
@@ -411,9 +414,9 @@ def _final_decision(risk_score: int, signal_score: int, bench_score: int) -> dic
     return {
         "titulo": "Venta / postura defensiva",
         "ui": "danger",
-        "mensaje_general": "La lectura integrada favorece una postura defensiva: reducir exposicion de forma relevante o priorizar salida.",
+        "mensaje_general": "La lectura integrada favorece una postura defensiva: reducir exposición de forma relevante o priorizar salida.",
         "mensaje_riesgo": "El principal riesgo es permanecer sobreexpuesto en un entorno donde coinciden riesgo elevado, deterioro técnico y/o rezago relativo.",
-        "mensaje_formal": "La evidencia integrada es adversa. Desde una perspectiva de control de riesgo, la postura mas defendible es de venta o reduccion sustancial de exposicion.",
+        "mensaje_formal": "La evidencia integrada es adversa. Desde una perspectiva de control de riesgo, la postura más defendible es de venta o reducción sustancial de exposición.",
         "score_total": total,
     }
 
@@ -528,7 +531,6 @@ def build_ml_risk_payload(
         drawdown = cumulative / cumulative.cummax().replace(0, np.nan) - 1.0
         return _finite_float(drawdown.min(), 0.0)
 
-    # Fallbacks neutrales: el endpoint requiere floats finitos aun si faltan indicadores técnicos.
     rsi = 50.0
     macd_hist = 0.0
     bb_position = 0.5
@@ -607,7 +609,7 @@ valid_asset_tickers = [ticker for ticker in asset_tickers if ticker in returns_a
 returns = risk_analyzer.clean_returns(returns_all[valid_asset_tickers])
 
 if returns.empty or len(returns) < 30:
-    st.error(data_error_message("No hay suficientes datos para construir el panel de decision."))
+    st.error(data_error_message("No hay suficientes datos para construir el panel de decisión."))
     st.stop()
 
 portfolio_returns, weights = risk_analyzer.portfolio_returns(returns)
@@ -635,7 +637,7 @@ elif "Historico" in risk_table.loc[:, METHOD_COL].values:
     var_hist = float(row_hist["VaR_diario"])
     cvar_hist = float(row_hist["CVaR_diario"])
 else:
-    st.info("No hay VaR histórico disponible para este periodo; el panel continuará con las demás señales.")
+    st.info("No hay VaR histórico disponible para este período; el panel continuará con las demás señales.")
 
 # GARCH
 garch_validation = validar_serie_para_garch(portfolio_returns, min_obs=120, max_null_ratio=0.05)
@@ -680,196 +682,396 @@ primary_ticker = valid_asset_tickers[0] if valid_asset_tickers else None
 ml_risk_payload = build_ml_risk_payload(portfolio_returns, bundle.get("ohlcv", {}), primary_ticker)
 ml_risk_score = fetch_ml_risk_score(ml_risk_payload)
 
+# Métricas derivadas para display
+alpha_jensen = metric_value(extras_df, "Alpha de Jensen")
+balance_signals = signal_summary["favorables"] - signal_summary["desfavorables"]
+
+# Clasificación de persistencia GARCH
+if pd.notna(persistencia):
+    if persistencia >= 0.98:
+        _garch_nivel = "Alta persistencia"
+        _garch_delta = "neg"
+    elif persistencia >= 0.90:
+        _garch_nivel = "Persistencia moderada"
+        _garch_delta = "neu"
+    else:
+        _garch_nivel = "Baja persistencia"
+        _garch_delta = "pos"
+else:
+    _garch_nivel = "N/D"
+    _garch_delta = "neu"
+
+# Clasificación de VaR para pilar
+if pd.notna(var_hist):
+    if var_hist >= 0.03:
+        _var_nivel = "Alto"
+        _var_delta = "neg"
+    elif var_hist >= 0.015:
+        _var_nivel = "Medio"
+        _var_delta = "neu"
+    else:
+        _var_nivel = "Bajo"
+        _var_delta = "pos"
+else:
+    _var_nivel = "N/D"
+    _var_delta = "neu"
+
+# Datos ML para display
+if ml_risk_score:
+    _ml_risk_level = str(ml_risk_score.get("risk_level", "")).lower()
+    _ml_score_val = _finite_float(ml_risk_score.get("risk_score"), np.nan)
+    _ml_horizon = ml_risk_score.get("horizon_days", "N/D")
+    _ml_model = ml_risk_score.get("model_version", "N/D")
+    _ml_delta_type = "neg" if _ml_risk_level == "alto" else "neu" if _ml_risk_level == "moderado" else "pos"
+    _ml_level_display = _ml_risk_level.capitalize() if _ml_risk_level else "N/D"
+else:
+    _ml_risk_level = ""
+    _ml_score_val = np.nan
+    _ml_horizon = "N/D"
+    _ml_model = "N/D"
+    _ml_delta_type = "neu"
+    _ml_level_display = "N/D"
+
+_kind_map = {"positive": "success", "warning": "warn", "danger": "danger"}
 
 # ==============================
-# UI principal
+# UI principal — Decisión ejecutiva (antes de pestañas)
 # ==============================
-st.markdown("### Resumen del módulo")
 st.caption(
-    "Panel integrador opcional para resumir riesgo, técnica y benchmark en una postura de acción del portafolio."
+    f"Período: {start_date} a {end_date} · "
+    f"{len(valid_asset_tickers)} activos · "
+    f"Nivel de confianza {int(alpha * 100)}% · "
+    f"Benchmark: {benchmark_ticker}"
 )
-
-st.caption(f"Periodo analizado: {start_date} a {end_date}")
 
 hero_text = decision["mensaje_general"]
 hero_decision(decision["titulo"], hero_text, level=decision["ui"])
 
-st.markdown("### Pilares de la decision")
-render_section(
-    "Que esta empujando la decision",
-    "La postura final se construye combinando riesgo agregado, lectura técnica, comparación frente al benchmark y una señal auxiliar ML.",
-)
+# ==============================
+# PESTAÑAS PRINCIPALES
+# ==============================
+tab_resumen, tab_pilares, tab_metricas, tab_ml, tab_detalle = st.tabs([
+    "Resumen ejecutivo",
+    "Pilares de decisión",
+    "Métricas soporte",
+    "Machine Learning",
+    "Detalle técnico",
+])
 
-c1, c2, c3, c4 = st.columns(4)
-
-with c1:
-    kpi_card(
-        "Riesgo",
-        risk_view["nivel"],
-        delta="Pilar 1",
-        delta_type="neg" if risk_view["nivel"] == "Alto" else "neu" if risk_view["nivel"] == "Medio" else "pos",
-        caption="Nivel agregado de riesgo del portafolio.",
+# ==============================
+# TAB 1 – Resumen ejecutivo
+# ==============================
+with tab_resumen:
+    render_section(
+        "Postura integrada del portafolio",
+        "Síntesis de los cuatro pilares de análisis en una sola lectura ejecutiva.",
     )
 
-with c2:
-    kpi_card(
-        "Tecnica",
-        signal_summary["lectura"],
-        delta="Pilar 2",
-        delta_type=signal_summary["ui"] == "positive" and "pos" or signal_summary["ui"] == "danger" and "neg" or "neu",
-        caption="Balance de señales por activo.",
-    )
+    _r1, _r2, _r3, _r4 = st.columns(4)
 
-with c3:
-    kpi_card(
-        "Benchmark",
-        bench_view["nivel"],
-        delta="Pilar 3",
-        delta_type="pos" if bench_view["nivel"] == "Superior" else "neg" if bench_view["nivel"] == "Inferior" else "neu",
-        caption="Comparacion frente al benchmark global.",
-    )
-
-with c4:
-    if ml_risk_score:
-        ml_risk_level = str(ml_risk_score.get("risk_level", "")).lower()
-        ml_delta_type = "neg" if ml_risk_level == "alto" else "neu" if ml_risk_level == "moderado" else "pos"
-        ml_score_value = _finite_float(ml_risk_score.get("risk_score"), np.nan)
-        ml_horizon = ml_risk_score.get("horizon_days", "N/D")
-        ml_model = ml_risk_score.get("model_version", "N/D")
+    with _r1:
         kpi_card(
-            "Riesgo ML",
-            ml_risk_level.capitalize() if ml_risk_level else "N/D",
-            delta="Pilar 4",
-            delta_type=ml_delta_type,
-            caption=(
-                "Score auxiliar ML a 5 dias. "
-                f"Score ML: {ml_score_value:.3f} | Horizonte: {ml_horizon} dias | Modelo: {ml_model}"
-                if pd.notna(ml_score_value)
-                else f"Score auxiliar ML a 5 dias. Horizonte: {ml_horizon} dias | Modelo: {ml_model}"
-            ),
+            "Riesgo agregado",
+            risk_view["nivel"],
+            delta="Pilar 1 — Riesgo extremo",
+            delta_type="neg" if risk_view["nivel"] == "Alto" else "neu" if risk_view["nivel"] == "Medio" else "pos",
+            caption="VaR, persistencia GARCH y drawdown combinados.",
         )
-    else:
+
+    with _r2:
+        kpi_card(
+            "Señales técnicas",
+            signal_summary["lectura"],
+            delta="Pilar 2 — Técnica",
+            delta_type="pos" if signal_summary["ui"] == "positive" else "neg" if signal_summary["ui"] == "danger" else "neu",
+            caption=f"Favorables: {signal_summary['favorables']} · Neutrales: {signal_summary['neutrales']} · Desfavorables: {signal_summary['desfavorables']}",
+        )
+
+    with _r3:
+        kpi_card(
+            "Benchmark",
+            bench_view["nivel"],
+            delta="Pilar 3 — Desempeño relativo",
+            delta_type="pos" if bench_view["nivel"] == "Superior" else "neg" if bench_view["nivel"] == "Inferior" else "neu",
+            caption="Comparación frente al benchmark global.",
+        )
+
+    with _r4:
         kpi_card(
             "Riesgo ML",
-            "N/D",
-            delta="Pilar 4",
+            _ml_level_display,
+            delta="Pilar 4 — Auxiliar ML",
+            delta_type=_ml_delta_type,
+            caption=f"Score: {_ml_score_val:.3f}" if pd.notna(_ml_score_val) else "Score ML no disponible.",
+        )
+
+    conclusion_box(
+        f"Decisión sugerida: **{decision['titulo']}**. {decision['mensaje_general']}",
+        kind=_kind_map.get(decision["ui"], "success"),
+        label="Conclusión ejecutiva del panel",
+    )
+
+# ==============================
+# TAB 2 – Pilares de decisión
+# ==============================
+with tab_pilares:
+    render_section(
+        "Qué está impulsando la decisión",
+        "La postura final se construye combinando cinco pilares: riesgo extremo, volatilidad GARCH, benchmark, señales técnicas y modelo ML auxiliar.",
+    )
+
+    _p1, _p2, _p3 = st.columns(3)
+
+    with _p1:
+        kpi_card(
+            "Pilar 1 — Riesgo extremo",
+            _var_nivel,
+            delta=f"VaR histórico {int(alpha * 100)}%: {f'{var_hist:.2%}' if pd.notna(var_hist) else 'N/D'}",
+            delta_type=_var_delta,
+            caption="La pérdida umbral diaria es controlada bajo el nivel de confianza seleccionado." if _var_nivel == "Bajo" else "El VaR indica un nivel de pérdida potencial que requiere atención.",
+        )
+
+    with _p2:
+        kpi_card(
+            "Pilar 2 — Volatilidad GARCH",
+            _garch_nivel,
+            delta=f"Persistencia: {f'{persistencia:.3f}' if pd.notna(persistencia) else 'N/D'}",
+            delta_type=_garch_delta,
+            caption="La persistencia refleja cuánta memoria conserva la volatilidad del portafolio.",
+        )
+
+    with _p3:
+        kpi_card(
+            "Pilar 3 — Benchmark",
+            bench_view["nivel"],
+            delta=f"Alpha de Jensen: {f'{alpha_jensen:.4f}' if pd.notna(alpha_jensen) else 'N/D'}",
+            delta_type="pos" if bench_view["nivel"] == "Superior" else "neg" if bench_view["nivel"] == "Inferior" else "neu",
+            caption=bench_view["mensaje"],
+        )
+
+    _p4, _p5, _ = st.columns(3)
+
+    with _p4:
+        _bal_label = "Sesgo comprador" if balance_signals > 0 else "Sesgo vendedor" if balance_signals < 0 else "Balance neutro"
+        _bal_delta = "pos" if balance_signals > 0 else "neg" if balance_signals < 0 else "neu"
+        kpi_card(
+            "Pilar 4 — Señales técnicas",
+            signal_summary["lectura"],
+            delta=f"Balance: {balance_signals:+d} ({_bal_label})",
+            delta_type=_bal_delta,
+            caption=f"{signal_summary['favorables']} favorables · {signal_summary['neutrales']} neutrales · {signal_summary['desfavorables']} desfavorables.",
+        )
+
+    with _p5:
+        kpi_card(
+            "Pilar 5 — ML auxiliar",
+            _ml_level_display,
+            delta=f"Score: {f'{_ml_score_val:.3f}' if pd.notna(_ml_score_val) else 'N/D'} · Horizonte: {_ml_horizon} días",
+            delta_type=_ml_delta_type,
+            caption="Señal auxiliar de apoyo. No reemplaza los pilares estadísticos principales.",
+        )
+
+    with st.expander("Cómo interpretar los pilares", expanded=False):
+        st.write(
+            """
+            - **Pilar 1 — Riesgo extremo:** resume VaR histórico, persistencia GARCH y drawdown en un nivel agregado de riesgo.
+            - **Pilar 2 — Volatilidad GARCH:** refleja la memoria de la volatilidad. Alta persistencia indica que los shocks tardan en disiparse.
+            - **Pilar 3 — Benchmark:** compara el retorno relativo y el Alpha de Jensen frente al índice de referencia.
+            - **Pilar 4 — Señales técnicas:** resume el balance de señales técnicas favorables vs. desfavorables por activo.
+            - **Pilar 5 — ML auxiliar:** score complementario a 5 días. Funciona como señal de confirmación o alerta, no como decisión independiente.
+            """
+        )
+
+# ==============================
+# TAB 3 – Métricas soporte
+# ==============================
+with tab_metricas:
+    render_section(
+        "Indicadores clave de respaldo",
+        "Métricas mínimas que respaldan la decisión, sin repetir el detalle de módulos anteriores.",
+    )
+
+    _m1, _m2, _m3 = st.columns(3)
+
+    with _m1:
+        kpi_card(
+            "VaR histórico",
+            f"{var_hist:.2%}" if pd.notna(var_hist) else "N/D",
+            delta=f"Nivel {int(alpha * 100)}%",
+            delta_type=_var_delta,
+            caption="Pérdida umbral diaria estimada.",
+        )
+
+    with _m2:
+        kpi_card(
+            "CVaR histórico",
+            f"{cvar_hist:.2%}" if pd.notna(cvar_hist) else "N/D",
+            delta="Pérdida esperada en cola",
             delta_type="neu",
-            caption="No disponible temporalmente.",
+            caption="Pérdida media esperada más allá del VaR.",
         )
 
-if mostrar_detalle and not ml_risk_score and "decision_ml_risk_error" in st.session_state:
-    ml_error = st.session_state["decision_ml_risk_error"]
-    st.info(f"Riesgo ML no disponible: {friendly_error_message(ml_error)}")
-    if getattr(ml_error, "technical_detail", None):
-        st.caption(ml_error.technical_detail)
+    with _m3:
+        kpi_card(
+            "Persistencia GARCH",
+            f"{persistencia:.3f}" if pd.notna(persistencia) else "N/D",
+            delta=_garch_nivel,
+            delta_type=_garch_delta,
+            caption="Memoria de la volatilidad del portafolio.",
+        )
 
-render_explanation_expander(
-    "Como interpretar los pilares",
-    [
-        "Riesgo: resume VaR historico, persistencia GARCH y drawdown.",
-        "Técnica: resume señales favorables, neutrales y desfavorables.",
-        "Benchmark: resume desempeño relativo y Alpha de Jensen.",
-        "Riesgo ML: score auxiliar a 5 días estimado con variables recientes de retorno, volatilidad e indicadores técnicos.",
-        "La decision final combina los tres componentes principales y usa el score ML como apoyo visual.",
-    ],
-)
+    _m4, _m5, _m6 = st.columns(3)
 
-st.markdown("### Métricas mínimas de soporte")
-render_section(
-    "Indicadores clave",
-        "Estas métricas respaldan la decisión sin repetir todo el detalle de módulos anteriores.",
-)
+    with _m4:
+        kpi_card(
+            "Alpha de Jensen",
+            f"{alpha_jensen:.4f}" if pd.notna(alpha_jensen) else "N/D",
+            delta="Desempeño ajustado por riesgo",
+            delta_type="pos" if pd.notna(alpha_jensen) and alpha_jensen > 0 else "neg" if pd.notna(alpha_jensen) and alpha_jensen < 0 else "neu",
+            caption="Retorno en exceso frente al benchmark ajustado por beta.",
+        )
 
-k1, k2, k3, k4 = st.columns(4)
+    with _m5:
+        kpi_card(
+            "Balance de señales",
+            str(balance_signals),
+            delta="Sesgo comprador" if balance_signals > 0 else "Sesgo vendedor" if balance_signals < 0 else "Balance neutro",
+            delta_type="pos" if balance_signals > 0 else "neg" if balance_signals < 0 else "neu",
+            caption="Favorables menos desfavorables entre todos los activos.",
+        )
 
-with k1:
-    kpi_card(
-        "VaR historico",
-        f"{var_hist:.2%}" if pd.notna(var_hist) else "N/D",
-        caption="Perdida umbral estimada.",
+    with _m6:
+        kpi_card(
+            "Score ML",
+            f"{_ml_score_val:.3f}" if pd.notna(_ml_score_val) else "N/D",
+            delta=f"Nivel: {_ml_level_display}",
+            delta_type=_ml_delta_type,
+            caption="Probabilidad de riesgo asignada por el modelo auxiliar.",
+        )
+
+    with st.expander("Ver detalle numérico completo", expanded=False):
+        if not risk_table.empty:
+            st.markdown("#### Tabla de riesgo extremo")
+            st.dataframe(risk_table, use_container_width=True, hide_index=True)
+        if not extras_df.empty:
+            st.markdown("#### Métricas benchmark")
+            st.dataframe(extras_df, use_container_width=True, hide_index=True)
+        if not summary_df.empty:
+            st.markdown("#### Resumen benchmark")
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+# ==============================
+# TAB 4 – Machine Learning
+# ==============================
+with tab_ml:
+    render_section(
+        "Componente Machine Learning — señal auxiliar",
+        "El score ML complementa los pilares estadísticos con una predicción a 5 días basada en variables recientes de retorno, volatilidad e indicadores técnicos.",
     )
 
-with k2:
-    kpi_card(
-        "Persistencia GARCH",
-        f"{persistencia:.3f}" if pd.notna(persistencia) else "N/D",
-        delta=(
-            "Alta persistencia" if pd.notna(persistencia) and persistencia >= 0.90
-            else "Media persistencia" if pd.notna(persistencia)
-            else None
-        ),
-        delta_type="neg" if pd.notna(persistencia) and persistencia >= 0.90 else "neu",
-        caption="Memoria de la volatilidad.",
+    if ml_risk_score:
+        _ml_c1, _ml_c2, _ml_c3, _ml_c4 = st.columns(4)
+
+        with _ml_c1:
+            kpi_card(
+                "Modelo ML",
+                str(_ml_model),
+                caption="Versión del modelo de clasificación de riesgo.",
+            )
+        with _ml_c2:
+            kpi_card(
+                "Horizonte",
+                f"{_ml_horizon} días",
+                caption="Ventana de predicción del score.",
+            )
+        with _ml_c3:
+            kpi_card(
+                "Score ML",
+                f"{_ml_score_val:.3f}" if pd.notna(_ml_score_val) else "N/D",
+                caption="Probabilidad asignada por el modelo.",
+            )
+        with _ml_c4:
+            kpi_card(
+                "Nivel de riesgo ML",
+                _ml_level_display,
+                delta_type=_ml_delta_type,
+                caption="Clasificación final del modelo.",
+            )
+
+        conclusion_box(
+            "Rol del modelo ML: el score ML se usa como señal auxiliar para complementar la evaluación cuantitativa. "
+            "No debe interpretarse como recomendación automática de inversión. "
+            "Funciona como Pilar 5 dentro de la decisión integrada: señal de confirmación o alerta adicional.",
+            kind="warn",
+            label="Rol del componente ML",
+        )
+
+        with st.expander("Variables utilizadas por el modelo", expanded=False):
+            st.write(
+                """
+                El modelo ML opera sobre las siguientes variables calculadas a partir de los datos del portafolio:
+
+                | Variable | Descripción |
+                |---|---|
+                | `ret_1d` | Retorno diario reciente |
+                | `ret_5d` | Retorno acumulado últimos 5 días |
+                | `ret_20d` | Retorno acumulado últimos 20 días |
+                | `vol_5d` | Volatilidad últimos 5 días |
+                | `vol_20d` | Volatilidad últimos 20 días |
+                | `rsi` | Índice de fuerza relativa (RSI) |
+                | `macd_hist` | Histograma MACD |
+                | `bb_position` | Posición dentro de las bandas de Bollinger |
+                | `close_over_sma20` | Precio de cierre sobre la media móvil de 20 días |
+                | `drawdown_20d` | Drawdown máximo últimos 20 días |
+                """
+            )
+
+        with st.expander("Detalle técnico del componente ML", expanded=False):
+            st.markdown(
+                """
+                **Endpoints ML del backend:**
+                - `/ml/risk-score` — Score de riesgo a 5 días (Logistic Regression + StandardScaler)
+                - `/predict` — Clasificación de señal de mercado (Random Forest Classifier)
+
+                **Artefactos:**
+                - `models/risk_classifier.joblib` — modelo de clasificación de riesgo cargado como singleton
+                - `models/signal_classifier.joblib` — modelo de señal técnica cargado como singleton
+
+                **Persistencia:** cada predicción queda registrada en SQLite vía `PredictionLog` y `RiskScoreLog`.
+
+                **Limitaciones:** el modelo ML opera sobre un conjunto reducido de features y actúa como apoyo visual, no como recomendación financiera independiente.
+                """
+            )
+
+    else:
+        st.info(
+            "Score ML no disponible para esta sesión. "
+            "El panel de decisión opera con los tres pilares estadísticos principales (riesgo, técnica, benchmark)."
+        )
+        if mostrar_detalle and "decision_ml_risk_error" in st.session_state:
+            ml_error = st.session_state["decision_ml_risk_error"]
+            st.caption(f"Error técnico: {friendly_error_message(ml_error)}")
+            if getattr(ml_error, "technical_detail", None):
+                st.caption(ml_error.technical_detail)
+
+# ==============================
+# TAB 5 – Detalle técnico
+# ==============================
+with tab_detalle:
+    render_section(
+        "Lógica de la decisión integrada",
+        "Cómo se construye la postura final a partir de los pilares y sus scores individuales.",
     )
 
-alpha_jensen = metric_value(extras_df, "Alpha de Jensen")
-
-with k3:
-    kpi_card(
-        "Alpha de Jensen",
-        f"{alpha_jensen:.4f}" if pd.notna(alpha_jensen) else "N/D",
-        delta="Comparacion relativa",
-        delta_type="pos" if pd.notna(alpha_jensen) and alpha_jensen > 0 else "neg" if pd.notna(alpha_jensen) and alpha_jensen < 0 else "neu",
-        caption="Desempeño ajustado por riesgo.",
-    )
-
-balance_signals = signal_summary["favorables"] - signal_summary["desfavorables"]
-with k4:
-    kpi_card(
-        "Balance de señales",
-        str(balance_signals),
-        delta=(
-            "Sesgo comprador" if balance_signals > 0
-            else "Sesgo vendedor" if balance_signals < 0
-            else "Balance neutro"
-        ),
-        delta_type="pos" if balance_signals > 0 else "neg" if balance_signals < 0 else "neu",
-        caption="Favorables menos desfavorables.",
-    )
-
-render_explanation_expander(
-    "Cómo interpretar las métricas de soporte",
-    [
-        "VaR historico: aproxima la perdida umbral del portafolio en la ventana analizada.",
-        "Persistencia GARCH: refleja cuanta memoria conserva la volatilidad.",
-        "Alpha de Jensen: mide desempeño relativo ajustado por riesgo frente al benchmark.",
-        "Balance de señales: resume la diferencia entre señales favorables y desfavorables.",
-    ]
-    + (
-        ["Si la persistencia aparece como N/D, significa que el modelo GARCH no entrego un valor alpha + beta valido para la ventana seleccionada."]
-        if pd.isna(persistencia)
-        else []
-    ),
-)
-
-st.markdown("### Como interpretar el resultado")
-st.success(
-    f"Decision sugerida: **{decision['titulo']}**. {decision['mensaje_general']}"
-)
-
-render_explanation_expander(
-    "Como interpretar la decision integrada",
-    [
-        "La postura final surge de combinar riesgo agregado, lectura técnica y desempeño relativo frente al benchmark.",
-        "Riesgo agregado: se aproxima mediante VaR historico, persistencia GARCH y drawdown.",
-        "Lectura técnica: se resume a partir del balance entre señales favorables y desfavorables de los activos.",
-        "Benchmark: se evalua en terminos de retorno relativo y Alpha de Jensen.",
-        "El score ML se usa como senal auxiliar y no como recomendacion financiera independiente.",
-        f"Conclusion formal: {decision['mensaje_formal']}",
-        f"Riesgo de implementacion de la postura: {decision['mensaje_riesgo']}",
-    ],
-)
-
-if mostrar_detalle:
-    with st.expander("Ver detalle técnico del score"):
+    with st.expander("Tabla de scoring por pilar", expanded=True):
         detalle_df = pd.DataFrame(
             {
-                "Componente": ["Riesgo", "Tecnica", "Benchmark", "Score total"],
+                "Pilar": ["Riesgo extremo", "Señales técnicas", "Benchmark", "Score total"],
                 "Lectura": [
                     risk_view["nivel"],
                     signal_summary["lectura"],
                     bench_view["nivel"],
-                    decision["score_total"],
+                    decision["titulo"],
                 ],
                 "Score": [
                     risk_view["score"],
@@ -881,3 +1083,47 @@ if mostrar_detalle:
         )
         render_table(detalle_df, hide_index=True, width="stretch")
 
+    with st.expander("Reglas de scoring", expanded=False):
+        st.markdown(
+            """
+            **Riesgo extremo (VaR + persistencia GARCH + drawdown):**
+            - VaR bajo (< 1.5%) → +1 | VaR medio (1.5–3%) → 0 | VaR alto (> 3%) → −1
+            - Persistencia alta (≥ 0.98) → −2 | Moderada (0.90–0.98) → −1 | Baja → 0
+            - Drawdown alto (≥ 25%) → −2 | Medio (10–25%) → −1 | Bajo → 0
+
+            **Señales técnicas:**
+            - Balance positivo (más favorables que desfavorables) → +1
+            - Balance neutro → 0
+            - Balance negativo (más desfavorables) → −1
+
+            **Benchmark:**
+            - Portafolio supera al benchmark + Alpha ≥ 0 → +1
+            - Portafolio por debajo del benchmark + Alpha < 0 → −1
+            - Mixto o no concluyente → 0
+
+            **Score total → Decisión:**
+            - ≥ 2 → Compra táctica
+            - 0 a 1 → Mantener / compra selectiva
+            - −1 → Reducir exposición
+            - ≤ −2 → Venta / postura defensiva
+            """
+        )
+
+    with st.expander("Parámetros utilizados", expanded=False):
+        st.write(
+            f"""
+            - **Nivel de confianza VaR:** {int(alpha * 100)}%
+            - **Simulaciones Monte Carlo:** {n_sim:,}
+            - **Período:** {start_date} a {end_date}
+            - **Horizonte:** {horizonte}
+            - **Benchmark:** {benchmark_ticker}
+            - **Tasa libre de riesgo:** {rf_annual:.2%}
+            - **Activos analizados:** {', '.join(valid_asset_tickers)}
+            - **Horizonte ML:** {_ml_horizon} días
+            - **Modelo ML:** {_ml_model}
+            """
+        )
+
+    with st.expander("Conclusión formal", expanded=False):
+        st.write(decision["mensaje_formal"])
+        st.write(f"**Riesgo de implementación:** {decision['mensaje_riesgo']}")

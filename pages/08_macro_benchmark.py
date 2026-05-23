@@ -17,6 +17,7 @@ from src.services.market_data_client import MarketDataClient
 from src.services.portfolio_optimizer import PortfolioOptimizer
 from src.ui_components import (
     kpi_card,
+    module_header,
     render_chart_explanation,
     render_explanation_expander,
     render_insight,
@@ -113,7 +114,11 @@ render_app_shell(
 ASSETS = configured_assets(ASSETS)
 horizonte, start_date, end_date = configured_period(DEFAULT_START_DATE, DEFAULT_END_DATE)
 render_portfolio_summary_card(ASSETS)
-
+module_header(
+    "Contexto macro y benchmark",
+    "Indicadores macroeconómicos del período y comparación del portafolio óptimo de máximo Sharpe frente al benchmark global.",
+    badge="Alpha de Jensen · TE · IR",
+)
 
 with module_params():
     st.header("Parámetros")
